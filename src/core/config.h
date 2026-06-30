@@ -93,6 +93,7 @@ struct WiFiConfig {
     int8_t attackMinRssi = -70;          // OINK/DNH: ignore networks weaker than this (dBm)
     uint8_t deauthBurstCount = 5;        // Deauth frames per burst (1-8)
     uint8_t deauthJitterMax = 5;         // Max ms jitter between deauth frames (0-20)
+    uint8_t displayBrightness = 200;     // Backlight brightness (10-255)
     uint8_t spectrumTopN = 0;           // Spectrum: cap visible APs (0 = no cap)
     uint16_t spectrumStaleMs = 5000;    // Spectrum: stale timeout before drop (ms)
     bool spectrumCollapseSsid = false;  // Spectrum: merge same-SSID APs

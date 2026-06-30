@@ -49,18 +49,7 @@ static void powerOff() {
         delay(20);
     }
 
-    App::clear();
-    App::centerMsg("POWERING OFF", TFT_RED);
-    App::footer("press any button to wake");
-    delay(1000);
-    M5.Display.setBrightness(0);
-
-    // Hold pull-ups on the button pins through deep sleep so idle=high, press=low.
-    rtc_gpio_pullup_en(GPIO_NUM_0);  rtc_gpio_pulldown_dis(GPIO_NUM_0);
-    rtc_gpio_pullup_en(GPIO_NUM_6);  rtc_gpio_pulldown_dis(GPIO_NUM_6);
-    // Wake when EITHER button goes low.
-    esp_sleep_enable_ext1_wakeup((1ULL << 0) | (1ULL << 6), ESP_EXT1_WAKEUP_ANY_LOW);
-    esp_deep_sleep_start();   // boots fresh on the next button press
+    App::powerOff();   // shared deep-sleep sequence (also used by long-press BACK)
 }
 
 void tick(const App::Input& in) {

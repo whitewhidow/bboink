@@ -105,6 +105,9 @@ struct __attribute__((packed)) ConfigBlob {
     float    mlVulnScorerThreshold;
     uint8_t  mlAutoUpdate;
     char     mlUpdateUrl[128];
+
+    // Appended after v-bump; old (shorter) blobs read these as 0 (see extractBlob).
+    uint8_t  displayBrightness;
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -133,6 +136,7 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.attackMinRssi        = wifi.attackMinRssi;
     b.deauthBurstCount     = wifi.deauthBurstCount;
     b.deauthJitterMax      = wifi.deauthJitterMax;
+    b.displayBrightness    = wifi.displayBrightness;
     b.spectrumTopN         = wifi.spectrumTopN;
     b.spectrumStaleMs      = wifi.spectrumStaleMs;
     b.spectrumCollapseSsid = wifi.spectrumCollapseSsid ? 1 : 0;
@@ -216,6 +220,7 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.attackMinRssi        = b.attackMinRssi;
     wifi.deauthBurstCount     = b.deauthBurstCount ? b.deauthBurstCount : 5;
     wifi.deauthJitterMax      = b.deauthJitterMax;
+    wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.spectrumTopN         = b.spectrumTopN;
     wifi.spectrumStaleMs      = b.spectrumStaleMs;
     wifi.spectrumCollapseSsid = b.spectrumCollapseSsid != 0;

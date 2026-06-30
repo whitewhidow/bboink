@@ -66,6 +66,18 @@ void inputPoll() {
     }
     if (pressEdge(btnSel))  { v.enter = true; v.changed = true; }
     if (pressEdge(btnBack)) { v.back  = true; v.changed = true; }
+
+    // Long-press BACK (held ~3s) -> one-shot power-off gesture (App::tick acts on it).
+    static uint32_t backDownSince = 0;
+    static bool backLongFired = false;
+    if (digitalRead(PORK_BTN_BACK) == LOW) {
+        if (backDownSince == 0) backDownSince = millis();
+        else if (!backLongFired && millis() - backDownSince >= 3000) {
+            v.backLongPress = true; v.changed = true; backLongFired = true;
+        }
+    } else {
+        backDownSince = 0; backLongFired = false;
+    }
     vkey = v;
 }
 

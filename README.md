@@ -38,8 +38,10 @@ internal storage) · connected WiFi SSID (green) · battery %.
 - **OPTIONS** — `WiFi` (a guided flow: scan → pick an SSID from the list → enter
   the password → saves and connects), `WPA Key` (wpa-sec, 32 hex), `OHC Key`
   (`sk_…`), and oink tuning: `Ch Hop ms`, `Lock ms`, `Atk RSSI`, `Deauth` on/off,
-  `Rnd MAC` on/off, `Burst`, `Jitter ms`. Saved on exit.
-- **REBOOT** / **POWER OFF** — soft restart / deep sleep (wake via reset).
+  `Rnd MAC` on/off, `Burst`, `Jitter ms`, `Brightness`. Saved on exit.
+- **REBOOT** / **POWER OFF** — soft restart / deep sleep (wake via any button).
+  POWER OFF is also triggered by **holding the side (BACK) button ~3 s** from
+  anywhere. The backlight **auto-dims after 30 s idle** and restores on any input.
 
 ## Controls
 Rotary encoder turn = move / adjust, click = select / confirm, side button =

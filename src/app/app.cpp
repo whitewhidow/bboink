@@ -2,10 +2,18 @@
 #include "app.h"
 #include "../core/config.h"
 #include <WiFi.h>
+#include <esp_sleep.h>
+#include <driver/rtc_io.h>
 
 namespace App {
 
 Screen screen = Screen::MENU;
+
+// Auto-dim the backlight after this long with no input (battery saver).
+static constexpr uint32_t kIdleDimMs = 30000;
+static constexpr uint8_t  kDimLevel  = 12;
+static uint32_t lastInputMs = 0;
+static bool     dimmed      = false;
 
 static constexpr int HEADER_H = 26;
 static constexpr int FOOTER_H = 18;
@@ -123,11 +131,37 @@ void go(Screen s) {
     }
 }
 
+void powerOff() {
+    clear();
+    centerMsg("POWERING OFF", TFT_RED);
+    footer("press any button to wake");
+    delay(1000);
+    M5.Display.setBrightness(0);
+    // Hold pull-ups on the button pins so idle=high, press=low wakes it.
+    rtc_gpio_pullup_en(GPIO_NUM_0);  rtc_gpio_pulldown_dis(GPIO_NUM_0);
+    rtc_gpio_pullup_en(GPIO_NUM_6);  rtc_gpio_pulldown_dis(GPIO_NUM_6);
+    esp_sleep_enable_ext1_wakeup((1ULL << 0) | (1ULL << 6), ESP_EXT1_WAKEUP_ANY_LOW);
+    esp_deep_sleep_start();   // boots fresh on the next button press
+}
+
 void begin() {
+    lastInputMs = millis();
     go(Screen::MENU);
 }
 
 void tick() {
+    // Hold the side button ~3s anywhere -> power off.
+    if (porkhal::vkey.backLongPress) { powerOff(); return; }
+
+    // Auto-dim backlight after idle; restore on any input.
+    if (porkhal::vkey.changed) {
+        lastInputMs = millis();
+        if (dimmed) { M5.Display.setBrightness(Config::wifi().displayBrightness); dimmed = false; }
+    } else if (!dimmed && millis() - lastInputMs > kIdleDimMs) {
+        M5.Display.setBrightness(kDimLevel);
+        dimmed = true;
+    }
+
     Input in = readInput();
     switch (screen) {
         case Screen::MENU:    ScreenMenu::tick(in);    break;

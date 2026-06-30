@@ -40,7 +40,7 @@ void setup() {
     // Now the display + input + engine (display init no longer disturbs WiFi).
     auto cfg = M5.config();
     M5Cardputer.begin(cfg);
-    M5.Display.setBrightness(200);
+    M5.Display.setBrightness(Config::wifi().displayBrightness);
 
     // The SD shares the SPI bus with the display; retry the mount now that the
     // ST7789 is initialised (it wouldn't mount before the display was up).

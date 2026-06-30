@@ -23,6 +23,7 @@ extern Screen screen;
 void begin();                 // after hardware is up
 void tick();                  // once per loop(), after M5Cardputer.update()
 void go(Screen s);            // switch screen (runs the target's enter hook)
+void powerOff();              // deep-sleep until a button wakes it (global)
 Input readInput();            // snapshot porkhal::vkey for this frame
 
 // Shared plain-UI primitives (app.cpp). Colours come from LovyanGFX via m5compat.
