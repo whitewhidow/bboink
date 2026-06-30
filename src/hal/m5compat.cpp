@@ -71,6 +71,66 @@ void inputPoll() {
 
 void ledInit() { /* neopixelWrite() initialises the RMT channel lazily */ }
 
+} // namespace porkhal
+
+// ---------------------------------------------------------------------------
+// Speaker: square-wave tone over I2S to the MAX98357A amp.
+// Install the I2S driver only for the tone, then uninstall so the WS pin (40,
+// shared with the display RST net) is released the rest of the time.
+// ---------------------------------------------------------------------------
+#include <driver/i2s.h>
+
+void SpeakerFacade::tone(uint16_t freq, uint32_t durationMs) {
+    if (freq == 0 || durationMs == 0) return;
+
+    const int kSampleRate = 16000;
+    i2s_config_t cfg = {};
+    cfg.mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
+    cfg.sample_rate          = kSampleRate;
+    cfg.bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT;
+    cfg.channel_format       = I2S_CHANNEL_FMT_ONLY_LEFT;
+    cfg.communication_format = I2S_COMM_FORMAT_STAND_I2S;
+    cfg.intr_alloc_flags     = 0;
+    cfg.dma_buf_count        = 6;
+    cfg.dma_buf_len          = 256;
+    cfg.use_apll             = false;
+    cfg.tx_desc_auto_clear   = true;
+
+    if (i2s_driver_install(I2S_NUM_0, &cfg, 0, nullptr) != ESP_OK) return;
+    i2s_pin_config_t pins = {};
+    pins.mck_io_num   = I2S_PIN_NO_CHANGE;
+    pins.bck_io_num   = PORK_I2S_BCLK;
+    pins.ws_io_num    = PORK_I2S_WS;
+    pins.data_out_num = PORK_I2S_DOUT;
+    pins.data_in_num  = I2S_PIN_NO_CHANGE;
+    i2s_set_pin(I2S_NUM_0, &pins);
+
+    const int16_t amp = (int16_t)(40 * _volume);     // _volume(0..255) -> amplitude
+    int halfPeriod = (kSampleRate / freq) / 2;        // samples per half square wave
+    if (halfPeriod < 1) halfPeriod = 1;
+    int totalSamples = (int)((uint64_t)kSampleRate * durationMs / 1000);
+
+    int16_t buf[256];
+    int idx = 0, phase = 0;
+    int16_t level = amp;
+    size_t written;
+    for (int n = 0; n < totalSamples; n++) {
+        buf[idx++] = level;
+        if (++phase >= halfPeriod) { phase = 0; level = (int16_t)-level; }
+        if (idx == 256) {
+            i2s_write(I2S_NUM_0, buf, sizeof(buf), &written, portMAX_DELAY);
+            idx = 0;
+        }
+    }
+    if (idx) i2s_write(I2S_NUM_0, buf, idx * sizeof(int16_t), &written, portMAX_DELAY);
+
+    i2s_zero_dma_buffer(I2S_NUM_0);
+    i2s_driver_uninstall(I2S_NUM_0);   // release WS pin (40) so display RST stays idle
+}
+
+namespace porkhal {
+// (porkhal namespace continues below)
+
 // ---------------------------------------------------------------------------
 // charPicker — blocking encoder-driven text entry modal.
 // ---------------------------------------------------------------------------

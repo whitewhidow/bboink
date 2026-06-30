@@ -88,12 +88,14 @@ public:
 // ---------------------------------------------------------------------------
 class SpeakerFacade {
 public:
-    // TODO(tembed): drive the I2S amp to synthesise tones. Silent for now.
-    void tone(uint16_t /*freq*/, uint32_t /*duration*/) {}
+    // Drive the MAX98357A I2S amp to emit a square-wave tone (blocking for the
+    // tone's duration). Implemented in m5compat.cpp.
+    void tone(uint16_t freq, uint32_t durationMs);
     void stop() {}
     bool begin() { return true; }
-    void setVolume(uint8_t) {}
-    void setAllChannelVolume(uint8_t) {}
+    void setVolume(uint8_t v) { _volume = v; }
+    void setAllChannelVolume(uint8_t v) { _volume = v; }
+    uint8_t _volume = 160;   // 0..255 amplitude scale
 };
 
 // board_t / Power_Class compatibility (main.cpp checks board_M5CardputerADV;

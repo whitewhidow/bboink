@@ -82,6 +82,15 @@
 #define PORK_CC1101_GDO0    3
 #define PORK_CC1101_GDO2    38
 
+// I2S speaker (MAX98357A). Pins per Bruce's lilygo-t-embed-cc1101 reference
+// (BCLK 46, word-select 40, data-out 7). NOTE: WS (40) is the same net as the
+// display RST — RST is only pulsed once at display init, so the I2S driver is
+// installed only for the duration of a tone and uninstalled after, leaving pin
+// 40 released (display RST inactive) the rest of the time.
+#define PORK_I2S_BCLK       46
+#define PORK_I2S_WS         40
+#define PORK_I2S_DOUT       7
+
 // Rotary encoder + buttons (the keyboard replacement).
 #define PORK_ENC_A          4
 #define PORK_ENC_B          5

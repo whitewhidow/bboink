@@ -13,6 +13,18 @@ namespace ScreenCapture {
 
 static uint32_t lastDraw = 0;
 static bool framed = false;   // static labels drawn once
+static uint16_t prevCaps = 0; // total captures seen, to detect new ones
+
+// Flash the onboard WS2812 green + chirp the speaker to signal a fresh capture.
+static void captureNotify() {
+    M5.Speaker.tone(2200, 120);                  // beep
+    for (int i = 0; i < 3; i++) {
+        neopixelWrite(PORK_LED_PIN, 0, 60, 0);   // green
+        delay(70);
+        neopixelWrite(PORK_LED_PIN, 0, 0, 0);    // off
+        delay(70);
+    }
+}
 
 static void drawFrame() {
     App::clear();
@@ -88,6 +100,8 @@ void enter() {
     OinkMode::start();
     framed = false;
     lastDraw = 0;
+    // Baseline the capture count so we don't notify for ones already captured.
+    prevCaps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
 }
 
 void tick(const App::Input& in) {
@@ -113,6 +127,11 @@ void tick(const App::Input& in) {
     // Pump the capture engine every frame.
     NetworkRecon::update();
     OinkMode::update();
+
+    // New handshake/PMKID since last frame? Flash the LED to signal it.
+    uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
+    if (caps > prevCaps) captureNotify();
+    prevCaps = caps;
 
     if (!framed) drawFrame();
     uint32_t now = millis();

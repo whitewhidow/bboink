@@ -24,7 +24,8 @@ internal storage) · connected WiFi SSID (green) · battery %.
   networks, packets, handshakes, PMKIDs, deauths, current target + clients) plus a
   **`last:`** line showing the network of the most recent saved capture. **Already
   captured networks are skipped** — both within the session and any with a
-  handshake already saved on the card. Side button stops, restores WiFi and exits.
+  handshake already saved on the card. Each new capture **beeps** (I2S amp) and
+  flashes the onboard LED green. Side button stops, restores WiFi and exits.
 - **WPA-SEC** — lists `.pcap` captures with status tags (`CRK`/`UP`/`-`) and
   counts. **SYNC** connects WiFi STA, uploads pending captures, and downloads the
   cracked potfile. Click a capture for a detail view (SSID/BSSID, status, recovered
