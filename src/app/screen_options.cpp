@@ -1,11 +1,13 @@
-// screen_options.cpp — WiFi creds, wpa-sec key, and oink tuning settings.
+// screen_options.cpp — WiFi setup, wpa-sec/OHC keys, and oink tuning settings.
 #include "app.h"
 #include "../core/config.h"
+#include "../core/net_link.h"
+#include <WiFi.h>
 
 namespace ScreenOptions {
 
 enum Field {
-    OPT_SSID, OPT_PASS, OPT_KEY, OPT_OHC,
+    OPT_WIFI, OPT_KEY, OPT_OHC,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER,
     OPT_COUNT
 };
@@ -18,8 +20,7 @@ struct FieldDef {
 };
 
 static const FieldDef defs[OPT_COUNT] = {
-    { "WiFi SSID", true,  false, 0, 0, 0 },
-    { "WiFi Pass", true,  false, 0, 0, 0 },
+    { "WiFi",      false, false, 0, 0, 0 },   // action: scan -> pick SSID -> password
     { "WPA Key",   true,  false, 0, 0, 0 },
     { "OHC Key",   true,  false, 0, 0, 0 },
     { "Ch Hop ms", false, false, 50, 2000, 50 },
@@ -72,8 +73,6 @@ static void setNum(int f, int v) {
 static char* textBuf(int f) {
     WiFiConfig& w = Config::wifi();
     switch (f) {
-        case OPT_SSID: return w.otaSSID;
-        case OPT_PASS: return w.otaPassword;
         case OPT_KEY:  return w.wpaSecKey;
         case OPT_OHC:  return w.ohcKey;
     }
@@ -81,8 +80,6 @@ static char* textBuf(int f) {
 }
 static size_t textCap(int f) {
     switch (f) {
-        case OPT_SSID: return sizeof(Config::wifi().otaSSID);
-        case OPT_PASS: return sizeof(Config::wifi().otaPassword);
         case OPT_KEY:  return sizeof(Config::wifi().wpaSecKey);
         case OPT_OHC:  return sizeof(Config::wifi().ohcKey);
     }
@@ -92,12 +89,16 @@ static size_t textCap(int f) {
 static void buildRow(int f) {
     const FieldDef& d = defs[f];
     char val[28];
+    if (f == OPT_WIFI) {
+        const char* s = Config::wifi().otaSSID;
+        snprintf(rowBuf[f], sizeof(rowBuf[f]), "WiFi: %.16s", (s && s[0]) ? s : "(not set)");
+        rowPtrs[f] = rowBuf[f];
+        return;
+    }
     if (d.isText) {
         const char* t = textBuf(f);
-        if (f == OPT_PASS || f == OPT_KEY || f == OPT_OHC)
-            snprintf(val, sizeof(val), "%s", (t && t[0]) ? "(set)" : "(empty)");
-        else
-            snprintf(val, sizeof(val), "%s", (t && t[0]) ? t : "(empty)");
+        // keys are sensitive -> show set/empty, not the value
+        snprintf(val, sizeof(val), "%s", (t && t[0]) ? "(set)" : "(empty)");
     } else if (d.isToggle) {
         snprintf(val, sizeof(val), "%s", getNum(f) ? "ON" : "OFF");
     } else {
@@ -124,6 +125,71 @@ static void draw() {
                              : "click: edit   back: save & exit");
 }
 
+// Guided WiFi setup: scan -> pick SSID from the list -> enter password -> save
+// and try to connect. Replaces the old separate SSID/Pass text fields.
+static void wifiSetupFlow() {
+    App::clear(); App::header("WIFI"); App::centerMsg("scanning...", TFT_CYAN);
+    WiFi.mode(WIFI_STA);
+    int n = WiFi.scanNetworks(false, true);   // synchronous, include hidden
+    if (n <= 0) {
+        App::centerMsg("no networks found", TFT_RED);
+        App::footer("press back");
+        while (true) { M5Cardputer.update(); if (porkhal::vkey.back || porkhal::vkey.enter) break; delay(20); }
+        WiFi.scanDelete();
+        return;
+    }
+    static constexpr int MAXN = 30;
+    if (n > MAXN) n = MAXN;
+    static char rb[MAXN][36];
+    static const char* rp[MAXN];
+    for (int i = 0; i < n; i++) {
+        String ss = WiFi.SSID(i);
+        const char* lock = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? " " : "*";
+        snprintf(rb[i], sizeof(rb[i]), "%s%-17.17s %d", lock,
+                 ss.length() ? ss.c_str() : "(hidden)", (int)WiFi.RSSI(i));
+        rp[i] = rb[i];
+    }
+
+    int s = 0, first = 0; constexpr int VIS = 7; bool redraw = true;
+    while (true) {
+        M5Cardputer.update();
+        if (porkhal::vkey.back) { WiFi.scanDelete(); return; }      // cancel
+        if (porkhal::vkey.up)   { s = (s + n - 1) % n; redraw = true; }
+        if (porkhal::vkey.down) { s = (s + 1) % n;     redraw = true; }
+        if (s < first) first = s;
+        if (s >= first + VIS) first = s - VIS + 1;
+        if (porkhal::vkey.enter) break;
+        if (redraw) {
+            App::clear(); App::header("PICK NETWORK");
+            App::drawList(rp, n, s, first, VIS, 1);
+            App::footer("turn: pick  click: ok  back: cancel");
+            redraw = false;
+        }
+        delay(20);
+    }
+
+    char ssid[33];
+    strncpy(ssid, WiFi.SSID(s).c_str(), sizeof(ssid) - 1); ssid[sizeof(ssid) - 1] = '\0';
+    bool open = (WiFi.encryptionType(s) == WIFI_AUTH_OPEN);
+    WiFi.scanDelete();
+    if (ssid[0] == '\0') return;   // hidden/blank SSID -> can't type it here
+
+    char pass[65] = {0};
+    if (!open && !porkhal::charPicker("Password", pass, sizeof(pass), 63)) return;  // cancelled
+
+    WiFiConfig& w = Config::wifi();
+    strncpy(w.otaSSID, ssid, sizeof(w.otaSSID) - 1);     w.otaSSID[sizeof(w.otaSSID) - 1] = '\0';
+    strncpy(w.otaPassword, pass, sizeof(w.otaPassword) - 1); w.otaPassword[sizeof(w.otaPassword) - 1] = '\0';
+    Config::save();
+
+    App::clear(); App::header("WIFI"); App::centerMsg("connecting...", TFT_CYAN);
+    bool ok = NetLink::connectConfigured();
+    App::centerMsg(ok ? "connected" : "saved (no link yet)", ok ? TFT_GREEN : TFT_YELLOW);
+    App::footer("press back");
+    uint32_t t = millis();
+    while (millis() - t < 2000) { M5Cardputer.update(); if (porkhal::vkey.back || porkhal::vkey.enter) break; delay(20); }
+}
+
 void tick(const App::Input& in) {
     if (editing >= 0) {
         // numeric edit mode
@@ -145,6 +211,7 @@ void tick(const App::Input& in) {
     if (sel >= firstVisible + VISIBLE) firstVisible = sel - VISIBLE + 1;
 
     if (in.enter) {
+        if (sel == OPT_WIFI) { wifiSetupFlow(); dirty = true; if (dirty) { draw(); dirty = false; } return; }
         const FieldDef& d = defs[sel];
         if (d.isText) {
             char* buf = textBuf(sel);

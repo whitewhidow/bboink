@@ -35,9 +35,10 @@ internal storage) · connected WiFi SSID (green) · battery %.
   **SYNC** submits the WPA hashes to OnlineHashCrack (API v2, algo 22000). Same
   per-capture detail/delete view. Crack status is shared from the wpa-sec potfile
   (OHC's API masks hashes, so per-file results can't be read back from it).
-- **OPTIONS** — `WiFi SSID`, `WiFi Pass`, `WPA Key` (wpa-sec, 32 hex), `OHC Key`
+- **OPTIONS** — `WiFi` (a guided flow: scan → pick an SSID from the list → enter
+  the password → saves and connects), `WPA Key` (wpa-sec, 32 hex), `OHC Key`
   (`sk_…`), and oink tuning: `Ch Hop ms`, `Lock ms`, `Atk RSSI`, `Deauth` on/off,
-  `Burst`, `Jitter ms`. Saved on exit.
+  `Rnd MAC` on/off, `Burst`, `Jitter ms`. Saved on exit.
 - **REBOOT** / **POWER OFF** — soft restart / deep sleep (wake via reset).
 
 ## Controls
