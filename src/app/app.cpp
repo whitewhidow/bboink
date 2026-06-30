@@ -1,5 +1,6 @@
 // app.cpp — state machine + plain drawing helpers.
 #include "app.h"
+#include "../core/config.h"
 #include <WiFi.h>
 
 namespace App {
@@ -48,10 +49,16 @@ void header(const char* title) {
     // Connected SSID (green) or "----" when offline, just left of the battery.
     bool wifi = (WiFi.status() == WL_CONNECTED);
     char ws[16];
-    if (wifi) { String s = WiFi.SSID(); snprintf(ws, sizeof(ws), "%.12s", s.c_str()); }
+    if (wifi) { String s = WiFi.SSID(); snprintf(ws, sizeof(ws), "%.8s", s.c_str()); }
     else      { strncpy(ws, "----", sizeof(ws)); }
     M5.Display.setTextColor(wifi ? TFT_GREEN : COL_DIM, TFT_BLACK);
     M5.Display.drawString(ws, PORK_DISPLAY_W - 40, 4);
+
+    // SD status, left of the WiFi/SSID block: green "SD" = card mounted,
+    // dim red "sd" = no card (running on internal LittleFS).
+    bool sd = Config::isSDCardMounted();
+    M5.Display.setTextColor(sd ? TFT_GREEN : TFT_RED, TFT_BLACK);
+    M5.Display.drawString(sd ? "SD" : "sd", PORK_DISPLAY_W - 92, 4);
 }
 
 void footer(const char* hint) {

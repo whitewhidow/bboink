@@ -286,6 +286,17 @@ static void ensureSdSpiReady() {
     pinMode(SD_CS_PIN, OUTPUT);
     digitalWrite(SD_CS_PIN, HIGH);
 
+#ifdef PORK_BOARD_TEMBED_CC1101
+    // On the T-Embed CC1101 the SD, CC1101 radio AND the ST7789 display all hang
+    // off ONE shared SPI bus (SCLK 11 / MOSI 9 / MISO 10). Every other device's
+    // chip-select must be HIGH (deselected) before the SD is mounted, or it holds
+    // the shared MISO line and the mount fails ("physical drive cannot work").
+    // This mirrors LilyGo's factory board_spi_deselect_all(). Our SD mount runs
+    // before the display driver claims pin 41, so we must park TFT CS ourselves.
+    pinMode(PORK_CC1101_CS, OUTPUT); digitalWrite(PORK_CC1101_CS, HIGH);  // radio
+    pinMode(PORK_TFT_CS,    OUTPUT); digitalWrite(PORK_TFT_CS,    HIGH);  // display
+#endif
+
     // SCK, MISO, MOSI, SS/CS
     sdSPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
     sdSpiBegun = true;
@@ -305,6 +316,16 @@ bool Config::init() {
 
     // Allow buses to stabilize after M5.begin()
     delay(50);
+
+#ifdef PORK_BOARD_TEMBED_CC1101
+    // The ST7789 hasn't been initialised yet (display comes up after Config::init)
+    // and in its power-on state it loads the shared SPI bus, corrupting SD I/O.
+    // Hold the panel in reset (RST low) for the duration of the SD mount so it
+    // releases the bus; the display driver re-pulses RST when it initialises.
+    pinMode(PORK_TFT_RST, OUTPUT);
+    digitalWrite(PORK_TFT_RST, LOW);
+    delay(10);
+#endif
 
     // Ensure SD has a proper SPI bus configured
     ensureSdSpiReady();
@@ -376,6 +397,14 @@ bool Config::init() {
         save();
     }
 
+    // If a card is mounted but has no config yet (e.g. the values were previously
+    // stored only in internal SPIFFS because the SD wasn't mounting), write the
+    // current config to the SD. The SD copy is authoritative and survives flashing
+    // other firmware, so re-flashing bboink restores your settings from the card.
+    if (sdAvailable && !SD.exists(configBinPathSD())) {
+        if (save()) Serial.println("[CONFIG] Config persisted to SD (survives reflashing)");
+    }
+
     // No credentials are hardcoded. Configure the WiFi SSID/password, the wpa-sec
     // key and the OnlineHashCrack key on-device via the Options screen, or drop a
     // wpa-sec key file on the SD card (see loadWpaSecKeyFromFile below). Values
@@ -402,6 +431,10 @@ bool Config::init() {
 bool Config::isSDAvailable() {
     // Now means "a capture filesystem is available" (SD card or internal LittleFS).
     return Storage::available();
+}
+
+bool Config::isSDCardMounted() {
+    return sdAvailable;
 }
 
 void Config::prepareSDBus() {
@@ -511,6 +544,23 @@ bool Config::reinitSD() {
     }
 
     return sdAvailable;
+}
+
+bool Config::mountSdAfterDisplay() {
+    // On the T-Embed CC1101 the SD, ST7789 display and CC1101 share one SPI bus.
+    // The SD frequently won't mount until the display driver has initialised the
+    // ST7789 (which leaves the panel in a known state that releases the shared
+    // bus). Config::init() runs BEFORE the display (required for the WiFi-before-
+    // display workaround), so the boot mount often fails and we fall back to
+    // LittleFS. Retry here, after M5/display init; on success route storage to SD.
+    if (sdAvailable) return true;              // already mounted at boot
+    if (!reinitSD()) return false;             // still no usable card -> keep LittleFS
+    Storage::setBackend(&SD, true);            // captures + config now go to the SD
+    // Seed the SD with the current config if it doesn't have it yet, so settings
+    // entered while on LittleFS get persisted to the (reflash-proof) card.
+    if (!SD.exists(configBinPathSD())) save();
+    Serial.println("[CONFIG] SD mounted after display init; storage -> SD");
+    return true;
 }
 
 bool Config::loadFrom(fs::FS& fs, const char* path) {

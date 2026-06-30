@@ -136,8 +136,10 @@ public:
     static bool save();
     static bool load();
     static bool loadPersonality();
-    static bool isSDAvailable();
+    static bool isSDAvailable();      // capture FS available (SD card OR internal LittleFS)
+    static bool isSDCardMounted();    // a real microSD card is mounted (not the LittleFS fallback)
     static bool reinitSD();  // Try to (re)initialize SD card at runtime
+    static bool mountSdAfterDisplay();  // Retry SD mount once the display is up (shared SPI bus)
     static bool loadWpaSecKeyFromFile();  // Load key from /m5porkchop/wpa-sec/wpasec_key.txt (legacy /wpasec_key.txt)
     static bool loadWigleKeyFromFile();   // Load keys from /m5porkchop/wigle/wigle_key.txt (legacy /wigle_key.txt)
     static void prepareSDBus();           // Prepare SPI bus for raw SD access

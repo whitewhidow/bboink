@@ -42,6 +42,10 @@ void setup() {
     M5Cardputer.begin(cfg);
     M5.Display.setBrightness(200);
 
+    // The SD shares the SPI bus with the display; retry the mount now that the
+    // ST7789 is initialised (it wouldn't mount before the display was up).
+    Config::mountSdAfterDisplay();
+
     NetworkRecon::init();
     OinkMode::init();
 

@@ -73,6 +73,15 @@
 #define PORK_SD_MOSI        9
 #define PORK_SD_CS          13
 
+// CC1101 sub-GHz radio shares the SAME SPI bus (SCLK/MOSI/MISO) with a
+// dedicated chip-select. This firmware doesn't use the radio, but its CS MUST be
+// driven HIGH (deselected) before SD access or the CC1101 holds the shared MISO
+// line and the SD mount fails ("physical drive cannot work"). Pins per LilyGo /
+// Bruce T_EMBED_1101 reference (CC1101_SS_PIN 12, GDO0 3, GDO2 38).
+#define PORK_CC1101_CS      12
+#define PORK_CC1101_GDO0    3
+#define PORK_CC1101_GDO2    38
+
 // Rotary encoder + buttons (the keyboard replacement).
 #define PORK_ENC_A          4
 #define PORK_ENC_B          5
