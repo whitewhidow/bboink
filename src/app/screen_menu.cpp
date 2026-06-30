@@ -7,18 +7,21 @@ namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "WPA-SEC", "HASHCRACK", "OPTIONS", "REBOOT", "POWER OFF" };
 static constexpr int kCount = 6;
+static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
+static int firstVisible = 0;
 static bool dirty = true;
 
 void enter() {
     sel = 0;
+    firstVisible = 0;
     dirty = true;
 }
 
 static void draw() {
     App::clear();
     App::header("BBoink");
-    App::drawList(kItems, kCount, sel, 0, kCount);
+    App::drawList(kItems, kCount, sel, firstVisible, VISIBLE);
     App::footer("turn: move   click: open");
 }
 
@@ -63,6 +66,9 @@ static void powerOff() {
 void tick(const App::Input& in) {
     if (in.up)   { sel = (sel + kCount - 1) % kCount; dirty = true; }
     if (in.down) { sel = (sel + 1) % kCount;          dirty = true; }
+    // Keep the selection within the visible window (scrolls for >VISIBLE items).
+    if (sel < firstVisible)            firstVisible = sel;
+    if (sel >= firstVisible + VISIBLE) firstVisible = sel - VISIBLE + 1;
     if (in.enter) {
         switch (sel) {
             case 0: App::go(App::Screen::CAPTURE); return;
