@@ -91,9 +91,11 @@ void ledInit() { /* neopixelWrite() initialises the RMT channel lazily */ }
 // shared with the display RST net) is released the rest of the time.
 // ---------------------------------------------------------------------------
 #include <driver/i2s.h>
+#include "../core/config.h"
 
 void SpeakerFacade::tone(uint16_t freq, uint32_t durationMs) {
     if (freq == 0 || durationMs == 0) return;
+    if (!Config::wifi().soundEnabled) return;   // respect the Options "Sound" toggle
 
     const int kSampleRate = 16000;
     i2s_config_t cfg = {};

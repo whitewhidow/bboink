@@ -108,6 +108,7 @@ struct __attribute__((packed)) ConfigBlob {
 
     // Appended after v-bump; old (shorter) blobs read these as 0 (see extractBlob).
     uint8_t  displayBrightness;
+    uint8_t  soundEnabled;     // 0=unset(->on), 1=on, 2=off
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -137,6 +138,7 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.deauthBurstCount     = wifi.deauthBurstCount;
     b.deauthJitterMax      = wifi.deauthJitterMax;
     b.displayBrightness    = wifi.displayBrightness;
+    b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
     b.spectrumTopN         = wifi.spectrumTopN;
     b.spectrumStaleMs      = wifi.spectrumStaleMs;
     b.spectrumCollapseSsid = wifi.spectrumCollapseSsid ? 1 : 0;
@@ -221,6 +223,7 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.deauthBurstCount     = b.deauthBurstCount ? b.deauthBurstCount : 5;
     wifi.deauthJitterMax      = b.deauthJitterMax;
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
+    wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;
     wifi.spectrumStaleMs      = b.spectrumStaleMs;
     wifi.spectrumCollapseSsid = b.spectrumCollapseSsid != 0;

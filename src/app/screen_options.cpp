@@ -9,7 +9,7 @@ namespace ScreenOptions {
 enum Field {
     OPT_WIFI, OPT_KEY, OPT_OHC,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER,
-    OPT_BRIGHT,
+    OPT_BRIGHT, OPT_SOUND,
     OPT_COUNT
 };
 
@@ -32,6 +32,7 @@ static const FieldDef defs[OPT_COUNT] = {
     { "Burst",     false, false, 1, 8, 1 },
     { "Jitter ms", false, false, 0, 20, 1 },
     { "Brightness",false, false, 10, 255, 15 },
+    { "Sound",     false, true,  0, 1, 1 },
 };
 
 static int  sel = 0;
@@ -54,6 +55,7 @@ static int  getNum(int f) {
         case OPT_BURST:  return w.deauthBurstCount;
         case OPT_JITTER: return w.deauthJitterMax;
         case OPT_BRIGHT: return w.displayBrightness;
+        case OPT_SOUND:  return w.soundEnabled ? 1 : 0;
     }
     return 0;
 }
@@ -72,6 +74,7 @@ static void setNum(int f, int v) {
         case OPT_JITTER: w.deauthJitterMax = (uint8_t)v;     break;
         case OPT_BRIGHT: w.displayBrightness = (uint8_t)v;
                          M5.Display.setBrightness((uint8_t)v); break;  // live preview
+        case OPT_SOUND:  w.soundEnabled = (v != 0);          break;
     }
 }
 

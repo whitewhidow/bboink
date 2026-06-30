@@ -26,19 +26,21 @@ internal storage) · connected WiFi SSID (green) · battery %.
   captured networks are skipped** — both within the session and any with a
   handshake already saved on the card. Each new capture **beeps** (I2S amp) and
   flashes the onboard LED green. Side button stops, restores WiFi and exits.
-- **WPA-SEC** — lists `.pcap` captures with status tags (`CRK`/`UP`/`-`) and
-  counts. **SYNC** connects WiFi STA, uploads pending captures, and downloads the
-  cracked potfile. Click a capture for a detail view (SSID/BSSID, status, recovered
-  password) and delete. Also: **MAKE TEST CAP** (generates a real, crackable WPA2
-  handshake for end-to-end testing) and **WIFI SCAN** diagnostics.
-- **HASHCRACK** — lists `.22000` captures with the same status tags/counts.
-  **SYNC** submits the WPA hashes to OnlineHashCrack (API v2, algo 22000). Same
-  per-capture detail/delete view. Crack status is shared from the wpa-sec potfile
-  (OHC's API masks hashes, so per-file results can't be read back from it).
+- **WPASEC SYNC** — lists `.pcap` captures with status tags (`CRK`/`UP`/`-`),
+  counts, and free storage. **SYNC** connects WiFi STA, uploads pending captures,
+  and downloads the cracked potfile. Click a capture for a detail view (SSID/BSSID,
+  status, recovered password) and delete. Also: **MAKE TEST CAP** (generates a
+  real, crackable WPA2 handshake for end-to-end testing) and **WIFI SCAN**.
+- **OHC SYNC** — lists `.22000` captures with the same status tags/counts and free
+  storage. **SYNC** submits the WPA hashes to OnlineHashCrack (API v2, algo 22000).
+  Same per-capture detail/delete view. Crack status is shared from the wpa-sec
+  potfile (OHC's API masks hashes, so per-file results can't be read back from it).
+- **SYNC ALL** — runs the WPA-SEC sync then the OnlineHashCrack upload back-to-back
+  and shows a combined result (no need to visit both screens).
 - **OPTIONS** — `WiFi` (a guided flow: scan → pick an SSID from the list → enter
   the password → saves and connects), `WPA Key` (wpa-sec, 32 hex), `OHC Key`
   (`sk_…`), and oink tuning: `Ch Hop ms`, `Lock ms`, `Atk RSSI`, `Deauth` on/off,
-  `Rnd MAC` on/off, `Burst`, `Jitter ms`, `Brightness`. Saved on exit.
+  `Rnd MAC` on/off, `Burst`, `Jitter ms`, `Brightness`, `Sound` on/off. Saved on exit.
 - **REBOOT** / **POWER OFF** — soft restart / deep sleep (wake via any button).
   POWER OFF is also triggered by **holding the side (BACK) button ~3 s** from
   anywhere. The backlight **auto-dims after 30 s idle** and restores on any input.

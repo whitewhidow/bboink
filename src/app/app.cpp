@@ -120,6 +120,14 @@ void centerMsg(const char* msg, uint16_t color) {
     M5.Display.drawString(msg, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2);
 }
 
+const char* fmtBytes(uint64_t b) {
+    static char s[12];
+    if (b >= (1ULL << 30))      snprintf(s, sizeof(s), "%.1fG", b / (float)(1ULL << 30));
+    else if (b >= (1ULL << 20)) snprintf(s, sizeof(s), "%lluM", (unsigned long long)(b >> 20));
+    else                        snprintf(s, sizeof(s), "%lluK", (unsigned long long)(b >> 10));
+    return s;
+}
+
 void go(Screen s) {
     screen = s;
     switch (s) {

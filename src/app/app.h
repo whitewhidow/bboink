@@ -35,6 +35,8 @@ void drawList(const char* const* rows, int count, int selected,
               int firstVisible, int visibleRows, int textSize = 2);
 // Centered single-line status (used for "scanning", "no captures", etc.).
 void centerMsg(const char* msg, uint16_t color = 0xFFFF);
+// Human-readable byte size into a shared static buffer ("3.2G" / "47M" / "812K").
+const char* fmtBytes(uint64_t bytes);
 
 } // namespace App
 

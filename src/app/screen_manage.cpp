@@ -97,7 +97,11 @@ static void draw() {
     snprintf(title, sizeof(title), "WPA-SEC %d U%d C%d", fileCount, up, crk);
     App::header(title);
     App::drawList(rowPtrs, rowCount(), sel, firstVisible, VISIBLE, 1);
-    App::footer("click file = delete   CRK/UP/-");
+    uint64_t freeB = Storage::totalBytes() > Storage::usedBytes()
+                   ? Storage::totalBytes() - Storage::usedBytes() : 0;
+    char foot[48];
+    snprintf(foot, sizeof(foot), "click=del  CRK/UP/-   %s free", App::fmtBytes(freeB));
+    App::footer(foot);
 }
 
 // --- wpa-sec sync ---------------------------------------------------------
