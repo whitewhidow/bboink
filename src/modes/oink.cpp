@@ -2715,6 +2715,7 @@ bool OinkMode::saveAllPMKIDs() {
 }
 
 void OinkMode::sendDeauthFrame(const uint8_t* bssid, const uint8_t* station, uint8_t reason) {
+    if (!Config::wifi().enableDeauth) return;   // respect the Options "Deauth" toggle
     // Deauth frame structure
     uint8_t deauthPacket[26] = {
         0xC0, 0x00,  // Frame Control: Deauth
@@ -2780,6 +2781,7 @@ void OinkMode::sendDeauthBurst(const uint8_t* bssid, const uint8_t* station, uin
 }
 
 void OinkMode::sendDisassocFrame(const uint8_t* bssid, const uint8_t* station, uint8_t reason) {
+    if (!Config::wifi().enableDeauth) return;   // respect the Options "Deauth" toggle
     // Disassociation frame - some clients respond better to this
     uint8_t disassocPacket[26] = {
         0xA0, 0x00,  // Frame Control: Disassoc (0xA0 instead of 0xC0)

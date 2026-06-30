@@ -6,7 +6,7 @@ namespace ScreenOptions {
 
 enum Field {
     OPT_SSID, OPT_PASS, OPT_KEY, OPT_OHC,
-    OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_BURST, OPT_JITTER,
+    OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER,
     OPT_COUNT
 };
 
@@ -26,6 +26,7 @@ static const FieldDef defs[OPT_COUNT] = {
     { "Lock ms",   false, false, 1000, 10000, 500 },
     { "Atk RSSI",  false, false, -90, -50, 5 },
     { "Deauth",    false, true,  0, 1, 1 },
+    { "Rnd MAC",   false, true,  0, 1, 1 },
     { "Burst",     false, false, 1, 8, 1 },
     { "Jitter ms", false, false, 0, 20, 1 },
 };
@@ -46,6 +47,7 @@ static int  getNum(int f) {
         case OPT_LOCK:   return w.lockTime;
         case OPT_RSSI:   return w.attackMinRssi;
         case OPT_DEAUTH: return w.enableDeauth ? 1 : 0;
+        case OPT_RNDMAC: return w.randomizeMAC ? 1 : 0;
         case OPT_BURST:  return w.deauthBurstCount;
         case OPT_JITTER: return w.deauthJitterMax;
     }
@@ -61,6 +63,7 @@ static void setNum(int f, int v) {
         case OPT_LOCK:   w.lockTime = (uint16_t)v;           break;
         case OPT_RSSI:   w.attackMinRssi = (int8_t)v;        break;
         case OPT_DEAUTH: w.enableDeauth = (v != 0);          break;
+        case OPT_RNDMAC: w.randomizeMAC = (v != 0);          break;
         case OPT_BURST:  w.deauthBurstCount = (uint8_t)v;    break;
         case OPT_JITTER: w.deauthJitterMax = (uint8_t)v;     break;
     }
