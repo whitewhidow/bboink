@@ -124,6 +124,8 @@ public:
     static uint16_t getCompleteHandshakeCount();
     // SSID of the most recently SAVED capture (handshake or PMKID); "" if none yet.
     static const char* getLastCaptureSSID() { return lastCaptureSSID; }
+    // Full storage path of the most recently saved capture file ("" if none yet).
+    static const char* getLastCapturePath() { return lastCapturePath; }
     // True if a handshake/PMKID file for this BSSID already exists on the SD
     // (loaded once at capture start). Cheap set lookup, no locking — safe to call
     // from inside the target-selection critical section.
@@ -202,6 +204,7 @@ private:
     static uint8_t targetBssid[6];  // Store BSSID to handle index invalidation
     static char targetSSIDCache[33];
     static char lastCaptureSSID[33];   // SSID of most recently saved capture (UI)
+    static char lastCapturePath[96];   // path of most recently saved capture file
     static uint8_t targetClientCountCache;
     static uint8_t targetBssidCache[6];
     static bool targetHiddenCache;

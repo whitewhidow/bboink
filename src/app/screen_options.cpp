@@ -7,7 +7,7 @@
 namespace ScreenOptions {
 
 enum Field {
-    OPT_WIFI, OPT_KEY, OPT_OHC,
+    OPT_WIFI, OPT_KEY, OPT_OHC, OPT_NTFY, OPT_NTFYFILE,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER,
     OPT_BRIGHT, OPT_SOUND,
     OPT_COUNT
@@ -24,6 +24,8 @@ static const FieldDef defs[OPT_COUNT] = {
     { "WiFi",      false, false, 0, 0, 0 },   // action: scan -> pick SSID -> password
     { "WPA Key",   true,  false, 0, 0, 0 },
     { "OHC Key",   true,  false, 0, 0, 0 },
+    { "Ntfy Topic",true,  false, 0, 0, 0 },
+    { "Ntfy File", false, true,  0, 1, 1 },
     { "Ch Hop ms", false, false, 50, 2000, 50 },
     { "Lock ms",   false, false, 1000, 10000, 500 },
     { "Atk RSSI",  false, false, -90, -50, 5 },
@@ -56,6 +58,7 @@ static int  getNum(int f) {
         case OPT_JITTER: return w.deauthJitterMax;
         case OPT_BRIGHT: return w.displayBrightness;
         case OPT_SOUND:  return w.soundEnabled ? 1 : 0;
+        case OPT_NTFYFILE: return w.ntfyAttachFile ? 1 : 0;
     }
     return 0;
 }
@@ -75,6 +78,7 @@ static void setNum(int f, int v) {
         case OPT_BRIGHT: w.displayBrightness = (uint8_t)v;
                          M5.Display.setBrightness((uint8_t)v); break;  // live preview
         case OPT_SOUND:  w.soundEnabled = (v != 0);          break;
+        case OPT_NTFYFILE: w.ntfyAttachFile = (v != 0);      break;
     }
 }
 
@@ -83,6 +87,7 @@ static char* textBuf(int f) {
     switch (f) {
         case OPT_KEY:  return w.wpaSecKey;
         case OPT_OHC:  return w.ohcKey;
+        case OPT_NTFY: return w.ntfyTopic;
     }
     return nullptr;
 }
@@ -90,6 +95,7 @@ static size_t textCap(int f) {
     switch (f) {
         case OPT_KEY:  return sizeof(Config::wifi().wpaSecKey);
         case OPT_OHC:  return sizeof(Config::wifi().ohcKey);
+        case OPT_NTFY: return sizeof(Config::wifi().ntfyTopic);
     }
     return 0;
 }
@@ -105,8 +111,10 @@ static void buildRow(int f) {
     }
     if (d.isText) {
         const char* t = textBuf(f);
-        // keys are sensitive -> show set/empty, not the value
-        snprintf(val, sizeof(val), "%s", (t && t[0]) ? "(set)" : "(empty)");
+        if (f == OPT_KEY || f == OPT_OHC)   // keys are sensitive -> hide value
+            snprintf(val, sizeof(val), "%s", (t && t[0]) ? "(set)" : "(empty)");
+        else                                 // ntfy topic etc. -> show it
+            snprintf(val, sizeof(val), "%s", (t && t[0]) ? t : "(empty)");
     } else if (d.isToggle) {
         snprintf(val, sizeof(val), "%s", getNum(f) ? "ON" : "OFF");
     } else {

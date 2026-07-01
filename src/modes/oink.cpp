@@ -183,6 +183,7 @@ int OinkMode::targetIndex = -1;
 uint8_t OinkMode::targetBssid[6] = {0};
 char OinkMode::targetSSIDCache[33] = {0};
 char OinkMode::lastCaptureSSID[33] = {0};
+char OinkMode::lastCapturePath[96] = {0};
 std::set<uint64_t> OinkMode::capturedBssids;
 uint8_t OinkMode::targetClientCountCache = 0;
 uint8_t OinkMode::targetBssidCache[6] = {0};
@@ -2305,6 +2306,9 @@ void OinkMode::autoSaveCheck() {
                 hs.saved = true;
                 strncpy(lastCaptureSSID, hs.ssid, sizeof(lastCaptureSSID) - 1);
                 lastCaptureSSID[sizeof(lastCaptureSSID) - 1] = '\0';
+                // Prefer the .pcap for the ntfy attachment (full handshake), else the .22000.
+                strncpy(lastCapturePath, pcapOk ? filename : filename22000, sizeof(lastCapturePath) - 1);
+                lastCapturePath[sizeof(lastCapturePath) - 1] = '\0';
                 SDLog::log("OINK", "Handshake saved: %s (pcap:%s 22000:%s)",
                            hs.ssid, pcapOk ? "OK" : "FAIL", hs22kOk ? "OK" : "FAIL");
             } else {
@@ -2695,6 +2699,8 @@ bool OinkMode::saveAllPMKIDs() {
                 p.saved = true;
                 strncpy(lastCaptureSSID, p.ssid, sizeof(lastCaptureSSID) - 1);
                 lastCaptureSSID[sizeof(lastCaptureSSID) - 1] = '\0';
+                strncpy(lastCapturePath, filename, sizeof(lastCapturePath) - 1);
+                lastCapturePath[sizeof(lastCapturePath) - 1] = '\0';
                 SDLog::log("OINK", "PMKID saved: %s", p.ssid);
             } else {
                 // Failed - increment attempt counter

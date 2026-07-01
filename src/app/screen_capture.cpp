@@ -6,6 +6,7 @@
 #include "../core/network_recon.h"
 #include "../core/wsl_bypasser.h"
 #include "../core/config.h"
+#include "../web/ntfy.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -13,7 +14,8 @@ namespace ScreenCapture {
 
 static uint32_t lastDraw = 0;
 static bool framed = false;   // static labels drawn once
-static uint16_t prevCaps = 0; // total captures seen, to detect new ones
+static uint16_t prevCaps = 0;        // total captures seen, to detect new ones (LED/beep)
+static uint16_t sessionStartCaps = 0; // baseline at screen entry (for the exit ntfy alert)
 
 // Flash the onboard WS2812 green + chirp the speaker to signal a fresh capture.
 static void captureNotify() {
@@ -102,6 +104,7 @@ void enter() {
     lastDraw = 0;
     // Baseline the capture count so we don't notify for ones already captured.
     prevCaps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
+    sessionStartCaps = prevCaps;
 }
 
 void tick(const App::Input& in) {
@@ -120,6 +123,16 @@ void tick(const App::Input& in) {
             WiFi.begin(ssid, Config::wifi().otaPassword);
             uint32_t t = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - t < 8000) { delay(100); yield(); }
+        }
+        // Push an ntfy alert (+ latest capture file if enabled) for this session's
+        // captures. Can't send during capture (promiscuous drops STA), so do it here
+        // once the uplink is back.
+        uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
+        if (caps > sessionStartCaps && Ntfy::enabled() && WiFi.status() == WL_CONNECTED) {
+            App::clear();
+            App::centerMsg("notifying phone...", TFT_CYAN);
+            Ntfy::sendCapture(OinkMode::getLastCaptureSSID(), OinkMode::getLastCapturePath(),
+                              caps - sessionStartCaps);
         }
         App::go(App::Screen::MENU);
         return;

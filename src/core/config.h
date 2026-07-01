@@ -106,6 +106,8 @@ struct WiFiConfig {
     char ohcKey[72];                    // OnlineHashCrack API key (sk_...)
     char wigleApiName[65];              // WiGLE API Name (from wigle.net/account)
     char wigleApiToken[65];             // WiGLE API Token (from wigle.net/account)
+    char ntfyTopic[64] = "capture_alert"; // ntfy.sh topic for capture alerts ("" = off)
+    bool ntfyAttachFile = true;         // attach the capture file to the ntfy push
 };
 
 // BLE settings for PIGGY BLUES mode

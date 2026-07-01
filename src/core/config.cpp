@@ -45,7 +45,7 @@ static bool littlefsAvailable = false;
 
 // ---- Binary config blob (zero heap allocation) ----
 static constexpr uint32_t CONFIG_MAGIC   = 0x504F524B;  // 'PORK'
-static constexpr uint16_t CONFIG_VERSION = 1;
+static constexpr uint16_t CONFIG_VERSION = 2;   // v2: ntfy topic + attach toggle
 #define CONFIG_BIN_FILE "/porkchop.dat"
 
 static const char* configBinPathSD() {
@@ -109,6 +109,9 @@ struct __attribute__((packed)) ConfigBlob {
     // Appended after v-bump; old (shorter) blobs read these as 0 (see extractBlob).
     uint8_t  displayBrightness;
     uint8_t  soundEnabled;     // 0=unset(->on), 1=on, 2=off
+    // v2 fields (gated on b.version >= 2 in extractBlob).
+    char     ntfyTopic[64];
+    uint8_t  ntfyAttachFile;
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -139,6 +142,8 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.deauthJitterMax      = wifi.deauthJitterMax;
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
+    strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
+    b.ntfyAttachFile       = wifi.ntfyAttachFile ? 1 : 0;
     b.spectrumTopN         = wifi.spectrumTopN;
     b.spectrumStaleMs      = wifi.spectrumStaleMs;
     b.spectrumCollapseSsid = wifi.spectrumCollapseSsid ? 1 : 0;
@@ -241,6 +246,18 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.wigleApiName[sizeof(wifi.wigleApiName) - 1] = '\0';
     strncpy(wifi.wigleApiToken, b.wigleApiToken, sizeof(wifi.wigleApiToken) - 1);
     wifi.wigleApiToken[sizeof(wifi.wigleApiToken) - 1] = '\0';
+
+    // v2 ntfy fields — only present in v>=2 blobs; older configs get seeded once
+    // with the defaults (topic "capture_alert", attach on).
+    if (b.version >= 2) {
+        strncpy(wifi.ntfyTopic, b.ntfyTopic, sizeof(wifi.ntfyTopic) - 1);
+        wifi.ntfyTopic[sizeof(wifi.ntfyTopic) - 1] = '\0';
+        wifi.ntfyAttachFile = b.ntfyAttachFile != 0;
+    } else {
+        strncpy(wifi.ntfyTopic, "capture_alert", sizeof(wifi.ntfyTopic) - 1);
+        wifi.ntfyTopic[sizeof(wifi.ntfyTopic) - 1] = '\0';
+        wifi.ntfyAttachFile = true;
+    }
 
     ble.burstInterval = b.burstInterval;
     ble.advDuration   = b.advDuration;

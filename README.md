@@ -25,7 +25,10 @@ internal storage) · connected WiFi SSID (green) · battery %.
   **`last:`** line showing the network of the most recent saved capture. **Already
   captured networks are skipped** — both within the session and any with a
   handshake already saved on the card. Each new capture **beeps** (I2S amp) and
-  flashes the onboard LED green. Side button stops, restores WiFi and exits.
+  flashes the onboard LED green. Side button stops, restores WiFi and exits — and
+  on exit, if an **ntfy** topic is set, pushes an alert to your phone (with the
+  latest capture file attached when `Ntfy File` is on). The push happens on exit,
+  not mid-capture, because capture runs promiscuous (no STA uplink).
 - **WPASEC SYNC** — lists `.pcap` captures with status tags (`CRK`/`UP`/`-`),
   counts, and free storage. **SYNC** connects WiFi STA, uploads pending captures,
   and downloads the cracked potfile. Click a capture for a detail view (SSID/BSSID,
@@ -40,6 +43,8 @@ internal storage) · connected WiFi SSID (green) · battery %.
 - **OPTIONS** — `WiFi` (a guided flow: scan → pick an SSID from the list → enter
   the password → saves and connects), `WPA Key` (wpa-sec, 32 hex), `OHC Key`
   (`sk_…`), and oink tuning: `Ch Hop ms`, `Lock ms`, `Atk RSSI`, `Deauth` on/off,
+  `Ntfy Topic` (ntfy.sh push topic for capture alerts; empty = off, default
+  `capture_alert`), `Ntfy File` on/off (attach the capture file to the push),
   `Rnd MAC` on/off, `Burst`, `Jitter ms`, `Brightness`, `Sound` on/off. Saved on exit.
 - **REBOOT** / **POWER OFF** — soft restart / deep sleep (wake via any button).
   POWER OFF is also triggered by **holding the side (BACK) button ~3 s** from
