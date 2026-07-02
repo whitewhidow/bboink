@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <Update.h>
 
 namespace Updater {
 
@@ -78,6 +79,51 @@ Result fetchToSD(const char* url, const char* sdPath, void (*progress)(size_t, s
     }
     r.ok = true;
     r.bytes = got;
+    return r;
+}
+
+Result fetchToFlash(const char* url, void (*progress)(size_t, size_t)) {
+    Result r = {};
+    if (WiFi.status() != WL_CONNECTED)          { strncpy(r.error, "WIFI NOT CONNECTED", sizeof(r.error) - 1); return r; }
+    if (!url || !url[0])                         { strncpy(r.error, "BAD URL", sizeof(r.error) - 1); return r; }
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setTimeout(15000);
+    if (!http.begin(client, url)) { strncpy(r.error, "HTTP BEGIN FAIL", sizeof(r.error) - 1); return r; }
+
+    int code = http.GET();
+    if (code != HTTP_CODE_OK) { snprintf(r.error, sizeof(r.error), "HTTP %d", code); http.end(); return r; }
+
+    int total = http.getSize();                 // Update needs a known size
+    if (total <= 0) { strncpy(r.error, "NO CONTENT-LENGTH", sizeof(r.error) - 1); http.end(); return r; }
+
+    // Update.begin() targets the inactive OTA partition and validates the image
+    // (magic byte + checksum) as it writes.
+    if (!Update.begin((size_t)total)) {
+        snprintf(r.error, sizeof(r.error), "BEGIN: %s", Update.errorString());
+        http.end();
+        return r;
+    }
+    if (progress) Update.onProgress([progress](size_t d, size_t t) { progress(d, t); });
+
+    WiFiClient* stream = http.getStreamPtr();
+    size_t written = Update.writeStream(*stream);
+    http.end();
+
+    if (written != (size_t)total) {
+        snprintf(r.error, sizeof(r.error), "WROTE %u/%d", (unsigned)written, total);
+        Update.abort();
+        return r;
+    }
+    if (!Update.end(true)) {                     // true = set the new partition bootable
+        snprintf(r.error, sizeof(r.error), "END: %s", Update.errorString());
+        return r;
+    }
+    r.ok = true;
+    r.bytes = written;
     return r;
 }
 

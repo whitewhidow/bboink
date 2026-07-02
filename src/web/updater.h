@@ -18,6 +18,12 @@ struct Result {
 // starts with the ESP image magic (0xE9), and write it to `sdPath` on the capture
 // FS via a temp file (only swapped in on success). progress(done,total) may be
 // null; total is 0 when the server sends no Content-Length. Requires WiFi up.
+// For a launcher install (the launcher loads the .bin from SD).
 Result fetchToSD(const char* url, const char* sdPath, void (*progress)(size_t, size_t));
+
+// GET `url` and write it straight into the spare OTA app partition via the Update
+// library, then mark it bootable. For a STANDALONE install (flashed at 0x0). On
+// success the caller should reboot to run the new image. Needs Content-Length.
+Result fetchToFlash(const char* url, void (*progress)(size_t, size_t));
 
 } // namespace Updater

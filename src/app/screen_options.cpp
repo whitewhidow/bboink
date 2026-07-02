@@ -11,7 +11,7 @@ namespace ScreenOptions {
 enum Field {
     OPT_WIFI, OPT_KEY, OPT_OHC, OPT_NTFY, OPT_NTFYFILE,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER, OPT_TRIES,
-    OPT_BRIGHT, OPT_SOUND, OPT_PURGE, OPT_OTAPATH, OPT_UPDATE,
+    OPT_BRIGHT, OPT_SOUND, OPT_PURGE, OPT_OTAPATH, OPT_UPDATE, OPT_UPDATE_SD,
     OPT_COUNT
 };
 
@@ -40,7 +40,8 @@ static const FieldDef defs[OPT_COUNT] = {
     { "Sound",     false, true,  0, 1, 1 },
     { "Purge Crk", false, true,  0, 1, 1 },
     { "OTA Path",  true,  false, 0, 0, 0 },
-    { "Update FW", false, false, 0, 0, 0 },   // action: download bin -> SD -> reboot
+    { "Update FW", false, false, 0, 0, 0 },   // action: flash OTA (standalone install)
+    { "Update->SD",false, false, 0, 0, 0 },   // action: write bin to SD (launcher install)
 };
 
 static int  sel = 0;
@@ -121,8 +122,13 @@ static void buildRow(int f) {
         rowPtrs[f] = rowBuf[f];
         return;
     }
-    if (f == OPT_UPDATE) {   // action row (download new bin to SD)
+    if (f == OPT_UPDATE) {      // flash OTA (standalone)
         snprintf(rowBuf[f], sizeof(rowBuf[f]), "Update FW  v%s  >", BBOINK_VERSION);
+        rowPtrs[f] = rowBuf[f];
+        return;
+    }
+    if (f == OPT_UPDATE_SD) {    // write bin to SD (launcher)
+        snprintf(rowBuf[f], sizeof(rowBuf[f]), "Update->SD  >");
         rowPtrs[f] = rowBuf[f];
         return;
     }
@@ -240,22 +246,49 @@ static void waitBackKey() {
     while (true) { M5Cardputer.update(); if (porkhal::vkey.back || porkhal::vkey.enter) break; delay(20); }
 }
 
-// Self-update: pull the latest app .bin over WiFi and write it to the SD path the
-// launcher loads, then reboot so the launcher picks it up. Never touches flash.
-static void firmwareUpdateFlow() {
+// Flash OTA: pull the latest app .bin over WiFi straight into the spare OTA
+// partition and boot into it. For a STANDALONE install (flashed at 0x0).
+static void flashUpdateFlow() {
     App::clear(); App::header("UPDATE FW");
-    if (!Config::isSDAvailable()) { App::centerMsg("NO SD CARD", TFT_RED); App::footer("press back"); waitBackKey(); return; }
     App::centerMsg("connecting wifi...", TFT_CYAN);
     if (!NetLink::connectConfigured()) { App::centerMsg("NO WIFI", TFT_RED); App::footer("press back"); waitBackKey(); return; }
 
     App::clear(); App::header("UPDATE FW");
+    M5.Display.setTextSize(1); M5.Display.setTextDatum(top_center); M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    M5.Display.drawString("flashing to OTA slot", PORK_DISPLAY_W / 2, 30);
+    App::footer("do NOT power off");
+
+    Updater::Result r = Updater::fetchToFlash(BBOINK_OTA_URL, updProgress);
+
+    App::clear(); App::header("UPDATE FW");
+    if (r.ok) {
+        App::centerMsg("OK - rebooting", TFT_GREEN);
+        App::footer("booting new firmware...");
+        delay(1600);
+        ESP.restart();
+    } else {
+        App::centerMsg(r.error, TFT_RED);
+        App::footer("press back");
+        waitBackKey();
+    }
+}
+
+// SD update: write the latest app .bin to the SD path the launcher loads, then
+// reboot so the launcher picks it up. For a LAUNCHER install. Never touches flash.
+static void sdUpdateFlow() {
+    App::clear(); App::header("UPDATE->SD");
+    if (!Config::isSDAvailable()) { App::centerMsg("NO SD CARD", TFT_RED); App::footer("press back"); waitBackKey(); return; }
+    App::centerMsg("connecting wifi...", TFT_CYAN);
+    if (!NetLink::connectConfigured()) { App::centerMsg("NO WIFI", TFT_RED); App::footer("press back"); waitBackKey(); return; }
+
+    App::clear(); App::header("UPDATE->SD");
     M5.Display.setTextSize(1); M5.Display.setTextDatum(top_center); M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.drawString(Config::wifi().otaBinPath, PORK_DISPLAY_W / 2, 30);
     App::footer("downloading...");
 
     Updater::Result r = Updater::fetchToSD(BBOINK_OTA_URL, Config::wifi().otaBinPath, updProgress);
 
-    App::clear(); App::header("UPDATE FW");
+    App::clear(); App::header("UPDATE->SD");
     if (r.ok) {
         char l[40]; snprintf(l, sizeof(l), "OK  %uKB", (unsigned)(r.bytes / 1024));
         App::centerMsg(l, TFT_GREEN);
@@ -291,7 +324,8 @@ void tick(const App::Input& in) {
 
     if (in.enter) {
         if (sel == OPT_WIFI) { wifiSetupFlow(); dirty = true; if (dirty) { draw(); dirty = false; } return; }
-        if (sel == OPT_UPDATE) { firmwareUpdateFlow(); dirty = true; draw(); dirty = false; return; }
+        if (sel == OPT_UPDATE)    { flashUpdateFlow(); dirty = true; draw(); dirty = false; return; }
+        if (sel == OPT_UPDATE_SD) { sdUpdateFlow();    dirty = true; draw(); dirty = false; return; }
         const FieldDef& d = defs[sel];
         if (d.isText) {
             char* buf = textBuf(sel);
