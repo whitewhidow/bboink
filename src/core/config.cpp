@@ -112,6 +112,7 @@ struct __attribute__((packed)) ConfigBlob {
     // v2 fields (gated on b.version >= 2 in extractBlob).
     char     ntfyTopic[64];
     uint8_t  ntfyAttachFile;
+    uint8_t  maxAttackAttempts;   // 0 (old blob) -> default 4
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -140,6 +141,7 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.attackMinRssi        = wifi.attackMinRssi;
     b.deauthBurstCount     = wifi.deauthBurstCount;
     b.deauthJitterMax      = wifi.deauthJitterMax;
+    b.maxAttackAttempts    = wifi.maxAttackAttempts;
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
     strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
@@ -227,6 +229,7 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.attackMinRssi        = b.attackMinRssi;
     wifi.deauthBurstCount     = b.deauthBurstCount ? b.deauthBurstCount : 5;
     wifi.deauthJitterMax      = b.deauthJitterMax;
+    wifi.maxAttackAttempts    = b.maxAttackAttempts ? b.maxAttackAttempts : 4;   // 0 = old blob
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;

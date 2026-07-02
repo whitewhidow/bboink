@@ -303,7 +303,8 @@ static const uint32_t TARGET_WARMUP_MIN_MS = 1500;    // Minimum time before tar
 static const uint32_t TARGET_WARMUP_FORCE_MS = 5000;  // Allow targeting even if quiet
 static const uint32_t TARGET_WARMUP_MIN_PACKETS = 200;
 static const uint8_t TARGET_WARMUP_MIN_NETWORKS = 2;
-static const uint8_t TARGET_MAX_ATTEMPTS = 4;
+// Tries per network before giving up — now configurable (Options -> "Max Tries").
+#define TARGET_MAX_ATTEMPTS (Config::wifi().maxAttackAttempts)
 
 // Bored state tracking
 static uint8_t consecutiveFailedScans = 0;      // Track failed getNextTarget() calls
