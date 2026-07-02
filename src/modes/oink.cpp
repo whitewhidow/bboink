@@ -185,6 +185,9 @@ uint8_t OinkMode::targetBssid[6] = {0};
 char OinkMode::targetSSIDCache[33] = {0};
 char OinkMode::lastCaptureSSID[33] = {0};
 char OinkMode::lastCapturePath[96] = {0};
+uint8_t OinkMode::lockBssid[6] = {0};
+char OinkMode::lockSsid[33] = {0};
+bool OinkMode::lockActive = false;
 std::set<uint64_t> OinkMode::capturedBssids;
 uint8_t OinkMode::targetClientCountCache = 0;
 uint8_t OinkMode::targetBssidCache[6] = {0};
@@ -1439,6 +1442,18 @@ void OinkMode::selectTarget(int index) {
     }
 
     updateTargetCache();
+}
+
+void OinkMode::setTargetLock(const uint8_t* bssid, const char* ssid) {
+    memcpy(lockBssid, bssid, 6);
+    strncpy(lockSsid, (ssid && ssid[0]) ? ssid : "", sizeof(lockSsid) - 1);
+    lockSsid[sizeof(lockSsid) - 1] = '\0';
+    lockActive = true;
+}
+
+void OinkMode::clearTargetLock() {
+    lockActive = false;
+    lockSsid[0] = '\0';
 }
 
 void OinkMode::clearTarget() {
@@ -3227,6 +3242,23 @@ int OinkMode::getNextTarget() {
 
     if (!isWarmForTargets(now)) {
         return -1;
+    }
+
+    // CAPTURE TARGETED: only ever pick the locked BSSID (ignores exclusion / the
+    // already-captured registry so you can deliberately re-grab it). Returns -1
+    // until it's visible + attackable, so the engine keeps scanning for it.
+    if (lockActive) {
+        NetworkRecon::enterCritical();
+        int idx = -1;
+        for (int i = 0; i < (int)networks().size(); i++) {
+            if (memcmp(networks()[i].bssid, lockBssid, 6) == 0) {
+                const DetectedNetwork& net = networks()[i];
+                if (!net.hasPMF && net.authmode != WIFI_AUTH_OPEN) idx = i;
+                break;
+            }
+        }
+        NetworkRecon::exitCritical();
+        return idx;
     }
 
     int bestIdx = -1;

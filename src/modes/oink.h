@@ -113,6 +113,12 @@ public:
     static void selectTarget(int index);
     static void clearTarget();
     static DetectedNetwork* getTarget();
+
+    // CAPTURE TARGETED: lock the engine to a single BSSID (only ever attack it).
+    static void setTargetLock(const uint8_t* bssid, const char* ssid);
+    static void clearTargetLock();
+    static bool isTargetLocked() { return lockActive; }
+    static const char* getLockSSID() { return lockSsid; }
     
     // Deauth (educational use only)
     static void startDeauth();
@@ -211,6 +217,9 @@ private:
     static char targetSSIDCache[33];
     static char lastCaptureSSID[33];   // SSID of most recently saved capture (UI)
     static char lastCapturePath[96];   // path of most recently saved capture file
+    static uint8_t lockBssid[6];       // CAPTURE TARGETED: locked target BSSID
+    static char    lockSsid[33];       // locked target SSID (for UI)
+    static bool    lockActive;         // engine locked to lockBssid
     static uint8_t targetClientCountCache;
     static uint8_t targetBssidCache[6];
     static bool targetHiddenCache;

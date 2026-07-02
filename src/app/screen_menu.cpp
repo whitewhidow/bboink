@@ -14,9 +14,9 @@
 
 namespace ScreenMenu {
 
-static const char* kItems[] = { "CAPTURE", "WPASEC SYNC", "OHC SYNC", "SYNC ALL",
-                                "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
-static constexpr int kCount = 9;
+static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
+                                "SYNC ALL", "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+static constexpr int kCount = 10;
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
 static int firstVisible = 0;
@@ -291,6 +291,46 @@ static void statsFlow() {
     dirty = true;
 }
 
+// CAPTURE TARGETED: scan, pick one AP, lock the engine to it, enter Capture.
+static void captureTargetedFlow() {
+    App::clear(); App::header("PICK TARGET"); App::centerMsg("scanning...", TFT_CYAN);
+    WiFi.mode(WIFI_STA);
+    int n = WiFi.scanNetworks(false, true);
+    if (n <= 0) { App::centerMsg("no networks", TFT_RED); App::footer("back"); waitBack(); WiFi.scanDelete(); dirty = true; return; }
+    if (n > 30) n = 30;
+    static uint8_t bss[30][6]; static char rb[30][40]; static const char* rp[30];
+    for (int i = 0; i < n; i++) {
+        memcpy(bss[i], WiFi.BSSID(i), 6);
+        bool secured = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+        String s = WiFi.SSID(i);
+        snprintf(rb[i], sizeof(rb[i]), "%c %-15.15s %d", secured ? '*' : ' ',
+                 s.length() ? s.c_str() : "(hidden)", (int)WiFi.RSSI(i));
+        rp[i] = rb[i];
+    }
+    int s = 0, first = 0; constexpr int VIS = 7; bool redraw = true;
+    while (true) {
+        M5Cardputer.update();
+        if (porkhal::vkey.back) { WiFi.scanDelete(); dirty = true; return; }
+        if (porkhal::vkey.up)   { s = (s + n - 1) % n; redraw = true; }
+        if (porkhal::vkey.down) { s = (s + 1) % n;     redraw = true; }
+        if (s < first) first = s;
+        if (s >= first + VIS) first = s - VIS + 1;
+        if (porkhal::vkey.enter) {
+            OinkMode::setTargetLock(bss[s], WiFi.SSID(s).c_str());
+            WiFi.scanDelete();
+            App::go(App::Screen::CAPTURE);   // capture, locked to this AP
+            return;
+        }
+        if (redraw) {
+            App::clear(); App::header("PICK TARGET");
+            App::drawList(rp, n, s, first, VIS, 1);
+            App::footer("*=secured  click: capture it  back: cancel");
+            redraw = false;
+        }
+        delay(20);
+    }
+}
+
 void tick(const App::Input& in) {
     if (in.up)   { sel = (sel + kCount - 1) % kCount; dirty = true; }
     if (in.down) { sel = (sel + 1) % kCount;          dirty = true; }
@@ -299,15 +339,16 @@ void tick(const App::Input& in) {
     if (sel >= firstVisible + VISIBLE) firstVisible = sel - VISIBLE + 1;
     if (in.enter) {
         switch (sel) {
-            case 0: App::go(App::Screen::CAPTURE); return;
-            case 1: App::go(App::Screen::MANAGE);  return;
-            case 2: App::go(App::Screen::OHC);     return;
-            case 3: syncAll();                     return;
-            case 4: capturesFlow();                return;
-            case 5: statsFlow();                   return;
-            case 6: App::go(App::Screen::OPTIONS); return;
-            case 7: reboot();                      return;
-            case 8: powerOff();                    return;
+            case 0: OinkMode::clearTargetLock(); App::go(App::Screen::CAPTURE); return;
+            case 1: captureTargetedFlow();         return;
+            case 2: App::go(App::Screen::MANAGE);  return;
+            case 3: App::go(App::Screen::OHC);     return;
+            case 4: syncAll();                     return;
+            case 5: capturesFlow();                return;
+            case 6: statsFlow();                   return;
+            case 7: App::go(App::Screen::OPTIONS); return;
+            case 8: reboot();                      return;
+            case 9: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

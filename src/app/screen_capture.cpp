@@ -30,7 +30,13 @@ static void captureNotify() {
 
 static void drawFrame() {
     App::clear();
-    App::header("CAPTURE");
+    if (OinkMode::isTargetLocked()) {
+        char h[40];
+        snprintf(h, sizeof(h), "TGT %.22s", OinkMode::getLockSSID());
+        App::header(h);
+    } else {
+        App::header("CAPTURE");
+    }
     App::footer("back: stop & exit");
     framed = true;
 }

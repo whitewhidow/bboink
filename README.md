@@ -19,6 +19,10 @@ Every screen shows: title · **SD** (green = microSD mounted, red `sd` = running
 internal storage) · connected WiFi SSID (green) · battery %.
 
 ## Menu
+- **CAPTURE TARGETED** — scan, pick one AP, and capture **only that BSSID** (the
+  engine locks to it and ignores everything else, even already-captured/excluded
+  ones); the Capture header shows `TGT <ssid>`. Back to exit; the normal CAPTURE
+  item clears the lock.
 - **CAPTURE** — channel-hops, auto-targets eligible APs, sends deauth bursts,
   captures EAPOL M1–M4 + PMKID, and auto-saves to storage. Live stats (channel,
   networks, packets, handshakes, PMKIDs, deauths, current target + clients) plus a
