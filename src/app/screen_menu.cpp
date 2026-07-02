@@ -3,17 +3,19 @@
 #include "../core/net_link.h"
 #include "../core/sd_layout.h"
 #include "../core/storage.h"
+#include "../modes/oink.h"
 #include "../web/wpasec.h"
 #include "../web/ohc.h"
 #include <SD.h>
+#include <WiFi.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
 
 namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "WPASEC SYNC", "OHC SYNC", "SYNC ALL",
-                                "OPTIONS", "REBOOT", "POWER OFF" };
-static constexpr int kCount = 7;
+                                "EXCLUDE APS", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+static constexpr int kCount = 9;
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
 static int firstVisible = 0;
@@ -125,6 +127,97 @@ static void syncAll() {
     dirty = true;
 }
 
+// EXCLUDE APS: scan, list nearby APs with an [X] for excluded ones; click toggles
+// membership in the never-attack list (boar bros); back saves and exits.
+static void exclusionsFlow() {
+    App::clear(); App::header("EXCLUDE APS"); App::centerMsg("scanning...", TFT_CYAN);
+    WiFi.mode(WIFI_STA);
+    int n = WiFi.scanNetworks(false, true);
+    OinkMode::loadBoarBros();
+    if (n <= 0) {
+        App::centerMsg("no networks found", TFT_RED); App::footer("back"); waitBack();
+        WiFi.scanDelete(); dirty = true; return;
+    }
+    static constexpr int MAXN = 30;
+    if (n > MAXN) n = MAXN;
+    static uint8_t bss[MAXN][6];
+    static char rb[MAXN][40];
+    static const char* rp[MAXN];
+    for (int i = 0; i < n; i++) memcpy(bss[i], WiFi.BSSID(i), 6);
+    auto rebuild = [&]() {
+        for (int i = 0; i < n; i++) {
+            String s = WiFi.SSID(i);
+            snprintf(rb[i], sizeof(rb[i]), "%c %-16.16s", OinkMode::isExcluded(bss[i]) ? 'X' : ' ',
+                     s.length() ? s.c_str() : "(hidden)");
+            rp[i] = rb[i];
+        }
+    };
+    rebuild();
+    int s = 0, first = 0; constexpr int VIS = 7; bool redraw = true;
+    while (true) {
+        M5Cardputer.update();
+        if (porkhal::vkey.back) break;
+        if (porkhal::vkey.up)   { s = (s + n - 1) % n; redraw = true; }
+        if (porkhal::vkey.down) { s = (s + 1) % n;     redraw = true; }
+        if (s < first) first = s;
+        if (s >= first + VIS) first = s - VIS + 1;
+        if (porkhal::vkey.enter) {
+            if (OinkMode::isExcluded(bss[s])) {
+                uint64_t key = 0; for (int k = 0; k < 6; k++) key = (key << 8) | bss[s][k];
+                OinkMode::removeBoarBro(key);
+            } else {
+                OinkMode::excludeNetworkByBSSID(bss[s], WiFi.SSID(s).c_str());
+            }
+            rebuild(); redraw = true;
+        }
+        if (redraw) {
+            App::clear(); App::header("EXCLUDE APS");
+            App::drawList(rp, n, s, first, VIS, 1);
+            App::footer("click: toggle X   back: save");
+            redraw = false;
+        }
+        delay(20);
+    }
+    OinkMode::saveBoarBros();
+    WiFi.scanDelete();
+    dirty = true;
+}
+
+// STATS: current on-disk inventory + cracked count + free space.
+static void statsFlow() {
+    int pcap = 0, h22 = 0;
+    File d = Storage::fs().open(SDLayout::handshakesDir());
+    if (d && d.isDirectory()) {
+        for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+            const char* nm = f.name(); size_t L = strlen(nm);
+            if (!f.isDirectory()) {
+                if (L > 5 && !strcmp(nm + L - 5, ".pcap")) pcap++;
+                else if (L > 6 && !strcmp(nm + L - 6, ".22000")) h22++;
+            }
+            f.close();
+        }
+        d.close();
+    }
+    uint16_t cracked = WPASec::getCrackedCount();
+    uint64_t total = Storage::totalBytes(), used = Storage::usedBytes();
+    uint64_t freeB = total > used ? total - used : 0;
+
+    App::clear(); App::header("STATS");
+    M5.Display.setTextSize(1); M5.Display.setTextDatum(top_left);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    char line[48]; int y = 32;
+    snprintf(line, sizeof(line), "pcap captures : %d", pcap);  M5.Display.drawString(line, 6, y); y += 16;
+    snprintf(line, sizeof(line), ".22000 hashes : %d", h22);   M5.Display.drawString(line, 6, y); y += 16;
+    M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+    snprintf(line, sizeof(line), "cracked (pot) : %u", cracked); M5.Display.drawString(line, 6, y); y += 16;
+    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    snprintf(line, sizeof(line), "storage: %s  %s free", Storage::backendName(), App::fmtBytes(freeB));
+    M5.Display.drawString(line, 6, y);
+    App::footer("back: menu");
+    waitBack();
+    dirty = true;
+}
+
 void tick(const App::Input& in) {
     if (in.up)   { sel = (sel + kCount - 1) % kCount; dirty = true; }
     if (in.down) { sel = (sel + 1) % kCount;          dirty = true; }
@@ -137,9 +230,11 @@ void tick(const App::Input& in) {
             case 1: App::go(App::Screen::MANAGE);  return;
             case 2: App::go(App::Screen::OHC);     return;
             case 3: syncAll();                     return;
-            case 4: App::go(App::Screen::OPTIONS); return;
-            case 5: reboot();                      return;
-            case 6: powerOff();                    return;
+            case 4: exclusionsFlow();              return;
+            case 5: statsFlow();                   return;
+            case 6: App::go(App::Screen::OPTIONS); return;
+            case 7: reboot();                      return;
+            case 8: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

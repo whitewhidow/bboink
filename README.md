@@ -40,6 +40,15 @@ internal storage) · connected WiFi SSID (green) · battery %.
   potfile (OHC's API masks hashes, so per-file results can't be read back from it).
 - **SYNC ALL** — runs the WPA-SEC sync then the OnlineHashCrack upload back-to-back
   and shows a combined result (no need to visit both screens).
+- **EXCLUDE APS** — scans nearby APs and lets you toggle a per-network
+  never-attack flag (`X`); the capture engine skips excluded BSSIDs. Use it to
+  spare your own AP / neighbours. (Persisted to the boar-bros list on storage.)
+- **STATS** — current inventory: `.pcap` / `.22000` counts on storage, cracked
+  count (from the wpa-sec potfile), storage backend + free space.
+
+The **capture detail view** (on the sync screens) also shows a hash-quality line:
+for a `.22000` it verifies a crackable `WPA*02*` (EAPOL) / `WPA*01*` (PMKID) line
+is present; `.pcap` is validated server-side on upload.
 - **OPTIONS** — `WiFi` (a guided flow: scan → pick an SSID from the list → enter
   the password → saves and connects), `WPA Key` (wpa-sec, 32 hex), `OHC Key`
   (`sk_…`), and oink tuning: `Ch Hop ms`, `Lock ms`, `Atk RSSI`, `Deauth` on/off,

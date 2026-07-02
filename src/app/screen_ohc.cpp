@@ -140,6 +140,29 @@ static void showCaptureDetail(int fi) {
     M5.Display.setTextColor(stc, TFT_BLACK);
     snprintf(line, sizeof(line), "status: %s", status);
     M5.Display.drawString(line, 6, y); y += 18;
+    // Handshake quality: does the file actually contain a crackable hash?
+    {
+        char qpath[128];
+        snprintf(qpath, sizeof(qpath), "%s/%s", SDLayout::handshakesDir(), files[fi]);
+        size_t fl = strlen(files[fi]);
+        const char* q; uint16_t qc;
+        if (fl > 6 && strcmp(files[fi] + fl - 6, ".22000") == 0) {
+            bool eapol = false, pmkid = false;
+            File qf = Storage::fs().open(qpath, FILE_READ);
+            if (qf) {
+                while (qf.available()) {
+                    String ln = qf.readStringUntil('\n');
+                    if (ln.startsWith("WPA*02*")) { eapol = true; break; }
+                    if (ln.startsWith("WPA*01*")) pmkid = true;
+                }
+                qf.close();
+            }
+            q = eapol ? "hash: EAPOL (crackable)" : pmkid ? "hash: PMKID (crackable)" : "hash: none!";
+            qc = (eapol || pmkid) ? TFT_GREEN : TFT_RED;
+        } else { q = "pcap (checked on upload)"; qc = TFT_CYAN; }
+        M5.Display.setTextColor(qc, TFT_BLACK);
+        M5.Display.drawString(q, 6, y); y += 16;
+    }
     if (fileStatus[fi] == 2 && haveBssid) {
         const char* pw = WPASec::getPassword(bssid);
         M5.Display.setTextSize(2);
