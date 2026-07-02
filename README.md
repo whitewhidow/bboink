@@ -46,8 +46,12 @@ internal storage) · connected WiFi SSID (green) · battery %.
   plus **manual** never-attack entries (`M`, add via *ADD IGNORE → scan → pick*).
   Click a network for detail: SSID, BSSID, type, **seen-time** (NTP), and the
   **recovered password** if cracked; **DELETE = forget** (re-capturable again).
-  Cracked networks show `CRK`. Backed by an extended boar-bros file
-  (`BSSID,flags,ts,SSID`); existing on-disk captures are imported on open.
+  Rows show status tags: `C`/`M` (captured/manual), `W`/`O` (uploaded to
+  wpa-sec / OHC), `K` (cracked). This registry is the **single source of truth
+  for capture exclusion** — the engine skips only what's listed here (captures are
+  registered on save and imported at capture start), so deleting an entry makes
+  the network capturable again regardless of whether its file still exists.
+  Backed by an extended boar-bros file (`BSSID,flags,ts,SSID`).
 - **STATS** — current inventory: `.pcap` / `.22000` counts on storage, cracked
   count (from the wpa-sec potfile), storage backend + free space.
 

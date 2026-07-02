@@ -431,8 +431,10 @@ void OinkMode::start() {
     // Register callback for new network discovery (triggers XP events)
     NetworkRecon::setNewNetworkCallback(onNewNetworkDiscovered);
 
-    // Skip networks we already captured a handshake for in a previous session.
-    loadCapturedBssids();
+    // The CAPTURES registry is the single exclusion source. Fold any on-disk
+    // capture files into it so nothing is missed, then the engine excludes purely
+    // via isExcluded() (loadBoarBros already ran above).
+    importCapturedFiles();
 
     running = true;
     scanning = true;
@@ -3012,8 +3014,8 @@ bool OinkMode::wasCapturedBefore(const uint8_t* bssid) {
 }
 
 bool OinkMode::hasHandshakeFor(const uint8_t* bssid) {
-    // Captured in a previous session (file on SD)?
-    if (wasCapturedBefore(bssid)) return true;
+    // Persistent "already captured" now lives in the registry (isExcluded); this
+    // is only the this-session complete-handshake check.
     NetworkRecon::enterCritical();
     bool result = false;
     for (const auto& hs : handshakes) {
@@ -3207,7 +3209,8 @@ static inline bool isEligibleTarget(const DetectedNetwork& net, uint32_t now) {
     if (net.cooldownUntil > now) return false;
     if (net.hasPMF) return false;
     if (net.hasHandshake) return false;
-    if (OinkMode::wasCapturedBefore(net.bssid)) return false;  // already on SD
+    // (persistent "already captured" is handled by the isExcluded() registry check
+    //  in getNextTarget, right before this call — the single source of truth.)
     if (net.authmode == WIFI_AUTH_OPEN) return false;
     if (net.attackAttempts >= TARGET_MAX_ATTEMPTS) return false;
     int8_t rssi = (net.rssiAvg != 0) ? net.rssiAvg : net.rssi;

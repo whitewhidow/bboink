@@ -184,6 +184,9 @@ static void captureDetail(int idx) {
     if (e.ts > 1700000000UL) { time_t t = e.ts; struct tm tmv; localtime_r(&t, &tmv); strftime(line, sizeof(line), "seen: %Y-%m-%d %H:%M", &tmv); }
     else strncpy(line, "seen: (time unknown)", sizeof(line));
     M5.Display.drawString(line, 6, y); y += 16;
+    snprintf(line, sizeof(line), "wpa-sec: %s   ohc: %s",
+             WPASec::isUploaded(hb) ? "uploaded" : "no", OHC::isUploaded(hb) ? "uploaded" : "no");
+    M5.Display.drawString(line, 6, y); y += 16;
     if (cracked) {
         M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
         snprintf(line, sizeof(line), "PW: %s", (pass && pass[0]) ? pass : "(?)");
@@ -214,8 +217,13 @@ static void capturesFlow() {
             if (list[i].flags & OinkMode::BB_CAPTURED) cm[p++] = 'C';
             if (list[i].flags & OinkMode::BB_MANUAL)   cm[p++] = 'M';
             cm[p] = '\0';
-            snprintf(rb[i + 1], sizeof(rb[i + 1]), "%-2s %-12.12s%s", cm,
-                     list[i].ssid[0] ? list[i].ssid : hb, WPASec::isCracked(hb) ? " CRK" : "");
+            char st[8]; int sp = 0;   // upload/crack status
+            if (WPASec::isUploaded(hb)) st[sp++] = 'W';
+            if (OHC::isUploaded(hb))    st[sp++] = 'O';
+            if (WPASec::isCracked(hb))  st[sp++] = 'K';
+            st[sp] = '\0';
+            snprintf(rb[i + 1], sizeof(rb[i + 1]), "%-2s %-11.11s %s", cm,
+                     list[i].ssid[0] ? list[i].ssid : hb, st);
             rp[i + 1] = rb[i + 1];
         }
         count = (nreg < CAP_MAX - 1 ? nreg : CAP_MAX - 1) + 1;
@@ -239,7 +247,7 @@ static void capturesFlow() {
         if (redraw) {
             App::clear(); App::header("CAPTURES");
             App::drawList(rp, count, sel, first, VIS, 1);
-            App::footer("C=captured M=manual  click: open");
+            App::footer("C/M cap/man  W/O uploaded  K cracked");
             redraw = false;
         }
         delay(20);
