@@ -192,6 +192,7 @@ std::set<uint64_t> OinkMode::capturedBssids;
 uint8_t OinkMode::targetClientCountCache = 0;
 uint8_t OinkMode::targetBssidCache[6] = {0};
 bool OinkMode::targetHiddenCache = false;
+int8_t OinkMode::targetRssiCache = 0;
 bool OinkMode::targetCacheValid = false;
 DetectedClient OinkMode::targetClients[MAX_CLIENTS_PER_NETWORK] = {};
 uint8_t OinkMode::targetClientCount = 0;
@@ -2264,30 +2265,41 @@ const char* OinkMode::getStateString() {
     return "?";
 }
 
-const char* OinkMode::getNetworkBreakdown() {
-    static char buf[64];
-    int work = 0, cool = 0, pmf = 0, done = 0, weak = 0, open = 0, idle = 0;
+uint8_t OinkMode::excludedFlags(const uint8_t* bssid, const char* ssid) {
+    uint64_t key = bssidToUint64(bssid);
+    bool haveName = ssid && ssid[0];
+    uint8_t f = 0;
+    for (uint16_t i = 0; i < boarBrosCount; i++) {
+        if (boarBros[i].bssid == key ||
+            (haveName && boarBros[i].ssid[0] && strncmp(boarBros[i].ssid, ssid, 32) == 0))
+            f |= boarBros[i].flags;
+    }
+    return f;
+}
+
+OinkMode::PoolCounts OinkMode::getPoolCounts() {
+    PoolCounts p = {};
     int8_t   minRssi  = Config::wifi().attackMinRssi;
     uint8_t  maxTries = Config::wifi().maxAttackAttempts;
     const char* mySsid = Config::wifi().otaSSID;
     uint32_t now = millis();
     NetworkRecon::enterCritical();
     for (const auto& net : networks()) {
-        if (net.hasPMF)                             { pmf++;  continue; }  // protected
-        if (net.authmode == WIFI_AUTH_OPEN)         { open++; continue; }  // nothing to crack
-        if (isExcluded(net.bssid, net.ssid) || net.hasHandshake) { done++; continue; }  // captured/ignored
+        if (net.hasPMF)                     { p.pmf++;  continue; }  // protected
+        if (net.authmode == WIFI_AUTH_OPEN) { p.open++; continue; }  // nothing to crack
+        uint8_t exf = excludedFlags(net.bssid, net.ssid);
+        if (net.hasHandshake || (exf & BB_CAPTURED)) { p.cap++; continue; }  // already captured
+        if (exf & BB_MANUAL)                { p.ign++; continue; }  // manually excluded
         int8_t rssi = (net.rssiAvg != 0) ? net.rssiAvg : net.rssi;
-        if (rssi < minRssi)                         { weak++; continue; }  // too far
-        if (net.attackAttempts >= maxTries)         { idle++; continue; }  // gave up
+        if (rssi < minRssi)                 { p.weak++; continue; }  // too far
+        if (net.attackAttempts >= maxTries) { p.idle++; continue; }  // gave up
         if (net.ssid[0] == 0 || net.isHidden ||
-            (mySsid[0] && strcmp(net.ssid, mySsid) == 0)) { idle++; continue; }  // hidden/own AP
-        if (net.cooldownUntil > now)                { cool++; continue; }  // waiting between bursts
-        work++;   // eligible right now -> a target will be picked
+            (mySsid[0] && strcmp(net.ssid, mySsid) == 0)) { p.idle++; continue; }  // hidden/own AP
+        if (net.cooldownUntil > now)        { p.cool++; continue; }  // waiting between bursts
+        p.work++;   // eligible right now -> a target will be picked
     }
     NetworkRecon::exitCritical();
-    snprintf(buf, sizeof(buf), "work %d cool %d pmf %d done %d weak %d open %d idle %d",
-             work, cool, pmf, done, weak, open, idle);
-    return buf;
+    return p;
 }
 
 const char* OinkMode::getTargetSSID() {
@@ -2300,6 +2312,10 @@ uint8_t OinkMode::getTargetClientCount() {
 
 const uint8_t* OinkMode::getTargetBSSID() {
     return targetCacheValid ? targetBssidCache : nullptr;
+}
+
+int8_t OinkMode::getTargetRssi() {
+    return targetCacheValid ? targetRssiCache : 0;
 }
 
 bool OinkMode::isTargetHidden() {
@@ -3114,12 +3130,14 @@ void OinkMode::updateTargetCache() {
         targetSSIDCache[32] = 0;
         targetClientCountCache = targetClientCount;
         targetHiddenCache = net.isHidden;
+        targetRssiCache = (net.rssiAvg != 0) ? net.rssiAvg : net.rssi;
         memcpy(targetBssidCache, net.bssid, sizeof(targetBssidCache));
         targetCacheValid = true;
     } else {
         targetSSIDCache[0] = '\0';
         targetClientCountCache = 0;
         targetHiddenCache = false;
+        targetRssiCache = 0;
         memset(targetBssidCache, 0, sizeof(targetBssidCache));
         targetCacheValid = false;
     }

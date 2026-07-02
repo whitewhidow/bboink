@@ -167,6 +167,7 @@ public:
     static uint8_t getTargetClientCount();
     static const uint8_t* getTargetBSSID();
     static bool isTargetHidden();
+    static int8_t getTargetRssi();   // dBm of the current target (0 = none)
     
     // Network selection cursor
     static int getSelectionIndex() { return selectionIndex; }
@@ -189,9 +190,15 @@ public:
     // Name-aware: excluded if the BSSID matches OR any registry entry shares the
     // SSID name (so ignoring one radio ignores every AP broadcasting that name).
     static bool isExcluded(const uint8_t* bssid, const char* ssid);
-    // One-line live breakdown of the network pool: how many are being worked vs
-    // why the rest are skipped (pmf/done/weak/open/idle).
-    static const char* getNetworkBreakdown();
+    // OR of the flags of every registry entry matching this BSSID or SSID name
+    // (0 = not in the registry). Lets callers tell captured from manually-ignored.
+    static uint8_t excludedFlags(const uint8_t* bssid, const char* ssid);
+    // Live breakdown of the network pool (see .cpp). work/cool/idle = the attack
+    // pipeline (eligible now / cooling down / gave up); pmf/cap/ign/weak/open = why
+    // the rest are skipped. cap = already captured or has a handshake this session;
+    // ign = manually excluded.
+    struct PoolCounts { uint16_t work, cool, pmf, cap, ign, weak, open, idle; };
+    static PoolCounts getPoolCounts();
     static uint16_t getExcludedCount();   // Number of registry entries
     static void removeBoarBro(uint64_t bssid);  // Remove from the registry
 
@@ -229,6 +236,7 @@ private:
     static uint8_t targetClientCountCache;
     static uint8_t targetBssidCache[6];
     static bool targetHiddenCache;
+    static int8_t targetRssiCache;
     static bool targetCacheValid;
     static DetectedClient targetClients[MAX_CLIENTS_PER_NETWORK];
     static uint8_t targetClientCount;

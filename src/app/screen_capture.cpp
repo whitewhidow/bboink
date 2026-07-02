@@ -59,9 +59,9 @@ static void drawStats() {
     M5.Display.setTextColor(sc, TFT_BLACK);
     M5.Display.drawString(st, 6, 30);
 
-    // --- small stat lines ---
+    // --- small stat lines (all labels use "label: value" for consistency) ---
     M5.Display.setTextSize(1);
-    int y = 52; const int lh = 13;
+    int y = 51; const int lh = 12;
     auto row = [&](const char* s, uint16_t c) {
         M5.Display.fillRect(0, y, PORK_DISPLAY_W, lh, TFT_BLACK);
         M5.Display.setTextColor(c, TFT_BLACK);
@@ -69,16 +69,21 @@ static void drawStats() {
         y += lh;
     };
 
-    snprintf(line, sizeof(line), "ch %02u   networks %u   pkts %lu",
+    snprintf(line, sizeof(line), "ch: %02u   networks: %u   pkts: %lu",
              OinkMode::getChannel(), OinkMode::getNetworkCount(),
              (unsigned long)OinkMode::getPacketCount());
     row(line, TFT_WHITE);
 
-    // Always-on pool breakdown: work = being attacked (tries left); the rest are
-    // why the others are skipped.
-    row(OinkMode::getNetworkBreakdown(), TFT_CYAN);
+    // Always-on pool breakdown across two rows: the attack pipeline, then why the
+    // rest are skipped. cap = captured/has handshake, ign = manually excluded.
+    OinkMode::PoolCounts pc = OinkMode::getPoolCounts();
+    snprintf(line, sizeof(line), "work: %u  cool: %u  idle: %u", pc.work, pc.cool, pc.idle);
+    row(line, TFT_CYAN);
+    snprintf(line, sizeof(line), "cap: %u ign: %u pmf: %u weak: %u open: %u",
+             pc.cap, pc.ign, pc.pmf, pc.weak, pc.open);
+    row(line, TFT_DARKGREY);
 
-    snprintf(line, sizeof(line), "handshakes %u   pmkid %u",
+    snprintf(line, sizeof(line), "handshakes: %u   pmkid: %u",
              OinkMode::getCompleteHandshakeCount(), OinkMode::getPMKIDCount());
     row(line, TFT_GREEN);
 
@@ -87,17 +92,21 @@ static void drawStats() {
     snprintf(line, sizeof(line), "last: %.26s", (last && last[0]) ? last : "-");
     row(line, (last && last[0]) ? TFT_GREEN : TFT_DARKGREY);
 
-    snprintf(line, sizeof(line), "deauth %lu   tx ok %lu / fail %lu",
+    snprintf(line, sizeof(line), "deauth: %lu   tx: %lu / %lu",
              (unsigned long)OinkMode::getDeauthCount(),
              (unsigned long)WSLBypasser::txOkCount(),
              (unsigned long)WSLBypasser::txFailCount());
     row(line, OinkMode::isDeauthing() ? TFT_RED : TFT_DARKGREY);
 
     const char* tgt = OinkMode::getTargetSSID();
-    snprintf(line, sizeof(line), "target: %.26s", (tgt && tgt[0]) ? tgt : "-");
+    int8_t trssi = OinkMode::getTargetRssi();
+    if (tgt && tgt[0])
+        snprintf(line, sizeof(line), "target: %.20s  %ddBm", tgt, trssi);
+    else
+        snprintf(line, sizeof(line), "target: -");
     row(line, (tgt && tgt[0]) ? TFT_YELLOW : TFT_DARKGREY);
 
-    snprintf(line, sizeof(line), "clients %u%s",
+    snprintf(line, sizeof(line), "clients: %u%s",
              OinkMode::getTargetClientCount(),
              OinkMode::isTargetHidden() ? "   [hidden SSID]" : "");
     row(line, TFT_WHITE);
