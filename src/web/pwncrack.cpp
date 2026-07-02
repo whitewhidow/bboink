@@ -167,13 +167,21 @@ UploadResult uploadFile(const char* basename) {
     snprintf(boundary, sizeof(boundary), "----BBoink%08lX", (unsigned long)millis());
     const char* key = Config::wifi().pwncrackKey;
 
+    // PwnCrack only accepts a .hc22000 filename ("Only .hc22000 files are allowed"),
+    // so present our .22000 file under an .hc22000 name (same hashcat content).
+    char upname[88];
+    snprintf(upname, sizeof(upname), "%s", basename);
+    size_t un = strlen(upname);
+    if (un > 6 && strcmp(upname + un - 6, ".22000") == 0) strcpy(upname + un - 6, ".hc22000");
+    else strncat(upname, ".hc22000", sizeof(upname) - un - 1);
+
     // Multipart preamble: the key field, then the handshake file part header.
     char pre[512];
     int pn = snprintf(pre, sizeof(pre),
         "--%s\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\n%s\r\n"
         "--%s\r\nContent-Disposition: form-data; name=\"handshake\"; filename=\"%s\"\r\n"
         "Content-Type: application/octet-stream\r\n\r\n",
-        boundary, key, boundary, basename);
+        boundary, key, boundary, upname);
     char epi[48];
     int en = snprintf(epi, sizeof(epi), "\r\n--%s--\r\n", boundary);
     size_t contentLength = (size_t)pn + fileSize + (size_t)en;
@@ -221,16 +229,23 @@ int syncPotfile(char* err, size_t errLen) {
 
     uint32_t to = millis() + 15000;
     while (client.connected() && !client.available() && millis() < to) { delay(10); yield(); }
-    // Skip HTTP headers.
-    bool ok200 = false;
+    // Read status code, then skip headers.
+    int status = 0;
     bool firstLine = true;
     while (client.connected() || client.available()) {
         String line = client.readStringUntil('\n');
-        if (firstLine) { ok200 = line.indexOf(" 200") > 0; firstLine = false; }
+        if (firstLine) {
+            int sp = line.indexOf(' ');            // "HTTP/1.1 200 OK"
+            if (sp > 0) status = line.substring(sp + 1, sp + 4).toInt();
+            firstLine = false;
+        }
         if (line.length() <= 1) break;   // blank line ends headers
         if (millis() > to) break;
     }
-    if (!ok200) { client.stop(); if (err) snprintf(err, errLen, "HTTP ERROR"); return -1; }
+    // 404 = PwnCrack has no potfile for this key yet (nothing cracked / uploaded) —
+    // not an error; report the existing cached count (usually 0).
+    if (status == 404) { client.stop(); loadCache(); return (int)g_cracked.size(); }
+    if (status != 200) { client.stop(); if (err) snprintf(err, errLen, "HTTP %d", status); return -1; }
 
     // Body -> potfile on SD, and (re)build the cache.
     if (!Storage::fs().exists(SDLayout::miscDir())) Storage::fs().mkdir(SDLayout::miscDir());
