@@ -15,7 +15,7 @@
 namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
-                                "SYNC ALL", "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+                                "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
 static constexpr int kCount = 10;
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
@@ -72,60 +72,6 @@ static void syncProgress(const char* status, uint8_t p, uint8_t t) {
     if (t > 0) snprintf(line, sizeof(line), "%s %u/%u", status, p, t);
     else       snprintf(line, sizeof(line), "%s", status);
     App::centerMsg(line, TFT_CYAN);
-}
-
-// SYNC ALL: connect WiFi, run the WPA-SEC sync (upload pcaps + fetch potfile),
-// then the OnlineHashCrack upload — back to back — and show a combined result.
-static void syncAll() {
-    App::clear(); App::header("SYNC ALL"); App::centerMsg("connecting wifi...", TFT_CYAN);
-    if (!NetLink::connectConfigured()) {
-        App::centerMsg("NO WIFI", TFT_RED); App::footer("back"); waitBack(); dirty = true; return;
-    }
-
-    WPASecSyncResult wr = {};
-    if (WPASec::hasApiKey()) {
-        App::clear(); App::header("WPA-SEC");
-        wr = WPASec::syncCaptures(syncProgress);
-    }
-
-    OHC::UploadResult orr = {};
-    if (OHC::hasApiKey()) {
-        App::clear(); App::header("ONLINEHASHCRACK"); App::centerMsg("uploading...", TFT_CYAN);
-        orr = OHC::uploadHashes();
-        if (orr.success) {   // mark every submitted .22000's BSSID as uploaded
-            File d = Storage::fs().open(SDLayout::handshakesDir());
-            if (d && d.isDirectory()) {
-                for (File f = d.openNextFile(); f; f = d.openNextFile()) {
-                    const char* n = f.name(); size_t L = strlen(n);
-                    char b[13];
-                    if (!f.isDirectory() && L > 6 && !strcmp(n + L - 6, ".22000") &&
-                        SDLayout::captureBssid(n, b)) OHC::markUploaded(b);
-                    f.close();
-                }
-                d.close();
-            }
-        }
-    }
-
-    App::clear(); App::header("SYNC ALL DONE");
-    M5.Display.setTextSize(1); M5.Display.setTextDatum(top_left);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    char line[48]; int y = 30;
-    if (WPASec::hasApiKey()) {
-        snprintf(line, sizeof(line), "wpa-sec: up %u  skip %u", wr.uploaded, wr.skipped);
-        M5.Display.drawString(line, 6, y); y += 15;
-        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-        snprintf(line, sizeof(line), "cracked %u (+%u)", wr.cracked, wr.newCracked);
-        M5.Display.drawString(line, 6, y); y += 17;
-        M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    } else { M5.Display.drawString("wpa-sec: no key", 6, y); y += 15; }
-    if (OHC::hasApiKey()) {
-        snprintf(line, sizeof(line), "ohc: new %u skip %u rej %u", orr.accepted, orr.skipped, orr.rejected);
-        M5.Display.drawString(line, 6, y); y += 15;
-    } else { M5.Display.drawString("ohc: no key", 6, y); y += 15; }
-    App::footer("back: menu");
-    waitBack();
-    dirty = true;
 }
 
 static void bssidHex(uint64_t b, char out[13]) {
@@ -343,12 +289,11 @@ void tick(const App::Input& in) {
             case 1: captureTargetedFlow();         return;
             case 2: App::go(App::Screen::MANAGE);  return;
             case 3: App::go(App::Screen::OHC);     return;
-            case 4: syncAll();                     return;
-            case 5: capturesFlow();                return;
-            case 6: statsFlow();                   return;
-            case 7: App::go(App::Screen::OPTIONS); return;
-            case 8: reboot();                      return;
-            case 9: powerOff();                    return;
+            case 4: capturesFlow();                return;
+            case 5: statsFlow();                   return;
+            case 6: App::go(App::Screen::OPTIONS); return;
+            case 7: reboot();                      return;
+            case 8: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

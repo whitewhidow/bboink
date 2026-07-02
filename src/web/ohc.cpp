@@ -125,36 +125,24 @@ static bool postV2(const String& body, String& resp, char* err, size_t errLen) {
     return resp.length() > 0;
 }
 
-UploadResult uploadHashes() {
+// Collect unique WPA* hash lines from an already-open .22000 file into `hashes`.
+static void collectHashesFromFile(File& f, std::vector<String>& hashes) {
+    while (f.available() && hashes.size() < OHC_MAX_HASH) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.startsWith("WPA*") && line.length() > 20) {
+            bool dup = false;
+            for (auto& h : hashes) if (h == line) { dup = true; break; }
+            if (!dup) hashes.push_back(line);
+        }
+    }
+}
+
+// Submit already-collected WPA hash lines to OHC in batches of OHC_BATCH.
+static UploadResult submitHashLines(std::vector<String>& hashes) {
     UploadResult r = {};
     if (!hasApiKey())                    { strncpy(r.error, "NO OHC KEY", sizeof(r.error)-1); return r; }
     if (WiFi.status() != WL_CONNECTED)   { strncpy(r.error, "WIFI NOT CONNECTED", sizeof(r.error)-1); return r; }
-
-    // Collect unique WPA hash lines from .22000 capture files.
-    std::vector<String> hashes;
-    const char* dir = SDLayout::handshakesDir();
-    File d = Storage::fs().open(dir);
-    if (d && d.isDirectory()) {
-        File f = d.openNextFile();
-        while (f && hashes.size() < OHC_MAX_HASH) {
-            const char* n = f.name();
-            size_t len = strlen(n);
-            if (!f.isDirectory() && len > 6 && strcmp(n + len - 6, ".22000") == 0) {
-                while (f.available() && hashes.size() < OHC_MAX_HASH) {
-                    String line = f.readStringUntil('\n');
-                    line.trim();
-                    if (line.startsWith("WPA*") && line.length() > 20) {
-                        bool dup = false;
-                        for (auto& h : hashes) if (h == line) { dup = true; break; }
-                        if (!dup) hashes.push_back(line);
-                    }
-                }
-            }
-            f.close();
-            f = d.openNextFile();
-        }
-        d.close();
-    }
     r.totalHashes = hashes.size();
     if (hashes.empty()) { strncpy(r.error, "NO .22000 HASHES", sizeof(r.error)-1); return r; }
 
@@ -188,6 +176,34 @@ UploadResult uploadHashes() {
     }
     r.success = true;
     return r;
+}
+
+UploadResult uploadHashes() {
+    std::vector<String> hashes;
+    const char* dir = SDLayout::handshakesDir();
+    File d = Storage::fs().open(dir);
+    if (d && d.isDirectory()) {
+        File f = d.openNextFile();
+        while (f && hashes.size() < OHC_MAX_HASH) {
+            const char* n = f.name();
+            size_t len = strlen(n);
+            if (!f.isDirectory() && len > 6 && strcmp(n + len - 6, ".22000") == 0)
+                collectHashesFromFile(f, hashes);
+            f.close();
+            f = d.openNextFile();
+        }
+        d.close();
+    }
+    return submitHashLines(hashes);
+}
+
+UploadResult uploadFile(const char* basename) {
+    std::vector<String> hashes;
+    char path[128];
+    snprintf(path, sizeof(path), "%s/%s", SDLayout::handshakesDir(), basename);
+    File f = Storage::fs().open(path, FILE_READ);
+    if (f) { collectHashesFromFile(f, hashes); f.close(); }
+    return submitHashLines(hashes);
 }
 
 int listTasks(Task* out, int maxTasks, char* err, size_t errLen) {

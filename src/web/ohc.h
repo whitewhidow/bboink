@@ -34,6 +34,10 @@ void markUploaded(const char* bssid); // record + persist a submitted BSSID
 // submit them in batches of 50 to OHC. Requires WiFi connected.
 UploadResult uploadHashes();
 
+// Submit the hashes from a SINGLE .22000 capture file (by basename) to OHC.
+// Used for per-capture uploads so we don't re-submit the whole set each time.
+UploadResult uploadFile(const char* basename);
+
 // Fetch the account's task list. Returns task count (or -1 on error).
 int listTasks(Task* out, int maxTasks, char* err, size_t errLen);
 
