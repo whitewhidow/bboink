@@ -955,6 +955,7 @@ void OinkMode::update() {
                 // Select this target (locks to channel, stops hopping)
                 selectTarget(selectionIndex);
                 networks()[selectionIndex].attackAttempts++;
+                networks()[selectionIndex].lastAttemptMs = now;   // for idle-retry re-arm
                 
                 // Go to LOCKING state to discover clients before attacking
                 autoState = AutoState::LOCKING;
@@ -3361,8 +3362,18 @@ int OinkMode::getNextTarget() {
     }
     // #endregion
 
+    // Idle-retry: re-arm networks that gave up long enough ago (Options "Idle Retry",
+    // minutes; 0 = off) WITHOUT waiting for them to age out and reappear.
+    uint32_t idleRetryMs = (uint32_t)Config::wifi().idleRetryMins * 60000UL;
+    uint8_t  maxTries    = Config::wifi().maxAttackAttempts;
+
     for (int i = 0; i < (int)networks().size(); i++) {
-        const DetectedNetwork& net = networks()[i];
+        DetectedNetwork& net = networks()[i];
+        if (idleRetryMs && net.attackAttempts >= maxTries && net.lastAttemptMs &&
+            (now - net.lastAttemptMs) >= idleRetryMs) {
+            net.attackAttempts = 0;         // give it another round of tries
+            net.lastAttemptMs = 0;
+        }
         if (isExcluded(net.bssid, net.ssid)) continue;  // BOAR BRO - skip (name-wide)
         if (!isEligibleTarget(net, now)) continue;
 

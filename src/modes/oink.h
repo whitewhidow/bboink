@@ -34,6 +34,7 @@ struct DetectedNetwork {
     bool hasPMF;  // Protected Management Frames (immune to deauth)
     bool hasHandshake;  // Already captured handshake for this network
     uint8_t attackAttempts;  // Number of attack attempts (for retry logic)
+    uint32_t lastAttemptMs;  // millis() of the most recent attack attempt (idle-retry)
     bool isHidden;  // Hidden SSID (needs probe response)
     uint32_t lastDataSeen;     // millis() of most recent client data frame
     uint32_t cooldownUntil;    // millis() until eligible for auto-target

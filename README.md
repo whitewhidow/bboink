@@ -77,7 +77,8 @@ is present; `.pcap` is validated server-side on upload.
   **Ntfy File** (attach the capture file to the push).
 - Oink tuning: **Ch Hop ms**, **Lock ms**, **Atk RSSI**, **Deauth** on/off,
   **Rnd MAC** on/off, **Burst**, **Jitter ms**, **Max Tries** (attempts per
-  network before giving up, 1–15).
+  network before giving up, 1–15), **Idle Retry** (re-arm a given-up network
+  after N minutes without waiting for it to age out and reappear; 0 = off).
 - **Brightness** · **Sound** on/off.
 - **Purge Crk** — after a WPA-SEC sync, delete local `.pcap`/`.22000` files for
   networks that are now cracked (the password stays in the potfile cache + the
