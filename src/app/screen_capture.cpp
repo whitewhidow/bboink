@@ -100,6 +100,10 @@ static void drawStats() {
              OinkMode::getTargetClientCount(),
              OinkMode::isTargetHidden() ? "   [hidden SSID]" : "");
     row(line, TFT_WHITE);
+
+    // The NO TARGETS breakdown adds an extra row; when it disappears the row count
+    // shrinks, so clear any stale trailing line left below the last row drawn.
+    if (y < 148) M5.Display.fillRect(0, y, PORK_DISPLAY_W, 148 - y, TFT_BLACK);
 }
 
 void enter() {

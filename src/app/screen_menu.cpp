@@ -108,39 +108,91 @@ static void addIgnoreFlow() {
     }
 }
 
-// Detail view for a registry entry: SSID/BSSID, type, seen-time, password; delete = forget.
+// Full-screen WiFi-join QR for a cracked network. Phones parse the standard
+// WIFI:S:<ssid>;T:WPA;P:<pass>;; string and offer to join on scan.
+static void showWifiQR(const char* ssid, const char* pass) {
+    auto esc = [](const char* in, char* out, size_t cap) {   // escape \ ; , : " per spec
+        size_t o = 0;
+        for (size_t i = 0; in && in[i] && o < cap - 2; i++) {
+            char c = in[i];
+            if (c == '\\' || c == ';' || c == ',' || c == ':' || c == '"') out[o++] = '\\';
+            out[o++] = c;
+        }
+        out[o] = '\0';
+    };
+    char es[80], ep[140], payload[240];
+    esc(ssid, es, sizeof(es));
+    esc(pass, ep, sizeof(ep));
+    snprintf(payload, sizeof(payload), "WIFI:S:%s;T:WPA;P:%s;;", es, ep);
+
+    App::clear(); App::header("WIFI QR");
+    const int sz = 134, x = (PORK_DISPLAY_W - sz) / 2, y = 30;
+    M5.Display.fillRect(x - 4, y - 4, sz + 8, sz + 8, TFT_WHITE);  // quiet-zone backdrop
+    M5.Display.qrcode(payload, x, y, sz, 1, true);                 // v1 auto-grows to fit; margin on
+    while (true) { M5Cardputer.update(); if (porkhal::vkey.back || porkhal::vkey.enter) break; delay(20); }
+}
+
+// Detail view for a registry entry: SSID/BSSID, type, seen-time, password; an
+// action selector (show QR if cracked, delete/forget). back returns.
 static void captureDetail(int idx) {
     if (idx < 0 || idx >= (int)OinkMode::getExcludedCount()) return;
     OinkMode::BoarBro e = OinkMode::getExcludedList()[idx];   // copy (list shifts on delete)
     char hb[13]; bssidHex(e.bssid, hb);
     bool cracked = WPASec::isCracked(hb);
     const char* pass = cracked ? WPASec::getPassword(hb) : "";
-    App::clear(); App::header("NETWORK");
-    M5.Display.setTextSize(1); M5.Display.setTextDatum(top_left); M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    char line[64]; int y = 32;
-    snprintf(line, sizeof(line), "%.30s", e.ssid[0] ? e.ssid : "(unknown ssid)"); M5.Display.drawString(line, 6, y); y += 16;
-    snprintf(line, sizeof(line), "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c", hb[0],hb[1],hb[2],hb[3],hb[4],hb[5],hb[6],hb[7],hb[8],hb[9],hb[10],hb[11]);
-    M5.Display.drawString(line, 6, y); y += 16;
-    const char* type = (e.flags & OinkMode::BB_CAPTURED)
-                     ? ((e.flags & OinkMode::BB_MANUAL) ? "captured + ignored" : "captured")
-                     : "manual ignore";
-    M5.Display.setTextColor((e.flags & OinkMode::BB_CAPTURED) ? TFT_GREEN : TFT_CYAN, TFT_BLACK);
-    M5.Display.drawString(type, 6, y); y += 16;
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    if (e.ts > 1700000000UL) { time_t t = e.ts; struct tm tmv; localtime_r(&t, &tmv); strftime(line, sizeof(line), "seen: %Y-%m-%d %H:%M", &tmv); }
-    else strncpy(line, "seen: (time unknown)", sizeof(line));
-    M5.Display.drawString(line, 6, y); y += 16;
-    snprintf(line, sizeof(line), "wpa-sec: %s   ohc: %s",
-             WPASec::isUploaded(hb) ? "uploaded" : "no", OHC::isUploaded(hb) ? "uploaded" : "no");
-    M5.Display.drawString(line, 6, y); y += 16;
-    if (cracked) {
-        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
-        snprintf(line, sizeof(line), "PW: %s", (pass && pass[0]) ? pass : "(?)");
-        M5.Display.drawString(line, 6, y);
+    const char* qrSsid = e.ssid[0] ? e.ssid : WPASec::getSSID(hb);
+    const int nActions = cracked ? 2 : 1;   // [SHOW QR], DELETE
+    int action = 0; bool redraw = true;
+
+    while (true) {
+        if (redraw) {
+            App::clear(); App::header("NETWORK");
+            M5.Display.setTextSize(1); M5.Display.setTextDatum(top_left); M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            char line[64]; int y = 30;
+            snprintf(line, sizeof(line), "%.30s", e.ssid[0] ? e.ssid : "(unknown ssid)"); M5.Display.drawString(line, 6, y); y += 14;
+            snprintf(line, sizeof(line), "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c", hb[0],hb[1],hb[2],hb[3],hb[4],hb[5],hb[6],hb[7],hb[8],hb[9],hb[10],hb[11]);
+            M5.Display.drawString(line, 6, y); y += 14;
+            const char* type = (e.flags & OinkMode::BB_CAPTURED)
+                             ? ((e.flags & OinkMode::BB_MANUAL) ? "captured + ignored" : "captured")
+                             : "manual ignore";
+            M5.Display.setTextColor((e.flags & OinkMode::BB_CAPTURED) ? TFT_GREEN : TFT_CYAN, TFT_BLACK);
+            M5.Display.drawString(type, 6, y); y += 14;
+            M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+            if (e.ts > 1700000000UL) { time_t t = e.ts; struct tm tmv; localtime_r(&t, &tmv); strftime(line, sizeof(line), "seen: %Y-%m-%d %H:%M", &tmv); }
+            else strncpy(line, "seen: (time unknown)", sizeof(line));
+            M5.Display.drawString(line, 6, y); y += 14;
+            snprintf(line, sizeof(line), "wpa-sec: %s   ohc: %s",
+                     WPASec::isUploaded(hb) ? "up" : "no", OHC::isUploaded(hb) ? "up" : "no");
+            M5.Display.drawString(line, 6, y); y += 14;
+            if (cracked) {
+                M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+                snprintf(line, sizeof(line), "PW: %s", (pass && pass[0]) ? pass : "(?)");
+                M5.Display.drawString(line, 6, y); y += 14;
+            }
+            // action selector
+            y += 4;
+            const char* acts[2]; int ai = 0;
+            if (cracked) acts[ai++] = "SHOW WIFI QR";
+            acts[ai++] = "DELETE (forget)";
+            for (int a = 0; a < nActions; a++) {
+                bool seld = (a == action);
+                M5.Display.setTextColor(seld ? TFT_BLACK : TFT_WHITE, seld ? TFT_CYAN : TFT_BLACK);
+                snprintf(line, sizeof(line), " %s %s ", seld ? ">" : " ", acts[a]);
+                M5.Display.drawString(line, 6, y); y += 13;
+            }
+            App::footer(nActions > 1 ? "turn: pick  click: do  back: return" : "click: delete  back: return");
+            redraw = false;
+        }
+        M5Cardputer.update();
+        if (porkhal::vkey.back) return;
+        if ((porkhal::vkey.up || porkhal::vkey.down) && nActions > 1) { action = (action + 1) % nActions; redraw = true; }
+        if (porkhal::vkey.enter) {
+            if (cracked && action == 0) { showWifiQR(qrSsid, pass); redraw = true; continue; }  // SHOW QR
+            OinkMode::removeBoarBro(e.bssid);   // DELETE: forget -> re-capturable, no longer listed
+            return;
+        }
+        delay(20);
     }
-    App::footer("click: DELETE (forget)  back: return");
-    while (true) { M5Cardputer.update(); if (porkhal::vkey.back) return; if (porkhal::vkey.enter) break; delay(20); }
-    OinkMode::removeBoarBro(e.bssid);   // forget -> re-capturable, no longer listed
 }
 
 // CAPTURES: the persistent registry — captured networks (survive file deletion)
