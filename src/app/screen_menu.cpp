@@ -16,7 +16,7 @@ namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
                                 "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
-static constexpr int kCount = 10;
+static constexpr int kCount = sizeof(kItems) / sizeof(kItems[0]);
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
 static int firstVisible = 0;
