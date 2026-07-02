@@ -15,4 +15,10 @@ bool enabled();
 // Requires the STA WiFi link to be up (not during promiscuous capture).
 bool sendCapture(const char* ssid, const char* filePath, uint16_t newCount);
 
+// Per-network alert: find this BSSID's capture files and, when ntfyAttachFile is
+// on, PUT BOTH the .pcap and the .22000 (one ntfy message each, since ntfy allows
+// one attachment per message); otherwise a single text alert. `bssidHex` is the
+// 12-char uppercase BSSID. Returns true if any message was accepted.
+bool sendCaptureFor(const char* ssid, const char* bssidHex);
+
 } // namespace Ntfy

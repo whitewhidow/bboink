@@ -133,16 +133,9 @@ void enter() {
 
 void tick(const App::Input& in) {
     if (in.back) {
-        // Snapshot capture state BEFORE stop() — stop() clears the handshake/PMKID
-        // vectors, which would zero the counts and suppress the ntfy alert entirely.
-        uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
-        bool wantNtfy = (caps > sessionStartCaps) && Ntfy::enabled();
-        char nSsid[33] = {0}, nPath[96] = {0};
-        uint16_t nNew = (caps > sessionStartCaps) ? (caps - sessionStartCaps) : 0;
-        if (wantNtfy) {
-            strncpy(nSsid, OinkMode::getLastCaptureSSID(),  sizeof(nSsid) - 1);
-            strncpy(nPath, OinkMode::getLastCapturePath(),  sizeof(nPath) - 1);
-        }
+        // The per-network session list (OinkMode::getSessionCapture*) survives stop()
+        // — only start() clears it — so it's safe to read after stop() below.
+        bool wantNtfy = (OinkMode::getSessionCaptureCount() > 0) && Ntfy::enabled();
 
         OinkMode::stop();
         // Capture left WiFi in promiscuous/disconnected. Restore the STA uplink on
@@ -159,16 +152,23 @@ void tick(const App::Input& in) {
             linked = NetLink::connectConfigured();   // robust ~15s reconnect
         }
 
-        // Push an ntfy alert for this session's captures (can't send mid-capture:
-        // promiscuous drops the STA link). Always report the outcome so it's never
-        // a silent no-op.
+        // One ntfy alert PER captured network (with both its .pcap + .22000 attached
+        // when Ntfy File is on). Can't send mid-capture (promiscuous drops STA), so
+        // do it here. Always report the outcome.
         if (wantNtfy) {
             if (linked) {
-                App::centerMsg("notifying phone...", TFT_CYAN);
-                bool sent = Ntfy::sendCapture(nSsid, nPath, nNew);
-                App::centerMsg(sent ? "ntfy sent" : "ntfy failed", sent ? TFT_GREEN : TFT_RED);
+                int nsc = OinkMode::getSessionCaptureCount();
+                int sent = 0;
+                for (int i = 0; i < nsc; i++) {
+                    char l[40]; snprintf(l, sizeof(l), "notifying %d/%d...", i + 1, nsc);
+                    App::clear(); App::centerMsg(l, TFT_CYAN);
+                    if (Ntfy::sendCaptureFor(OinkMode::getSessionCaptureSSID(i),
+                                             OinkMode::getSessionCaptureBssid(i))) sent++;
+                }
+                char l[40]; snprintf(l, sizeof(l), "ntfy sent %d/%d", sent, nsc);
+                App::clear(); App::centerMsg(l, sent ? TFT_GREEN : TFT_RED);
             } else {
-                App::centerMsg("ntfy: no wifi", TFT_YELLOW);
+                App::clear(); App::centerMsg("ntfy: no wifi", TFT_YELLOW);
             }
             delay(1200);
         }

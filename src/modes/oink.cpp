@@ -185,6 +185,30 @@ uint8_t OinkMode::targetBssid[6] = {0};
 char OinkMode::targetSSIDCache[33] = {0};
 char OinkMode::lastCaptureSSID[33] = {0};
 char OinkMode::lastCapturePath[96] = {0};
+
+// Networks captured this session, for the per-network exit ntfy push.
+namespace { struct SessionCap { char ssid[33]; char bssid[13]; }; }
+static std::vector<SessionCap> g_sessionCaps;
+static const uint16_t MAX_SESSION_CAPS = 64;
+
+uint16_t OinkMode::getSessionCaptureCount() { return g_sessionCaps.size(); }
+const char* OinkMode::getSessionCaptureSSID(uint16_t i) {
+    return i < g_sessionCaps.size() ? g_sessionCaps[i].ssid : "";
+}
+const char* OinkMode::getSessionCaptureBssid(uint16_t i) {
+    return i < g_sessionCaps.size() ? g_sessionCaps[i].bssid : "";
+}
+void OinkMode::addSessionCapture(const uint8_t* bssid, const char* ssid) {
+    char hex[13];
+    snprintf(hex, sizeof(hex), "%02X%02X%02X%02X%02X%02X",
+             bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+    for (auto& e : g_sessionCaps) if (strcmp(e.bssid, hex) == 0) return;  // dedup within session
+    if (g_sessionCaps.size() >= MAX_SESSION_CAPS) return;
+    SessionCap e{};
+    strncpy(e.ssid, (ssid && ssid[0]) ? ssid : "(hidden)", sizeof(e.ssid) - 1);
+    memcpy(e.bssid, hex, sizeof(e.bssid));
+    g_sessionCaps.push_back(e);
+}
 uint8_t OinkMode::lockBssid[6] = {0};
 char OinkMode::lockSsid[33] = {0};
 bool OinkMode::lockActive = false;
@@ -422,10 +446,13 @@ void OinkMode::start() {
     Serial.printf("[OINK] Starting... free=%u largest=%u\n",
                   ESP.getFreeHeap(), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     
-    // Ensure NetworkRecon is running (handles WiFi promiscuous mode)
-    if (!NetworkRecon::isRunning()) {
-        NetworkRecon::start();
-    }
+    // Always tear down + restart NetworkRecon so promiscuous mode, the rx callback
+    // and channel-hopping are re-asserted. The previous capture EXIT reconnects STA
+    // and disables promiscuous with a raw esp_wifi call — outside NetworkRecon — so
+    // its cached "running" flag can be stale-true. Trusting it left re-entered
+    // capture stuck at 0 networks until a reboot. stop() self-guards when idle.
+    NetworkRecon::stop();
+    NetworkRecon::start();
     
     // Initialize WSL bypasser for deauth frame injection
     WSLBypasser::init();
@@ -440,6 +467,8 @@ void OinkMode::start() {
     // capture files into it so nothing is missed, then the engine excludes purely
     // via isExcluded() (loadBoarBros already ran above).
     importCapturedFiles();
+
+    g_sessionCaps.clear();   // fresh per-network ntfy list for this session
 
     running = true;
     scanning = true;
@@ -2403,6 +2432,7 @@ void OinkMode::autoSaveCheck() {
                 strncpy(lastCapturePath, pcapOk ? filename : filename22000, sizeof(lastCapturePath) - 1);
                 lastCapturePath[sizeof(lastCapturePath) - 1] = '\0';
                 registerCapture(hs.bssid, hs.ssid);   // persist in the registry
+                addSessionCapture(hs.bssid, hs.ssid);  // per-network exit ntfy
                 SDLog::log("OINK", "Handshake saved: %s (pcap:%s 22000:%s)",
                            hs.ssid, pcapOk ? "OK" : "FAIL", hs22kOk ? "OK" : "FAIL");
             } else {
@@ -2798,6 +2828,7 @@ bool OinkMode::saveAllPMKIDs() {
                 strncpy(lastCapturePath, filename, sizeof(lastCapturePath) - 1);
                 lastCapturePath[sizeof(lastCapturePath) - 1] = '\0';
                 registerCapture(p.bssid, p.ssid);   // persist in the registry
+                addSessionCapture(p.bssid, p.ssid);  // per-network exit ntfy
                 SDLog::log("OINK", "PMKID saved: %s", p.ssid);
             } else {
                 // Failed - increment attempt counter

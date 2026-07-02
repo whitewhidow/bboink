@@ -33,10 +33,11 @@ internal storage) · connected WiFi SSID (green) · battery %. The version
   · `weak` (below Atk RSSI) · `open` · `idle` (gave up after Max Tries). Each new
   capture **beeps** (I2S amp) and flashes the onboard LED green. Excluded networks
   (see CAPTURES) are neither attacked **nor** passively saved. Side button stops,
-  restores WiFi and exits — and on exit, if you captured something new this session
-  and an **ntfy** topic is set, it pushes an alert to your phone (with the latest
-  capture file attached when `Ntfy File` is on). The push happens on exit, not
-  mid-capture, because capture runs promiscuous (no STA uplink).
+  restores WiFi and exits — and on exit, if an **ntfy** topic is set, it pushes **one
+  alert per network captured this session**, each with **both** that network's `.pcap`
+  and `.22000` attached (when `Ntfy File` is on; ntfy allows one file per message, so
+  that's two messages). The push happens on exit, not mid-capture, because capture
+  runs promiscuous (no STA uplink).
 - **CAPTURE TARGETED** — scan, pick one AP, and capture **only that BSSID** (the
   engine locks to it and ignores everything else, even already-captured/excluded
   ones, and ignores the Max-Tries give-up); the Capture header shows `TGT <ssid>`.

@@ -2,6 +2,7 @@
 #include "ntfy.h"
 #include "../core/config.h"
 #include "../core/storage.h"
+#include "../core/sd_layout.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <SD.h>
@@ -92,6 +93,45 @@ bool sendCapture(const char* ssid, const char* filePath, uint16_t newCount) {
         if (sendFile(topic, title, msg, filePath)) return true;  // else fall back to text
     }
     return sendText(topic, title, msg);
+}
+
+bool sendCaptureFor(const char* ssid, const char* bssidHex) {
+    if (!enabled()) return false;
+    const char* topic = Config::wifi().ntfyTopic;
+    char safeSsid[40];
+    headerSafe((ssid && ssid[0]) ? ssid : "(hidden)", safeSsid, sizeof(safeSsid));
+    char title[56]; snprintf(title, sizeof(title), "BBoink capture: %s", safeSsid);
+    char msg[64];   snprintf(msg, sizeof(msg), "captured %.40s", safeSsid);
+
+    if (!Config::wifi().ntfyAttachFile) return sendText(topic, title, msg);
+
+    // Locate this network's .pcap and .22000 files by BSSID.
+    char pcapPath[128] = {0}, h22Path[128] = {0};
+    const char* dir = SDLayout::handshakesDir();
+    File d = Storage::fs().open(dir);
+    if (d && d.isDirectory()) {
+        for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+            if (!f.isDirectory()) {
+                const char* n = f.name(); const char* s = strrchr(n, '/'); if (s) n = s + 1;
+                char b[13];
+                if (SDLayout::captureBssid(n, b) && strcmp(b, bssidHex) == 0) {
+                    size_t L = strlen(n);
+                    if (L > 5 && !strcmp(n + L - 5, ".pcap")  && !pcapPath[0])
+                        snprintf(pcapPath, sizeof(pcapPath), "%s/%s", dir, n);
+                    else if (L > 6 && !strcmp(n + L - 6, ".22000") && !h22Path[0])
+                        snprintf(h22Path, sizeof(h22Path), "%s/%s", dir, n);
+                }
+            }
+            f.close();
+        }
+        d.close();
+    }
+
+    bool any = false;
+    if (pcapPath[0]) any |= sendFile(topic, title, msg, pcapPath);
+    if (h22Path[0])  any |= sendFile(topic, title, msg, h22Path);
+    if (!any) any = sendText(topic, title, msg);   // no files found -> at least text
+    return any;
 }
 
 } // namespace Ntfy
