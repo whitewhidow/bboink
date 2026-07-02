@@ -41,8 +41,7 @@ internal storage) · connected WiFi SSID (green) · battery %. The version
   counts, and free storage. **SYNC** connects WiFi STA, **bulk-uploads** pending
   captures, and downloads the cracked potfile (with optional *Purge Crk*, below).
   Click a capture for a detail view (SSID/BSSID, status, recovered password) and
-  delete. Also: **MAKE TEST CAP** (generates a real, crackable WPA2 handshake for
-  end-to-end testing) and **WIFI SCAN**.
+  delete. Also has a **WIFI SCAN** diagnostic.
 - **OHC SYNC** — lists `.22000` captures with the same status tags/counts and free
   storage. Uploads are **per-capture** (not bulk — avoids re-submitting the whole
   set and flooding OHC with duplicates): click a capture → a detail view with an

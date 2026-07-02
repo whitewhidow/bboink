@@ -3,7 +3,6 @@
 #include "../core/sd_layout.h"
 #include "../core/config.h"
 #include "../web/wpasec.h"
-#include "testcap.h"
 #include "../core/net_link.h"
 #include <SD.h>
 #include "../core/storage.h"
@@ -20,7 +19,7 @@ static constexpr int  NAME_LEN  = 64;
 static char  files[MAX_FILES][NAME_LEN];
 static uint8_t fileStatus[MAX_FILES];   // 0=local, 1=uploaded, 2=cracked
 static int   fileCount = 0;
-static constexpr int ACTIONS = 3;  // 0=SYNC, 1=MAKE TEST CAP, 2=WIFI SCAN
+static constexpr int ACTIONS = 2;  // 0=SYNC, 1=WIFI SCAN
 
 static int   sel = 0;            // 0..ACTIONS-1 = actions, then files
 static int   firstVisible = 0;
@@ -67,11 +66,9 @@ static void scan() {
 
 static void rebuildRows() {
     snprintf(rowBuf[0], sizeof(rowBuf[0]), ">> SYNC TO WPA-SEC");
-    snprintf(rowBuf[1], sizeof(rowBuf[1]), ">> MAKE TEST CAP");
-    snprintf(rowBuf[2], sizeof(rowBuf[2]), ">> WIFI SCAN");
+    snprintf(rowBuf[1], sizeof(rowBuf[1]), ">> WIFI SCAN");
     rowPtrs[0] = rowBuf[0];
     rowPtrs[1] = rowBuf[1];
-    rowPtrs[2] = rowBuf[2];
     for (int i = 0; i < fileCount; i++) {
         const char* tag = fileStatus[i] == 2 ? "CRK" : fileStatus[i] == 1 ? "UP " : "-  ";
         snprintf(rowBuf[i + ACTIONS], sizeof(rowBuf[i + ACTIONS]), "%s %.59s", tag, files[i]);
@@ -388,16 +385,7 @@ void tick(const App::Input& in) {
     if (sel >= firstVisible + VISIBLE) { firstVisible = sel - VISIBLE + 1; }
 
     if (in.enter && sel == 0) { doSync(); return; }
-    if (in.enter && sel == 1) {
-        char path[96];
-        bool ok = TestCap::generate(path, sizeof(path));
-        App::clear(); App::header("TEST CAP");
-        App::centerMsg(ok ? "created" : "FAILED", ok ? TFT_GREEN : TFT_RED);
-        delay(1200);
-        enter();   // rescan to show the new file
-        return;
-    }
-    if (in.enter && sel == 2) { wifiScanDiag(); return; }
+    if (in.enter && sel == 1) { wifiScanDiag(); return; }
 
     // Click a file row -> detail view (info + cracked password + delete).
     if (in.enter && sel >= ACTIONS) {
