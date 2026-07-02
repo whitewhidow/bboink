@@ -124,15 +124,23 @@ void enter() {
 
 void tick(const App::Input& in) {
     if (in.back) {
+        // Snapshot capture state BEFORE stop() — stop() clears the handshake/PMKID
+        // vectors, which would zero the counts and suppress the ntfy alert entirely.
+        uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
+        bool wantNtfy = (caps > sessionStartCaps) && Ntfy::enabled();
+        char nSsid[33] = {0}, nPath[96] = {0};
+        uint16_t nNew = (caps > sessionStartCaps) ? (caps - sessionStartCaps) : 0;
+        if (wantNtfy) {
+            strncpy(nSsid, OinkMode::getLastCaptureSSID(),  sizeof(nSsid) - 1);
+            strncpy(nPath, OinkMode::getLastCapturePath(),  sizeof(nPath) - 1);
+        }
+
         OinkMode::stop();
         // Capture left WiFi in promiscuous/disconnected. Restore the STA uplink on
         // the still-initialised driver (a fresh init post-display would fail) — it's
         // needed both for sync and for the ntfy push below.
         esp_wifi_set_promiscuous(false);
         WiFi.setAutoReconnect(true);
-
-        uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
-        bool wantNtfy = (caps > sessionStartCaps) && Ntfy::enabled();
 
         const char* ssid = Config::wifi().otaSSID;
         bool linked = false;
@@ -148,9 +156,7 @@ void tick(const App::Input& in) {
         if (wantNtfy) {
             if (linked) {
                 App::centerMsg("notifying phone...", TFT_CYAN);
-                bool sent = Ntfy::sendCapture(OinkMode::getLastCaptureSSID(),
-                                              OinkMode::getLastCapturePath(),
-                                              caps - sessionStartCaps);
+                bool sent = Ntfy::sendCapture(nSsid, nPath, nNew);
                 App::centerMsg(sent ? "ntfy sent" : "ntfy failed", sent ? TFT_GREEN : TFT_RED);
             } else {
                 App::centerMsg("ntfy: no wifi", TFT_YELLOW);
