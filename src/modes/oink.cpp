@@ -557,9 +557,29 @@ void OinkMode::stop() {
 
 void OinkMode::update() {
     if (!running) return;
-    
+
     uint32_t now = millis();
-    
+
+    // Promiscuous-health watchdog. The ESP32-S3 promiscuous RX can silently wedge
+    // under load (deauth injection + channel-hopping + heap pressure): packets stop
+    // arriving, every network ages out at STALE_TIMEOUT, and the engine sits at zero
+    // until a reboot. Ambient beacons mean the packet counter should ALWAYS climb
+    // while capturing, so if it flatlines for 15s while active (not the brief
+    // save-time pause), revive the radio in place so it self-heals.
+    {
+        static uint32_t wdLastPkts = 0, wdLastRiseMs = 0;
+        uint32_t pk = NetworkRecon::getPacketCount();
+        if (wdLastRiseMs == 0) wdLastRiseMs = now;
+        if (pk != wdLastPkts) { wdLastPkts = pk; wdLastRiseMs = now; }
+        else if (!NetworkRecon::isPaused() && (now - wdLastRiseMs) > 15000) {
+            Serial.println("[OINK] promiscuous flatlined -> reviving NetworkRecon");
+            NetworkRecon::stop();
+            NetworkRecon::start();
+            wdLastPkts = NetworkRecon::getPacketCount();
+            wdLastRiseMs = now;
+        }
+    }
+
     // #region agent log - HEAP INSTRUMENTATION
     // Track heap every 500ms to catch the exact moment it improves
     static uint32_t lastHeapLog = 0;
