@@ -866,7 +866,7 @@ void OinkMode::update() {
                             // Skip: Open, WEP, BOAR BRO, PMF, or already have PMKID
                             if (net.authmode == WIFI_AUTH_OPEN) continue;
                             if (net.authmode == WIFI_AUTH_WEP) continue;
-                            if (isExcluded(net.bssid)) continue;  // BOAR BRO exclusion
+                            if (isExcluded(net.bssid, net.ssid)) continue;  // BOAR BRO exclusion
                             if (net.ssid[0] == 0 || net.isHidden) continue;
                             if (net.hasPMF) continue;
                             
@@ -2218,7 +2218,15 @@ int OinkMode::findOrCreatePMKIDSafe(const uint8_t* bssid, const uint8_t* station
 
 bool OinkMode::ignoredForCapture(const uint8_t* bssid) {
     if (lockActive && memcmp(bssid, lockBssid, 6) == 0) return false;  // targeted -> allow
-    return isExcluded(bssid);
+    if (isExcluded(bssid, nullptr)) return true;                       // exact BSSID
+    // Look up this BSSID's SSID so a name-wide ignore also silences it.
+    char ssid[33] = {0};
+    NetworkRecon::enterCritical();
+    for (const auto& net : networks()) {
+        if (memcmp(net.bssid, bssid, 6) == 0) { strncpy(ssid, net.ssid, 32); ssid[32] = 0; break; }
+    }
+    NetworkRecon::exitCritical();
+    return ssid[0] && isExcluded(bssid, ssid);
 }
 
 uint16_t OinkMode::getCompleteHandshakeCount() {
@@ -3119,7 +3127,7 @@ void OinkMode::sortNetworksByPriority() {
             if (net.authmode == WIFI_AUTH_OPEN) score -= 40;
             if (net.ssid[0] == 0 || net.isHidden) score -= 20;
             if (net.cooldownUntil > now) score -= 20;
-            if (isExcluded(net.bssid)) score -= 80;
+            if (isExcluded(net.bssid, net.ssid)) score -= 80;
             return score;
         };
         
@@ -3311,7 +3319,7 @@ int OinkMode::getNextTarget() {
 
     for (int i = 0; i < (int)networks().size(); i++) {
         const DetectedNetwork& net = networks()[i];
-        if (isExcluded(net.bssid)) continue;  // BOAR BRO - skip
+        if (isExcluded(net.bssid, net.ssid)) continue;  // BOAR BRO - skip (name-wide)
         if (!isEligibleTarget(net, now)) continue;
 
         int score = computeTargetScore(net, now);
@@ -3346,9 +3354,16 @@ uint64_t OinkMode::bssidToUint64(const uint8_t* bssid) {
 }
 
 bool OinkMode::isExcluded(const uint8_t* bssid) {
+    return isExcluded(bssid, nullptr);
+}
+
+bool OinkMode::isExcluded(const uint8_t* bssid, const char* ssid) {
     uint64_t key = bssidToUint64(bssid);
+    bool haveName = ssid && ssid[0];
     for (uint16_t i = 0; i < boarBrosCount; i++) {
-        if (boarBros[i].bssid == key) return true;
+        if (boarBros[i].bssid == key) return true;                       // exact radio
+        if (haveName && boarBros[i].ssid[0] &&
+            strncmp(boarBros[i].ssid, ssid, 32) == 0) return true;       // name-wide
     }
     return false;
 }

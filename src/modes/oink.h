@@ -186,6 +186,9 @@ public:
     static void registerCapture(const uint8_t* bssid, const char* ssid); // captured -> registry
     static void importCapturedFiles();    // add any on-disk captures not yet in the registry
     static bool isExcluded(const uint8_t* bssid);  // Check if BSSID is excluded
+    // Name-aware: excluded if the BSSID matches OR any registry entry shares the
+    // SSID name (so ignoring one radio ignores every AP broadcasting that name).
+    static bool isExcluded(const uint8_t* bssid, const char* ssid);
     static uint16_t getExcludedCount();   // Number of registry entries
     static void removeBoarBro(uint64_t bssid);  // Remove from the registry
 
