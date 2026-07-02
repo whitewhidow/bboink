@@ -7,6 +7,7 @@
 #include "../core/wsl_bypasser.h"
 #include "../core/config.h"
 #include "../web/ntfy.h"
+#include "../core/net_link.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -68,6 +69,9 @@ static void drawStats() {
         y += lh;
     };
 
+    // When there's nothing to attack, explain why (pmf/captured/weak/open/idle).
+    if (strstr(st, "NO TARGETS")) row(OinkMode::getNoTargetSummary(), TFT_ORANGE);
+
     snprintf(line, sizeof(line), "ch %02u   networks %u   pkts %lu",
              OinkMode::getChannel(), OinkMode::getNetworkCount(),
              (unsigned long)OinkMode::getPacketCount());
@@ -116,29 +120,37 @@ void enter() {
 void tick(const App::Input& in) {
     if (in.back) {
         OinkMode::stop();
-        // Capture left WiFi in promiscuous/disconnected. The driver is still
-        // initialised (holds the GDMA resource — porkchop never deinits WiFi), so
-        // re-associate here to restore the uplink for sync. Reconnect on the
-        // running driver works post-display; a fresh init would not.
+        // Capture left WiFi in promiscuous/disconnected. Restore the STA uplink on
+        // the still-initialised driver (a fresh init post-display would fail) — it's
+        // needed both for sync and for the ntfy push below.
         esp_wifi_set_promiscuous(false);
         WiFi.setAutoReconnect(true);
+
+        uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
+        bool wantNtfy = (caps > sessionStartCaps) && Ntfy::enabled();
+
         const char* ssid = Config::wifi().otaSSID;
+        bool linked = false;
         if (ssid && ssid[0]) {
             App::clear();
             App::centerMsg("reconnecting wifi", TFT_CYAN);
-            WiFi.begin(ssid, Config::wifi().otaPassword);
-            uint32_t t = millis();
-            while (WiFi.status() != WL_CONNECTED && millis() - t < 8000) { delay(100); yield(); }
+            linked = NetLink::connectConfigured();   // robust ~15s reconnect
         }
-        // Push an ntfy alert (+ latest capture file if enabled) for this session's
-        // captures. Can't send during capture (promiscuous drops STA), so do it here
-        // once the uplink is back.
-        uint16_t caps = OinkMode::getCompleteHandshakeCount() + OinkMode::getPMKIDCount();
-        if (caps > sessionStartCaps && Ntfy::enabled() && WiFi.status() == WL_CONNECTED) {
-            App::clear();
-            App::centerMsg("notifying phone...", TFT_CYAN);
-            Ntfy::sendCapture(OinkMode::getLastCaptureSSID(), OinkMode::getLastCapturePath(),
-                              caps - sessionStartCaps);
+
+        // Push an ntfy alert for this session's captures (can't send mid-capture:
+        // promiscuous drops the STA link). Always report the outcome so it's never
+        // a silent no-op.
+        if (wantNtfy) {
+            if (linked) {
+                App::centerMsg("notifying phone...", TFT_CYAN);
+                bool sent = Ntfy::sendCapture(OinkMode::getLastCaptureSSID(),
+                                              OinkMode::getLastCapturePath(),
+                                              caps - sessionStartCaps);
+                App::centerMsg(sent ? "ntfy sent" : "ntfy failed", sent ? TFT_GREEN : TFT_RED);
+            } else {
+                App::centerMsg("ntfy: no wifi", TFT_YELLOW);
+            }
+            delay(1200);
         }
         App::go(App::Screen::MENU);
         return;

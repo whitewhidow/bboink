@@ -2264,6 +2264,25 @@ const char* OinkMode::getStateString() {
     return "?";
 }
 
+const char* OinkMode::getNoTargetSummary() {
+    static char buf[64];
+    int seen = 0, pmf = 0, done = 0, weak = 0, open = 0, idle = 0;
+    int8_t minRssi = Config::wifi().attackMinRssi;
+    NetworkRecon::enterCritical();
+    for (const auto& net : networks()) {
+        seen++;
+        if (net.hasPMF)                            { pmf++;  continue; }  // can't attack
+        if (net.authmode == WIFI_AUTH_OPEN)        { open++; continue; }  // nothing to crack
+        if (isExcluded(net.bssid, net.ssid))       { done++; continue; }  // captured/ignored
+        if (net.rssi < minRssi)                    { weak++; continue; }  // too far
+        idle++;  // eligible in principle: exhausted attempts / no clients / cooldown
+    }
+    NetworkRecon::exitCritical();
+    snprintf(buf, sizeof(buf), "%d seen: %dpmf %ddone %dweak %dopen %didle",
+             seen, pmf, done, weak, open, idle);
+    return buf;
+}
+
 const char* OinkMode::getTargetSSID() {
     return targetCacheValid ? targetSSIDCache : "";
 }

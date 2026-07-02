@@ -9,7 +9,7 @@ namespace ScreenOptions {
 enum Field {
     OPT_WIFI, OPT_KEY, OPT_OHC, OPT_NTFY, OPT_NTFYFILE,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER, OPT_TRIES,
-    OPT_BRIGHT, OPT_SOUND,
+    OPT_BRIGHT, OPT_SOUND, OPT_PURGE,
     OPT_COUNT
 };
 
@@ -36,6 +36,7 @@ static const FieldDef defs[OPT_COUNT] = {
     { "Max Tries", false, false, 1, 15, 1 },
     { "Brightness",false, false, 10, 255, 15 },
     { "Sound",     false, true,  0, 1, 1 },
+    { "Purge Crk", false, true,  0, 1, 1 },
 };
 
 static int  sel = 0;
@@ -60,6 +61,7 @@ static int  getNum(int f) {
         case OPT_TRIES:  return w.maxAttackAttempts;
         case OPT_BRIGHT: return w.displayBrightness;
         case OPT_SOUND:  return w.soundEnabled ? 1 : 0;
+        case OPT_PURGE:  return w.autoPurgeCracked ? 1 : 0;
         case OPT_NTFYFILE: return w.ntfyAttachFile ? 1 : 0;
     }
     return 0;
@@ -81,6 +83,7 @@ static void setNum(int f, int v) {
         case OPT_BRIGHT: w.displayBrightness = (uint8_t)v;
                          M5.Display.setBrightness((uint8_t)v); break;  // live preview
         case OPT_SOUND:  w.soundEnabled = (v != 0);          break;
+        case OPT_PURGE:  w.autoPurgeCracked = (v != 0);      break;
         case OPT_NTFYFILE: w.ntfyAttachFile = (v != 0);      break;
     }
 }

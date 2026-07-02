@@ -109,6 +109,7 @@ struct WiFiConfig {
     char wigleApiToken[65];             // WiGLE API Token (from wigle.net/account)
     char ntfyTopic[64] = "capture_alert"; // ntfy.sh topic for capture alerts ("" = off)
     bool ntfyAttachFile = true;         // attach the capture file to the ntfy push
+    bool autoPurgeCracked = false;      // after WPA-SEC sync, delete local files for cracked nets
 };
 
 // BLE settings for PIGGY BLUES mode

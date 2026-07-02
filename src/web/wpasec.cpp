@@ -847,6 +847,37 @@ WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
     Serial.printf("[WPASEC] Sync complete: uploaded=%u failed=%u cracked=%u\n",
                   (unsigned int)result.uploaded, (unsigned int)result.failed,
                   (unsigned int)result.cracked);
-    
+
     return result;
+}
+
+int WPASec::purgeCrackedCaptures() {
+    loadCache();
+    const char* dir = SDLayout::handshakesDir();
+    File d = Storage::fs().open(dir);
+    if (!d || !d.isDirectory()) { if (d) d.close(); return 0; }
+
+    // Collect names first — deleting while iterating the dir handle is unsafe.
+    std::vector<String> toDelete;
+    for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+        if (!f.isDirectory()) {
+            const char* n = f.name(); const char* s = strrchr(n, '/'); if (s) n = s + 1;
+            size_t len = strlen(n);
+            bool cap = (len > 5 && strcmp(n + len - 5, ".pcap") == 0) ||
+                       (len > 6 && strcmp(n + len - 6, ".22000") == 0);
+            char bssid[13];
+            if (cap && SDLayout::captureBssid(n, bssid) && isCracked(bssid))
+                toDelete.push_back(String(n));
+        }
+        f.close();
+    }
+    d.close();
+
+    int count = 0;
+    char path[128];
+    for (auto& name : toDelete) {
+        snprintf(path, sizeof(path), "%s/%s", dir, name.c_str());
+        if (Storage::fs().remove(path)) count++;
+    }
+    return count;
 }

@@ -268,6 +268,11 @@ static void doSync() {
 
     WPASecSyncResult r = WPASec::syncCaptures(syncProgress);
 
+    // Optionally delete local files for networks that are now cracked (the password
+    // stays available from the potfile cache and the CAPTURES registry).
+    int purged = 0;
+    if (r.success && Config::wifi().autoPurgeCracked) purged = WPASec::purgeCrackedCaptures();
+
     // Keep WiFi connected — do NOT turn it off. The connection is held from boot
     // (claimed before the display) and reused; turning it off here would drop it
     // and a fresh reconnect after the display is up fails to associate.
@@ -286,6 +291,12 @@ static void doSync() {
     snprintf(line, sizeof(line), "cracked %u (+%u)", r.cracked, r.newCracked);
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     M5.Display.drawString(line, 8, y);
+    if (purged > 0) {
+        y += 24;
+        M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+        snprintf(line, sizeof(line), "purged %d", purged);
+        M5.Display.drawString(line, 8, y);
+    }
     if (!r.success && r.error[0]) {
         M5.Display.setTextSize(1);
         M5.Display.setTextColor(TFT_RED, TFT_BLACK);

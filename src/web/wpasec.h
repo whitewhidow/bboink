@@ -53,6 +53,10 @@ public:
     static bool canSync();                           // Check heap requirements (~35KB)
     static WPASecSyncResult syncCaptures(WPASecProgressCallback cb = nullptr);  // Full sync
 
+    // Delete local .pcap/.22000 files whose BSSID is already cracked (the password
+    // stays available from the potfile cache). Returns the number of files removed.
+    static int purgeCrackedCaptures();
+
     // Status
     static const char* getLastError();
 
