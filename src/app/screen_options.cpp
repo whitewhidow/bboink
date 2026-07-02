@@ -11,7 +11,7 @@ namespace ScreenOptions {
 enum Field {
     OPT_WIFI, OPT_KEY, OPT_OHC, OPT_NTFY, OPT_NTFYFILE,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER, OPT_TRIES,
-    OPT_IDLE, OPT_BRIGHT, OPT_SOUND, OPT_PURGE, OPT_OTAPATH, OPT_UPDATE, OPT_UPDATE_SD,
+    OPT_IDLE, OPT_BRIGHT, OPT_SOUND, OPT_PURGE, OPT_CRKUP, OPT_OTAPATH, OPT_UPDATE, OPT_UPDATE_SD,
     OPT_COUNT
 };
 
@@ -36,10 +36,11 @@ static const FieldDef defs[OPT_COUNT] = {
     { "Burst",     false, false, 1, 8, 1 },
     { "Jitter ms", false, false, 0, 20, 1 },
     { "Max Tries", false, false, 1, 15, 1 },
-    { "Idle Retry",false, false, 0, 120, 1 },   // minutes; 0 = off
+    { "Idle Rty m",false, false, 0, 120, 1 },   // idle-retry minutes; 0 = off
     { "Brightness",false, false, 10, 255, 15 },
     { "Sound",     false, true,  0, 1, 1 },
     { "Purge Crk", false, true,  0, 1, 1 },
+    { "Crk Uplink",false, true,  0, 1, 1 },
     { "OTA Path",  true,  false, 0, 0, 0 },
     { "Update FW", false, false, 0, 0, 0 },   // action: flash OTA (standalone install)
     { "Update->SD",false, false, 0, 0, 0 },   // action: write bin to SD (launcher install)
@@ -69,6 +70,7 @@ static int  getNum(int f) {
         case OPT_BRIGHT: return w.displayBrightness;
         case OPT_SOUND:  return w.soundEnabled ? 1 : 0;
         case OPT_PURGE:  return w.autoPurgeCracked ? 1 : 0;
+        case OPT_CRKUP:  return w.crackedFallback ? 1 : 0;
         case OPT_NTFYFILE: return w.ntfyAttachFile ? 1 : 0;
     }
     return 0;
@@ -92,6 +94,7 @@ static void setNum(int f, int v) {
                          M5.Display.setBrightness((uint8_t)v); break;  // live preview
         case OPT_SOUND:  w.soundEnabled = (v != 0);          break;
         case OPT_PURGE:  w.autoPurgeCracked = (v != 0);      break;
+        case OPT_CRKUP:  w.crackedFallback = (v != 0);       break;
         case OPT_NTFYFILE: w.ntfyAttachFile = (v != 0);      break;
     }
 }

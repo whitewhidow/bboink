@@ -95,6 +95,7 @@ struct WiFiConfig {
     uint8_t deauthJitterMax = 5;         // Max ms jitter between deauth frames (0-20)
     uint8_t maxAttackAttempts = 4;       // Tries per network before giving up (1-15)
     uint16_t idleRetryMins = 0;          // Re-arm given-up networks after N min (0 = off)
+    bool crackedFallback = false;        // If uplink is down, sync via an in-range cracked AP
     uint8_t displayBrightness = 200;     // Backlight brightness (10-255)
     bool    soundEnabled = true;         // I2S beep notifications on/off
     uint8_t spectrumTopN = 0;           // Spectrum: cap visible APs (0 = no cap)

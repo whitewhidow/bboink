@@ -83,6 +83,9 @@ is present; `.pcap` is validated server-side on upload.
 - **Purge Crk** — after a WPA-SEC sync, delete local `.pcap`/`.22000` files for
   networks that are now cracked (the password stays in the potfile cache + the
   CAPTURES registry).
+- **Crk Uplink** — if the configured WiFi isn't reachable when syncing, fall back
+  to an in-range **cracked** network (using its recovered password) for the upload.
+  Opt-in (default off); only use on networks you're authorized on.
 - **OTA Path** — SD path the launcher loads / the SD self-update writes to.
 - **Update FW** / **Update→SD** — self-update over WiFi (see below).
 
