@@ -151,7 +151,7 @@ static void capturesFlow() {
     App::clear(); App::header("CAPTURES"); App::centerMsg("loading...", TFT_CYAN);
     OinkMode::loadBoarBros();
     OinkMode::importCapturedFiles();
-    static char rb[CAP_MAX][40]; static const char* rp[CAP_MAX];
+    static char rb[CAP_MAX][48]; static const char* rp[CAP_MAX];
     int count = 1;
     auto rebuild = [&]() {
         const OinkMode::BoarBro* list = OinkMode::getExcludedList();
@@ -168,8 +168,9 @@ static void capturesFlow() {
             if (OHC::isUploaded(hb))    st[sp++] = 'O';
             if (WPASec::isCracked(hb))  st[sp++] = 'K';
             st[sp] = '\0';
-            snprintf(rb[i + 1], sizeof(rb[i + 1]), "%-2s %-11.11s %s", cm,
-                     list[i].ssid[0] ? list[i].ssid : hb, st);
+            // Status tag first so it stays visible; SSID gets the full width (up to 32).
+            snprintf(rb[i + 1], sizeof(rb[i + 1]), "%-2s %-3s %.32s", cm, st,
+                     list[i].ssid[0] ? list[i].ssid : hb);
             rp[i + 1] = rb[i + 1];
         }
         count = (nreg < CAP_MAX - 1 ? nreg : CAP_MAX - 1) + 1;
