@@ -189,8 +189,9 @@ public:
     // Name-aware: excluded if the BSSID matches OR any registry entry shares the
     // SSID name (so ignoring one radio ignores every AP broadcasting that name).
     static bool isExcluded(const uint8_t* bssid, const char* ssid);
-    // One-line breakdown of why there are no targets (for the NO TARGETS screen).
-    static const char* getNoTargetSummary();
+    // One-line live breakdown of the network pool: how many are being worked vs
+    // why the rest are skipped (pmf/done/weak/open/idle).
+    static const char* getNetworkBreakdown();
     static uint16_t getExcludedCount();   // Number of registry entries
     static void removeBoarBro(uint64_t bssid);  // Remove from the registry
 

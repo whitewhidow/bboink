@@ -69,13 +69,14 @@ static void drawStats() {
         y += lh;
     };
 
-    // When there's nothing to attack, explain why (pmf/captured/weak/open/idle).
-    if (strstr(st, "NO TARGETS")) row(OinkMode::getNoTargetSummary(), TFT_ORANGE);
-
     snprintf(line, sizeof(line), "ch %02u   networks %u   pkts %lu",
              OinkMode::getChannel(), OinkMode::getNetworkCount(),
              (unsigned long)OinkMode::getPacketCount());
     row(line, TFT_WHITE);
+
+    // Always-on pool breakdown: work = being attacked (tries left); the rest are
+    // why the others are skipped.
+    row(OinkMode::getNetworkBreakdown(), TFT_CYAN);
 
     snprintf(line, sizeof(line), "handshakes %u   pmkid %u",
              OinkMode::getCompleteHandshakeCount(), OinkMode::getPMKIDCount());

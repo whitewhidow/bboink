@@ -2264,22 +2264,23 @@ const char* OinkMode::getStateString() {
     return "?";
 }
 
-const char* OinkMode::getNoTargetSummary() {
+const char* OinkMode::getNetworkBreakdown() {
     static char buf[64];
-    int seen = 0, pmf = 0, done = 0, weak = 0, open = 0, idle = 0;
-    int8_t minRssi = Config::wifi().attackMinRssi;
+    int pmf = 0, done = 0, weak = 0, open = 0, work = 0, idle = 0;
+    int8_t  minRssi  = Config::wifi().attackMinRssi;
+    uint8_t maxTries = Config::wifi().maxAttackAttempts;
     NetworkRecon::enterCritical();
     for (const auto& net : networks()) {
-        seen++;
-        if (net.hasPMF)                            { pmf++;  continue; }  // can't attack
-        if (net.authmode == WIFI_AUTH_OPEN)        { open++; continue; }  // nothing to crack
-        if (isExcluded(net.bssid, net.ssid))       { done++; continue; }  // captured/ignored
-        if (net.rssi < minRssi)                    { weak++; continue; }  // too far
-        idle++;  // eligible in principle: exhausted attempts / no clients / cooldown
+        if (net.hasPMF)                      { pmf++;  continue; }  // protected, can't attack
+        if (net.authmode == WIFI_AUTH_OPEN)  { open++; continue; }  // nothing to crack
+        if (isExcluded(net.bssid, net.ssid)) { done++; continue; }  // captured/ignored
+        if (net.rssi < minRssi)              { weak++; continue; }  // too far
+        if (net.attackAttempts < maxTries)   work++;  // tries left -> still being worked
+        else                                 idle++;  // gave up (attempts exhausted)
     }
     NetworkRecon::exitCritical();
-    snprintf(buf, sizeof(buf), "%d seen: %dpmf %ddone %dweak %dopen %didle",
-             seen, pmf, done, weak, open, idle);
+    snprintf(buf, sizeof(buf), "work %d  pmf %d done %d weak %d open %d idle %d",
+             work, pmf, done, weak, open, idle);
     return buf;
 }
 
