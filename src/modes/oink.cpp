@@ -2266,21 +2266,27 @@ const char* OinkMode::getStateString() {
 
 const char* OinkMode::getNetworkBreakdown() {
     static char buf[64];
-    int pmf = 0, done = 0, weak = 0, open = 0, work = 0, idle = 0;
-    int8_t  minRssi  = Config::wifi().attackMinRssi;
-    uint8_t maxTries = Config::wifi().maxAttackAttempts;
+    int work = 0, cool = 0, pmf = 0, done = 0, weak = 0, open = 0, idle = 0;
+    int8_t   minRssi  = Config::wifi().attackMinRssi;
+    uint8_t  maxTries = Config::wifi().maxAttackAttempts;
+    const char* mySsid = Config::wifi().otaSSID;
+    uint32_t now = millis();
     NetworkRecon::enterCritical();
     for (const auto& net : networks()) {
-        if (net.hasPMF)                      { pmf++;  continue; }  // protected, can't attack
-        if (net.authmode == WIFI_AUTH_OPEN)  { open++; continue; }  // nothing to crack
-        if (isExcluded(net.bssid, net.ssid)) { done++; continue; }  // captured/ignored
-        if (net.rssi < minRssi)              { weak++; continue; }  // too far
-        if (net.attackAttempts < maxTries)   work++;  // tries left -> still being worked
-        else                                 idle++;  // gave up (attempts exhausted)
+        if (net.hasPMF)                             { pmf++;  continue; }  // protected
+        if (net.authmode == WIFI_AUTH_OPEN)         { open++; continue; }  // nothing to crack
+        if (isExcluded(net.bssid, net.ssid) || net.hasHandshake) { done++; continue; }  // captured/ignored
+        int8_t rssi = (net.rssiAvg != 0) ? net.rssiAvg : net.rssi;
+        if (rssi < minRssi)                         { weak++; continue; }  // too far
+        if (net.attackAttempts >= maxTries)         { idle++; continue; }  // gave up
+        if (net.ssid[0] == 0 || net.isHidden ||
+            (mySsid[0] && strcmp(net.ssid, mySsid) == 0)) { idle++; continue; }  // hidden/own AP
+        if (net.cooldownUntil > now)                { cool++; continue; }  // waiting between bursts
+        work++;   // eligible right now -> a target will be picked
     }
     NetworkRecon::exitCritical();
-    snprintf(buf, sizeof(buf), "work %d  pmf %d done %d weak %d open %d idle %d",
-             work, pmf, done, weak, open, idle);
+    snprintf(buf, sizeof(buf), "work %d cool %d pmf %d done %d weak %d open %d idle %d",
+             work, cool, pmf, done, weak, open, idle);
     return buf;
 }
 
