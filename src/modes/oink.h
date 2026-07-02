@@ -142,7 +142,7 @@ public:
     
     // PMKID capture (clientless attack)
     static const std::vector<CapturedPMKID>& getPMKIDs() { return pmkids; }
-    static uint16_t getPMKIDCount() { return pmkids.size(); }
+    static uint16_t getPMKIDCount();   // excludes ignored networks (see .cpp)
     static bool savePMKID22000(const CapturedPMKID& p, const char* path);
     static bool saveAllPMKIDs();
     
@@ -259,6 +259,9 @@ private:
     static void sortNetworksByPriority();
     static void updateTargetCache();
     static bool hasHandshakeFor(const uint8_t* bssid);
+    // Skip passively saving/counting a handshake for an excluded network (unless
+    // it's the deliberate CAPTURE TARGETED lock).
+    static bool ignoredForCapture(const uint8_t* bssid);
     static void loadCapturedBssids();          // scan SD handshakes dir into capturedBssids
     static std::set<uint64_t> capturedBssids;  // BSSIDs already captured (prev sessions)
     static int getNextTarget();  // Smart target selection

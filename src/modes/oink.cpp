@@ -2207,10 +2207,23 @@ int OinkMode::findOrCreatePMKIDSafe(const uint8_t* bssid, const uint8_t* station
     return idx;
 }
 
+bool OinkMode::ignoredForCapture(const uint8_t* bssid) {
+    if (lockActive && memcmp(bssid, lockBssid, 6) == 0) return false;  // targeted -> allow
+    return isExcluded(bssid);
+}
+
 uint16_t OinkMode::getCompleteHandshakeCount() {
     uint16_t count = 0;
     for (const auto& hs : handshakes) {
-        if (hs.isComplete()) count++;
+        if (hs.isComplete() && !ignoredForCapture(hs.bssid)) count++;
+    }
+    return count;
+}
+
+uint16_t OinkMode::getPMKIDCount() {
+    uint16_t count = 0;
+    for (const auto& p : pmkids) {
+        if (!ignoredForCapture(p.bssid)) count++;
     }
     return count;
 }
@@ -2261,13 +2274,13 @@ void OinkMode::autoSaveCheck() {
     bool hasUnsavedPMKID = false;
     
     for (const auto& hs : handshakes) {
-        if (hs.isComplete() && !hs.saved && hs.saveAttempts < 3) {
+        if (hs.isComplete() && !hs.saved && hs.saveAttempts < 3 && !ignoredForCapture(hs.bssid)) {
             hasUnsavedHS = true;
             break;
         }
     }
     for (const auto& p : pmkids) {
-        if (!p.saved && p.ssid[0] != 0) {
+        if (!p.saved && p.ssid[0] != 0 && !ignoredForCapture(p.bssid)) {
             hasUnsavedPMKID = true;
             break;
         }
@@ -2288,6 +2301,8 @@ void OinkMode::autoSaveCheck() {
     
     // Save any unsaved complete handshakes
     for (auto& hs : handshakes) {
+        // Excluded network (and not the CAPTURE TARGETED lock): consume without saving.
+        if (hs.isComplete() && !hs.saved && ignoredForCapture(hs.bssid)) { hs.saved = true; continue; }
         if (hs.isComplete() && !hs.saved && hs.saveAttempts < 3) {
             // Check backoff timer (exponential: 0s, 2s, 5s, then give up)
             static const uint32_t backoffMs[] = {0, 2000, 5000};
@@ -2676,6 +2691,8 @@ bool OinkMode::saveAllPMKIDs() {
     
     bool success = true;
     for (auto& p : pmkids) {
+        // Excluded network (and not the CAPTURE TARGETED lock): consume without saving.
+        if (!p.saved && ignoredForCapture(p.bssid)) { p.saved = true; continue; }
         // SSID backfill: In passive mode (DO NO HAM), M1 frames may arrive before
         // beacon, so SSID lookup fails at capture time. Try again before saving.
         // SSID is REQUIRED for PMKID cracking - it's the salt for PBKDF2(passphrase, SSID).
