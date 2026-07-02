@@ -96,7 +96,7 @@ public:
     bool begin() { return true; }
     void setVolume(uint8_t v) { _volume = v; }
     void setAllChannelVolume(uint8_t v) { _volume = v; }
-    uint8_t _volume = 160;   // 0..255 amplitude scale
+    uint8_t _volume = 230;   // 0..255 amplitude scale (loud default)
 };
 
 // board_t / Power_Class compatibility (main.cpp checks board_M5CardputerADV;

@@ -119,7 +119,7 @@ void SpeakerFacade::tone(uint16_t freq, uint32_t durationMs) {
     pins.data_in_num  = I2S_PIN_NO_CHANGE;
     i2s_set_pin(I2S_NUM_0, &pins);
 
-    const int16_t amp = (int16_t)(40 * _volume);     // _volume(0..255) -> amplitude
+    const int16_t amp = (int16_t)(120 * _volume);    // _volume(0..255) -> amplitude (max ~30600)
     int halfPeriod = (kSampleRate / freq) / 2;        // samples per half square wave
     if (halfPeriod < 1) halfPeriod = 1;
     int totalSamples = (int)((uint64_t)kSampleRate * durationMs / 1000);
