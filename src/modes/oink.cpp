@@ -3479,12 +3479,34 @@ void OinkMode::importCapturedFiles() {
                 int nib = (c <= '9') ? (c - '0') : ((c | 0x20) - 'a' + 10);
                 key = (key << 4) | (uint64_t)(nib & 0xf);
             }
+            // Recover the SSID from the filename: "<SSID>_<BSSID><token>.<ext>".
+            char nameBuf[33] = {0};
+            {
+                const char* base = n; const char* sl = strrchr(n, '/'); if (sl) base = sl + 1;
+                const char* dot = strrchr(base, '.');
+                size_t bl = dot ? (size_t)(dot - base) : strlen(base);
+                static const char* kToks[] = {"_pcap", "_pmkid", "_22000", "_hs"};
+                for (const char* t : kToks) { size_t tl = strlen(t);
+                    if (bl > tl && strncmp(base + bl - tl, t, tl) == 0) { bl -= tl; break; } }
+                if (bl >= 13 && base[bl - 13] == '_') {
+                    size_t sn = bl - 13; if (sn > 32) sn = 32;
+                    memcpy(nameBuf, base, sn); nameBuf[sn] = '\0';
+                }
+            }
             bool found = false;
-            for (uint16_t i = 0; i < boarBrosCount; i++)
-                if (boarBros[i].bssid == key) { boarBros[i].flags |= BB_CAPTURED; found = true; break; }
+            for (uint16_t i = 0; i < boarBrosCount; i++) {
+                if (boarBros[i].bssid == key) {
+                    if (!(boarBros[i].flags & BB_CAPTURED)) { boarBros[i].flags |= BB_CAPTURED; changed = true; }
+                    if (boarBros[i].ssid[0] == '\0' && nameBuf[0]) {   // backfill missing name
+                        strncpy(boarBros[i].ssid, nameBuf, 32); boarBros[i].ssid[32] = '\0'; changed = true;
+                    }
+                    found = true; break;
+                }
+            }
             if (!found) {
                 BoarBro& e = boarBros[boarBrosCount++];
-                e.bssid = key; e.ssid[0] = '\0'; e.flags = BB_CAPTURED; e.ts = 0;
+                e.bssid = key; e.flags = BB_CAPTURED; e.ts = 0;
+                strncpy(e.ssid, nameBuf, 32); e.ssid[32] = '\0';
                 changed = true;
             }
         }
