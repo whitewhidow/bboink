@@ -35,6 +35,9 @@ void setup() {
         neopixelWrite(14, 0, 0, 0);
         Serial.printf("[OINK] boot wifi: %s\n",
                       WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
+        // Best-effort NTP (async) so capture registry timestamps are real.
+        if (WiFi.status() == WL_CONNECTED)
+            configTime(0, 0, "pool.ntp.org", "time.google.com");
     }
 
     // Now the display + input + engine (display init no longer disturbs WiFi).

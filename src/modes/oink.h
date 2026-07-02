@@ -168,17 +168,23 @@ public:
     static void moveSelectionDown();
     static void confirmSelection();
     
-    // BOAR BROS - network exclusion list
+    // Network registry (formerly "boar bros"): persistent list of networks to
+    // exclude from capture — both MANUAL never-attack entries and every CAPTURED
+    // network (added on save; persists even if the capture file is deleted).
+    static constexpr uint8_t BB_MANUAL   = 1;
+    static constexpr uint8_t BB_CAPTURED = 2;
     static bool loadBoarBros();           // Load from SD
     static bool saveBoarBros();           // Save to SD
     static bool excludeNetwork(int index); // Add selected network to exclusion list
-    static bool excludeNetworkByBSSID(const uint8_t* bssid, const char* ssid); // Add by BSSID directly
+    static bool excludeNetworkByBSSID(const uint8_t* bssid, const char* ssid); // manual add
+    static void registerCapture(const uint8_t* bssid, const char* ssid); // captured -> registry
+    static void importCapturedFiles();    // add any on-disk captures not yet in the registry
     static bool isExcluded(const uint8_t* bssid);  // Check if BSSID is excluded
-    static uint16_t getExcludedCount();   // Number of excluded networks
-    static void removeBoarBro(uint64_t bssid);  // Remove from exclusion list
+    static uint16_t getExcludedCount();   // Number of registry entries
+    static void removeBoarBro(uint64_t bssid);  // Remove from the registry
 
-    // BOAR BROS data structure
-    struct BoarBro { uint64_t bssid; char ssid[33]; };
+    // Registry data structure
+    struct BoarBro { uint64_t bssid; char ssid[33]; uint8_t flags; uint32_t ts; };
     static const BoarBro* getExcludedList() { return boarBros; }
     
     // Stress test injection (no RF)

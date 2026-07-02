@@ -40,9 +40,14 @@ internal storage) · connected WiFi SSID (green) · battery %.
   potfile (OHC's API masks hashes, so per-file results can't be read back from it).
 - **SYNC ALL** — runs the WPA-SEC sync then the OnlineHashCrack upload back-to-back
   and shows a combined result (no need to visit both screens).
-- **EXCLUDE APS** — scans nearby APs and lets you toggle a per-network
-  never-attack flag (`X`); the capture engine skips excluded BSSIDs. Use it to
-  spare your own AP / neighbours. (Persisted to the boar-bros list on storage.)
+- **CAPTURES** — the persistent network **registry**, and the single source of
+  capture exclusion. It holds every **captured** network (`C`, registered on save —
+  so it stays listed and excluded **even after you delete the `.pcap`/`.22000`**)
+  plus **manual** never-attack entries (`M`, add via *ADD IGNORE → scan → pick*).
+  Click a network for detail: SSID, BSSID, type, **seen-time** (NTP), and the
+  **recovered password** if cracked; **DELETE = forget** (re-capturable again).
+  Cracked networks show `CRK`. Backed by an extended boar-bros file
+  (`BSSID,flags,ts,SSID`); existing on-disk captures are imported on open.
 - **STATS** — current inventory: `.pcap` / `.22000` counts on storage, cracked
   count (from the wpa-sec potfile), storage backend + free space.
 

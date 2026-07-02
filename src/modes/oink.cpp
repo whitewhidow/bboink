@@ -10,6 +10,7 @@
 #include "../core/heap_gates.h"
 #include "../core/sdlog.h"
 #include "../core/sd_layout.h"
+#include <time.h>
 #include "../core/xp.h"
 #include "../core/heap_policy.h"
 #include "../core/heap_health.h"
@@ -232,7 +233,7 @@ std::atomic<bool> OinkMode::beaconCaptured{false};  // Atomic initialization for
 // BOAR BROS - excluded networks (fixed array in BSS, zero heap)
 OinkMode::BoarBro OinkMode::boarBros[50] = {};
 uint16_t OinkMode::boarBrosCount = 0;
-static const size_t MAX_BOAR_BROS = 50;  // Max excluded networks
+static const size_t MAX_BOAR_BROS = 150;  // Max registry entries (manual + captured)
 
 // Channel hop order (most common channels first)
 const uint8_t CHANNEL_HOP_ORDER[] = {1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13};
@@ -2309,6 +2310,7 @@ void OinkMode::autoSaveCheck() {
                 // Prefer the .pcap for the ntfy attachment (full handshake), else the .22000.
                 strncpy(lastCapturePath, pcapOk ? filename : filename22000, sizeof(lastCapturePath) - 1);
                 lastCapturePath[sizeof(lastCapturePath) - 1] = '\0';
+                registerCapture(hs.bssid, hs.ssid);   // persist in the registry
                 SDLog::log("OINK", "Handshake saved: %s (pcap:%s 22000:%s)",
                            hs.ssid, pcapOk ? "OK" : "FAIL", hs22kOk ? "OK" : "FAIL");
             } else {
@@ -2701,6 +2703,7 @@ bool OinkMode::saveAllPMKIDs() {
                 lastCaptureSSID[sizeof(lastCaptureSSID) - 1] = '\0';
                 strncpy(lastCapturePath, filename, sizeof(lastCapturePath) - 1);
                 lastCapturePath[sizeof(lastCapturePath) - 1] = '\0';
+                registerCapture(p.bssid, p.ssid);   // persist in the registry
                 SDLog::log("OINK", "PMKID saved: %s", p.ssid);
             } else {
                 // Failed - increment attempt counter
@@ -3345,18 +3348,39 @@ bool OinkMode::loadBoarBros() {
             }
 
             if (valid) {
-                boarBros[boarBrosCount].bssid = bssid;
-                // Extract SSID from rest of line (after space)
-                if (lineLen > 13) {
+                BoarBro& e = boarBros[boarBrosCount];
+                e.bssid = bssid;
+                e.flags = BB_MANUAL;   // default (old-format entries were manual)
+                e.ts = 0;
+                e.ssid[0] = '\0';
+                char* rest = line + 12;
+                if (*rest == ',') {
+                    // New CSV format: AABBCCDDEEFF,flags,ts,SSID
+                    rest++;
+                    e.flags = (uint8_t)atoi(rest);
+                    char* c2 = strchr(rest, ',');
+                    if (c2) {
+                        rest = c2 + 1;
+                        e.ts = (uint32_t)strtoul(rest, nullptr, 10);
+                        char* c3 = strchr(rest, ',');
+                        if (c3) {
+                            char* s = c3 + 1;
+                            int sl = strlen(s);
+                            while (sl > 0 && (s[sl-1] == ' ' || s[sl-1] == '\t')) sl--;
+                            if (sl > 32) sl = 32;
+                            memcpy(e.ssid, s, sl); e.ssid[sl] = '\0';
+                        }
+                    }
+                } else if (lineLen > 13) {
+                    // Legacy format: "AABBCCDDEEFF SSID"
                     char* ssidStart = line + 13;
                     while (*ssidStart == ' ' || *ssidStart == '\t') ssidStart++;
-                    // Trim trailing spaces
                     int ssidLen = strlen(ssidStart);
                     while (ssidLen > 0 && (ssidStart[ssidLen-1] == ' ' || ssidStart[ssidLen-1] == '\t')) ssidLen--;
                     if (ssidLen > 32) ssidLen = 32;
-                    memcpy(boarBros[boarBrosCount].ssid, ssidStart, ssidLen);
-                    boarBros[boarBrosCount].ssid[ssidLen] = '\0';
+                    memcpy(e.ssid, ssidStart, ssidLen); e.ssid[ssidLen] = '\0';
                 }
+                if (e.flags == 0) e.flags = BB_MANUAL;
                 boarBrosCount++;
             }
         }
@@ -3387,12 +3411,10 @@ bool OinkMode::saveBoarBros() {
         f.close();
         return false;
     }
-    f.println("# Format: BSSID (12 hex chars) followed by optional SSID");
+    f.println("# Format: BSSID,flags,ts,SSID  (flags: 1=manual 2=captured 3=both)");
 
     for (uint16_t i = 0; i < boarBrosCount; i++) {
         uint64_t bssid = boarBros[i].bssid;
-
-        // Convert uint64 back to hex string
         char hex[13];
         snprintf(hex, sizeof(hex), "%02X%02X%02X%02X%02X%02X",
                  (uint8_t)((bssid >> 40) & 0xFF),
@@ -3401,16 +3423,75 @@ bool OinkMode::saveBoarBros() {
                  (uint8_t)((bssid >> 16) & 0xFF),
                  (uint8_t)((bssid >> 8) & 0xFF),
                  (uint8_t)(bssid & 0xFF));
-
-        if (boarBros[i].ssid[0] != '\0') {
-            f.printf("%s %s\n", hex, boarBros[i].ssid);
-        } else {
-            f.println(hex);
-        }
+        f.printf("%s,%u,%lu,%s\n", hex, (unsigned)boarBros[i].flags,
+                 (unsigned long)boarBros[i].ts, boarBros[i].ssid);
     }
     
     f.close();
     return true;
+}
+
+// Register a network we just captured into the persistent registry (so it stays
+// excluded even after the capture file is deleted). Adds a new CAPTURED entry, or
+// flags an existing one as captured + stamps the time.
+void OinkMode::registerCapture(const uint8_t* bssid, const char* ssidIn) {
+    uint64_t key = bssidToUint64(bssid);
+    uint32_t nowTs = (uint32_t)time(nullptr);
+    if (nowTs < 1700000000UL) nowTs = 0;   // clock not set yet -> unknown
+    for (uint16_t i = 0; i < boarBrosCount; i++) {
+        if (boarBros[i].bssid == key) {
+            boarBros[i].flags |= BB_CAPTURED;
+            if (boarBros[i].ts == 0) boarBros[i].ts = nowTs;
+            if (boarBros[i].ssid[0] == '\0' && ssidIn && ssidIn[0]) {
+                strncpy(boarBros[i].ssid, ssidIn, 32); boarBros[i].ssid[32] = '\0';
+            }
+            saveBoarBros();
+            return;
+        }
+    }
+    if (boarBrosCount >= MAX_BOAR_BROS) return;
+    BoarBro& e = boarBros[boarBrosCount];
+    e.bssid = key;
+    strncpy(e.ssid, (ssidIn && ssidIn[0]) ? ssidIn : "", 32); e.ssid[32] = '\0';
+    e.flags = BB_CAPTURED;
+    e.ts = nowTs;
+    boarBrosCount++;
+    saveBoarBros();
+}
+
+// Import any capture files already on the SD into the registry (one-time backfill
+// so existing captures show up and stay excluded even after their files go away).
+void OinkMode::importCapturedFiles() {
+    const char* dir = SDLayout::handshakesDir();
+    File d = Storage::fs().open(dir);
+    if (!d || !d.isDirectory()) { if (d) d.close(); return; }
+    bool changed = false;
+    for (File f = d.openNextFile(); f && boarBrosCount < MAX_BOAR_BROS; f = d.openNextFile()) {
+        const char* n = f.name(); size_t L = strlen(n);
+        bool cap = (!f.isDirectory()) &&
+                   ((L > 5 && strcmp(n + L - 5, ".pcap") == 0) ||
+                    (L > 6 && strcmp(n + L - 6, ".22000") == 0));
+        char bssid[13];
+        if (cap && SDLayout::captureBssid(n, bssid)) {
+            uint64_t key = 0;
+            for (int i = 0; i < 12; i++) {
+                char c = bssid[i];
+                int nib = (c <= '9') ? (c - '0') : ((c | 0x20) - 'a' + 10);
+                key = (key << 4) | (uint64_t)(nib & 0xf);
+            }
+            bool found = false;
+            for (uint16_t i = 0; i < boarBrosCount; i++)
+                if (boarBros[i].bssid == key) { boarBros[i].flags |= BB_CAPTURED; found = true; break; }
+            if (!found) {
+                BoarBro& e = boarBros[boarBrosCount++];
+                e.bssid = key; e.ssid[0] = '\0'; e.flags = BB_CAPTURED; e.ts = 0;
+                changed = true;
+            }
+        }
+        f.close();
+    }
+    d.close();
+    if (changed) saveBoarBros();
 }
 
 void OinkMode::removeBoarBro(uint64_t bssid) {
@@ -3552,6 +3633,8 @@ bool OinkMode::excludeNetworkByBSSID(const uint8_t* bssid, const char* ssidIn) {
     const char* ssid = (ssidIn && ssidIn[0]) ? ssidIn : "NONAME BRO";
     strncpy(boarBros[boarBrosCount].ssid, ssid, 32);
     boarBros[boarBrosCount].ssid[32] = '\0';
+    boarBros[boarBrosCount].flags = BB_MANUAL;
+    boarBros[boarBrosCount].ts = 0;
     boarBrosCount++;
     saveBoarBros();
     

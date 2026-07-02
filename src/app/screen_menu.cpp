@@ -8,13 +8,14 @@
 #include "../web/ohc.h"
 #include <SD.h>
 #include <WiFi.h>
+#include <time.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
 
 namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "WPASEC SYNC", "OHC SYNC", "SYNC ALL",
-                                "EXCLUDE APS", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+                                "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
 static constexpr int kCount = 9;
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
@@ -127,59 +128,123 @@ static void syncAll() {
     dirty = true;
 }
 
-// EXCLUDE APS: scan, list nearby APs with an [X] for excluded ones; click toggles
-// membership in the never-attack list (boar bros); back saves and exits.
-static void exclusionsFlow() {
-    App::clear(); App::header("EXCLUDE APS"); App::centerMsg("scanning...", TFT_CYAN);
+static void bssidHex(uint64_t b, char out[13]) {
+    snprintf(out, 13, "%02X%02X%02X%02X%02X%02X",
+             (uint8_t)(b >> 40), (uint8_t)(b >> 32), (uint8_t)(b >> 24),
+             (uint8_t)(b >> 16), (uint8_t)(b >> 8), (uint8_t)b);
+}
+
+// Scan + pick an AP to add as a MANUAL never-attack entry.
+static void addIgnoreFlow() {
+    App::clear(); App::header("ADD IGNORE"); App::centerMsg("scanning...", TFT_CYAN);
     WiFi.mode(WIFI_STA);
     int n = WiFi.scanNetworks(false, true);
-    OinkMode::loadBoarBros();
-    if (n <= 0) {
-        App::centerMsg("no networks found", TFT_RED); App::footer("back"); waitBack();
-        WiFi.scanDelete(); dirty = true; return;
+    if (n <= 0) { App::centerMsg("no networks", TFT_RED); App::footer("back"); waitBack(); WiFi.scanDelete(); return; }
+    if (n > 30) n = 30;
+    static uint8_t bss[30][6]; static char rb[30][40]; static const char* rp[30];
+    for (int i = 0; i < n; i++) {
+        memcpy(bss[i], WiFi.BSSID(i), 6);
+        String s = WiFi.SSID(i);
+        snprintf(rb[i], sizeof(rb[i]), "%-18.18s %d", s.length() ? s.c_str() : "(hidden)", (int)WiFi.RSSI(i));
+        rp[i] = rb[i];
     }
-    static constexpr int MAXN = 30;
-    if (n > MAXN) n = MAXN;
-    static uint8_t bss[MAXN][6];
-    static char rb[MAXN][40];
-    static const char* rp[MAXN];
-    for (int i = 0; i < n; i++) memcpy(bss[i], WiFi.BSSID(i), 6);
-    auto rebuild = [&]() {
-        for (int i = 0; i < n; i++) {
-            String s = WiFi.SSID(i);
-            snprintf(rb[i], sizeof(rb[i]), "%c %-16.16s", OinkMode::isExcluded(bss[i]) ? 'X' : ' ',
-                     s.length() ? s.c_str() : "(hidden)");
-            rp[i] = rb[i];
-        }
-    };
-    rebuild();
     int s = 0, first = 0; constexpr int VIS = 7; bool redraw = true;
     while (true) {
         M5Cardputer.update();
-        if (porkhal::vkey.back) break;
+        if (porkhal::vkey.back) { WiFi.scanDelete(); return; }
         if (porkhal::vkey.up)   { s = (s + n - 1) % n; redraw = true; }
         if (porkhal::vkey.down) { s = (s + 1) % n;     redraw = true; }
         if (s < first) first = s;
         if (s >= first + VIS) first = s - VIS + 1;
+        if (porkhal::vkey.enter) { OinkMode::excludeNetworkByBSSID(bss[s], WiFi.SSID(s).c_str()); WiFi.scanDelete(); return; }
+        if (redraw) { App::clear(); App::header("ADD IGNORE"); App::drawList(rp, n, s, first, VIS, 1); App::footer("click: ignore  back: cancel"); redraw = false; }
+        delay(20);
+    }
+}
+
+// Detail view for a registry entry: SSID/BSSID, type, seen-time, password; delete = forget.
+static void captureDetail(int idx) {
+    if (idx < 0 || idx >= (int)OinkMode::getExcludedCount()) return;
+    OinkMode::BoarBro e = OinkMode::getExcludedList()[idx];   // copy (list shifts on delete)
+    char hb[13]; bssidHex(e.bssid, hb);
+    bool cracked = WPASec::isCracked(hb);
+    const char* pass = cracked ? WPASec::getPassword(hb) : "";
+    App::clear(); App::header("NETWORK");
+    M5.Display.setTextSize(1); M5.Display.setTextDatum(top_left); M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    char line[64]; int y = 32;
+    snprintf(line, sizeof(line), "%.30s", e.ssid[0] ? e.ssid : "(unknown ssid)"); M5.Display.drawString(line, 6, y); y += 16;
+    snprintf(line, sizeof(line), "%c%c:%c%c:%c%c:%c%c:%c%c:%c%c", hb[0],hb[1],hb[2],hb[3],hb[4],hb[5],hb[6],hb[7],hb[8],hb[9],hb[10],hb[11]);
+    M5.Display.drawString(line, 6, y); y += 16;
+    const char* type = (e.flags & OinkMode::BB_CAPTURED)
+                     ? ((e.flags & OinkMode::BB_MANUAL) ? "captured + ignored" : "captured")
+                     : "manual ignore";
+    M5.Display.setTextColor((e.flags & OinkMode::BB_CAPTURED) ? TFT_GREEN : TFT_CYAN, TFT_BLACK);
+    M5.Display.drawString(type, 6, y); y += 16;
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    if (e.ts > 1700000000UL) { time_t t = e.ts; struct tm tmv; localtime_r(&t, &tmv); strftime(line, sizeof(line), "seen: %Y-%m-%d %H:%M", &tmv); }
+    else strncpy(line, "seen: (time unknown)", sizeof(line));
+    M5.Display.drawString(line, 6, y); y += 16;
+    if (cracked) {
+        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        snprintf(line, sizeof(line), "PW: %s", (pass && pass[0]) ? pass : "(?)");
+        M5.Display.drawString(line, 6, y);
+    }
+    App::footer("click: DELETE (forget)  back: return");
+    while (true) { M5Cardputer.update(); if (porkhal::vkey.back) return; if (porkhal::vkey.enter) break; delay(20); }
+    OinkMode::removeBoarBro(e.bssid);   // forget -> re-capturable, no longer listed
+}
+
+// CAPTURES: the persistent registry — captured networks (survive file deletion)
+// plus manual never-attack entries. Row 0 adds a manual ignore; click a network
+// for detail + delete. All entries are excluded from capture.
+static constexpr int CAP_MAX = 160;
+static void capturesFlow() {
+    App::clear(); App::header("CAPTURES"); App::centerMsg("loading...", TFT_CYAN);
+    OinkMode::loadBoarBros();
+    OinkMode::importCapturedFiles();
+    static char rb[CAP_MAX][40]; static const char* rp[CAP_MAX];
+    int count = 1;
+    auto rebuild = [&]() {
+        const OinkMode::BoarBro* list = OinkMode::getExcludedList();
+        int nreg = OinkMode::getExcludedCount();
+        snprintf(rb[0], sizeof(rb[0]), ">> ADD IGNORE (scan)"); rp[0] = rb[0];
+        for (int i = 0; i < nreg && i < CAP_MAX - 1; i++) {
+            char hb[13]; bssidHex(list[i].bssid, hb);
+            char cm[3]; int p = 0;
+            if (list[i].flags & OinkMode::BB_CAPTURED) cm[p++] = 'C';
+            if (list[i].flags & OinkMode::BB_MANUAL)   cm[p++] = 'M';
+            cm[p] = '\0';
+            snprintf(rb[i + 1], sizeof(rb[i + 1]), "%-2s %-12.12s%s", cm,
+                     list[i].ssid[0] ? list[i].ssid : hb, WPASec::isCracked(hb) ? " CRK" : "");
+            rp[i + 1] = rb[i + 1];
+        }
+        count = (nreg < CAP_MAX - 1 ? nreg : CAP_MAX - 1) + 1;
+    };
+    rebuild();
+    int sel = 0, first = 0; constexpr int VIS = 7; bool redraw = true;
+    while (true) {
+        M5Cardputer.update();
+        if (porkhal::vkey.back) break;
+        if (porkhal::vkey.up)   { sel = (sel + count - 1) % count; redraw = true; }
+        if (porkhal::vkey.down) { sel = (sel + 1) % count;         redraw = true; }
+        if (sel < first) first = sel;
+        if (sel >= first + VIS) first = sel - VIS + 1;
         if (porkhal::vkey.enter) {
-            if (OinkMode::isExcluded(bss[s])) {
-                uint64_t key = 0; for (int k = 0; k < 6; k++) key = (key << 8) | bss[s][k];
-                OinkMode::removeBoarBro(key);
-            } else {
-                OinkMode::excludeNetworkByBSSID(bss[s], WiFi.SSID(s).c_str());
-            }
-            rebuild(); redraw = true;
+            if (sel == 0) addIgnoreFlow();
+            else          captureDetail(sel - 1);
+            rebuild();
+            if (sel >= count) sel = count - 1;
+            first = 0; redraw = true;
         }
         if (redraw) {
-            App::clear(); App::header("EXCLUDE APS");
-            App::drawList(rp, n, s, first, VIS, 1);
-            App::footer("click: toggle X   back: save");
+            App::clear(); App::header("CAPTURES");
+            App::drawList(rp, count, sel, first, VIS, 1);
+            App::footer("C=captured M=manual  click: open");
             redraw = false;
         }
         delay(20);
     }
     OinkMode::saveBoarBros();
-    WiFi.scanDelete();
     dirty = true;
 }
 
@@ -230,7 +295,7 @@ void tick(const App::Input& in) {
             case 1: App::go(App::Screen::MANAGE);  return;
             case 2: App::go(App::Screen::OHC);     return;
             case 3: syncAll();                     return;
-            case 4: exclusionsFlow();              return;
+            case 4: capturesFlow();                return;
             case 5: statsFlow();                   return;
             case 6: App::go(App::Screen::OPTIONS); return;
             case 7: reboot();                      return;
