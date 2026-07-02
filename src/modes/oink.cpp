@@ -2078,7 +2078,12 @@ int OinkMode::findOrCreatePMKID(const uint8_t* bssid, const uint8_t* station) {
 int OinkMode::findOrCreateHandshakeSafe(const uint8_t* bssid, const uint8_t* station) {
     // This version is ONLY called from update() in main loop context
     // Still need spinlock to prevent race with callback reads
-    
+
+    // Excluded network (and not the CAPTURE TARGETED lock): never track it, so it
+    // never counts/beeps/saves. A network we capture THIS session isn't excluded
+    // until registerCapture() runs at save time, so its first capture proceeds.
+    if (ignoredForCapture(bssid)) return -1;
+
     NetworkRecon::enterCritical();
     
     // Look for existing
@@ -2158,7 +2163,10 @@ int OinkMode::findOrCreateHandshakeSafe(const uint8_t* bssid, const uint8_t* sta
 int OinkMode::findOrCreatePMKIDSafe(const uint8_t* bssid, const uint8_t* station) {
     // This version is ONLY called from update() in main loop context
     // Still need spinlock to prevent race with callback reads
-    
+
+    // Excluded network (and not the CAPTURE TARGETED lock): never track it.
+    if (ignoredForCapture(bssid)) return -1;
+
     NetworkRecon::enterCritical();
     
     // Look for existing
@@ -2214,19 +2222,19 @@ bool OinkMode::ignoredForCapture(const uint8_t* bssid) {
 }
 
 uint16_t OinkMode::getCompleteHandshakeCount() {
+    // Plain count of what's in the vector. Excluded networks are kept OUT of the
+    // vector at creation time (findOrCreate*Safe), so we must NOT filter here --
+    // filtering would un-count a network the instant registerCapture() adds it to
+    // the registry, killing the beep/counter for a real fresh capture.
     uint16_t count = 0;
     for (const auto& hs : handshakes) {
-        if (hs.isComplete() && !ignoredForCapture(hs.bssid)) count++;
+        if (hs.isComplete()) count++;
     }
     return count;
 }
 
 uint16_t OinkMode::getPMKIDCount() {
-    uint16_t count = 0;
-    for (const auto& p : pmkids) {
-        if (!ignoredForCapture(p.bssid)) count++;
-    }
-    return count;
+    return pmkids.size();   // see getCompleteHandshakeCount: no exclusion filter here
 }
 
 // LOCKING state queries for display
