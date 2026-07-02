@@ -9,7 +9,7 @@
 namespace ScreenOptions {
 
 enum Field {
-    OPT_WIFI, OPT_KEY, OPT_OHC, OPT_NTFY, OPT_NTFYFILE,
+    OPT_WIFI, OPT_KEY, OPT_OHC, OPT_PWN, OPT_NTFY, OPT_NTFYFILE,
     OPT_HOP, OPT_LOCK, OPT_RSSI, OPT_DEAUTH, OPT_RNDMAC, OPT_BURST, OPT_JITTER, OPT_TRIES,
     OPT_IDLE, OPT_BRIGHT, OPT_SOUND, OPT_PURGE, OPT_CRKUP, OPT_OTAPATH, OPT_UPDATE, OPT_UPDATE_SD,
     OPT_COUNT
@@ -26,6 +26,7 @@ static const FieldDef defs[OPT_COUNT] = {
     { "WiFi",      false, false, 0, 0, 0 },   // action: scan -> pick SSID -> password
     { "WPA Key",   true,  false, 0, 0, 0 },
     { "OHC Key",   true,  false, 0, 0, 0 },
+    { "PWN Key",   true,  false, 0, 0, 0 },
     { "Ntfy Topic",true,  false, 0, 0, 0 },
     { "Ntfy File", false, true,  0, 1, 1 },
     { "Ch Hop ms", false, false, 50, 2000, 50 },
@@ -104,6 +105,7 @@ static char* textBuf(int f) {
     switch (f) {
         case OPT_KEY:  return w.wpaSecKey;
         case OPT_OHC:  return w.ohcKey;
+        case OPT_PWN:  return w.pwncrackKey;
         case OPT_NTFY: return w.ntfyTopic;
         case OPT_OTAPATH: return w.otaBinPath;
     }
@@ -113,6 +115,7 @@ static size_t textCap(int f) {
     switch (f) {
         case OPT_KEY:  return sizeof(Config::wifi().wpaSecKey);
         case OPT_OHC:  return sizeof(Config::wifi().ohcKey);
+        case OPT_PWN:  return sizeof(Config::wifi().pwncrackKey);
         case OPT_NTFY: return sizeof(Config::wifi().ntfyTopic);
         case OPT_OTAPATH: return sizeof(Config::wifi().otaBinPath);
     }
@@ -140,7 +143,7 @@ static void buildRow(int f) {
     }
     if (d.isText) {
         const char* t = textBuf(f);
-        if (f == OPT_KEY || f == OPT_OHC)   // keys are sensitive -> hide value
+        if (f == OPT_KEY || f == OPT_OHC || f == OPT_PWN)   // keys are sensitive -> hide value
             snprintf(val, sizeof(val), "%s", (t && t[0]) ? "(set)" : "(empty)");
         else                                 // ntfy topic etc. -> show it
             snprintf(val, sizeof(val), "%s", (t && t[0]) ? t : "(empty)");

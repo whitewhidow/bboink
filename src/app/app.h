@@ -7,7 +7,7 @@
 
 namespace App {
 
-enum class Screen { MENU, CAPTURE, MANAGE, OHC, OPTIONS };
+enum class Screen { MENU, CAPTURE, MANAGE, OHC, PWNCRACK, OPTIONS };
 
 // One frame's worth of debounced encoder/button edges (true for one tick).
 struct Input {
@@ -45,4 +45,5 @@ namespace ScreenMenu    { void enter(); void tick(const App::Input&); }
 namespace ScreenCapture { void enter(); void tick(const App::Input&); }
 namespace ScreenManage  { void enter(); void tick(const App::Input&); }
 namespace ScreenOHC     { void enter(); void tick(const App::Input&); }
+namespace ScreenPwnCrack{ void enter(); void tick(const App::Input&); }
 namespace ScreenOptions { void enter(); void tick(const App::Input&); }

@@ -7,6 +7,10 @@ for cloud cracking:
 
 - **`.pcap`** → [wpa-sec.stanev.org](https://wpa-sec.stanev.org/)
 - **`.22000`** → [OnlineHashCrack](https://www.onlinehashcrack.com/) (hashcat mode 22000)
+- **`.22000`** → [PwnCrack.org](https://pwncrack.org/) (hc22000; distributed GPU donors)
+
+Cracked status is **unified**: a network shows as cracked (and its password/QR is
+available) if *any* service recovered it (wpa-sec or PwnCrack — OHC masks hashes).
 
 It does only the "oink" (capture) part of M5PORKCHOP. The on-board CC1101 sub-GHz
 radio is **not** used (but its chip-select is managed — see *SD card* below).
@@ -47,6 +51,10 @@ internal storage) · connected WiFi SSID (green) · battery %. The version
   set and flooding OHC with duplicates): click a capture → a detail view with an
   **UPLOAD TO OHC / DELETE** selector. Crack status is shared from the wpa-sec
   potfile (OHC's API masks hashes, so per-file results can't be read back from it).
+- **PWNCRACK SYNC** — lists `.22000` captures for [PwnCrack.org](https://pwncrack.org/).
+  Per-capture upload (detail → **UPLOAD TO PWNCRACK / DELETE**) plus a **SYNC
+  POTFILE** row that downloads PwnCrack's cracked potfile so its status tags and
+  passwords populate. Folded into the unified crack status.
 - **CAPTURES** — the persistent network **registry**, and the single source of
   capture exclusion. It holds every **captured** network (`C`, registered on save —
   so it stays listed and excluded **even after you delete the `.pcap`/`.22000`**)
@@ -56,8 +64,8 @@ internal storage) · connected WiFi SSID (green) · battery %. The version
   Click a network for detail: SSID, BSSID, type, **seen-time** (NTP), the
   **recovered password** if cracked, and a **SHOW WIFI QR** action for cracked
   networks (renders a `WIFI:` join QR you scan with a phone). **DELETE = forget**
-  (re-capturable again). Rows show `C`/`M` (captured/manual), `W`/`O` (uploaded to
-  wpa-sec / OHC), `K` (cracked). Backed by an extended boar-bros file
+  (re-capturable again). Rows show `C`/`M` (captured/manual), `W`/`O`/`P` (uploaded
+  to wpa-sec / OHC / PwnCrack), `K` (cracked, any service). Backed by an extended boar-bros file
   (`BSSID,flags,ts,SSID`).
 - **STATS** — current inventory: `.pcap` / `.22000` counts on storage, cracked
   count (from the wpa-sec potfile), storage backend + free space.
@@ -72,7 +80,7 @@ is present; `.pcap` is validated server-side on upload.
 
 ## Options
 - **WiFi** — guided flow: scan → pick an SSID → enter password → save + connect.
-- **WPA Key** (wpa-sec, 32 hex) · **OHC Key** (`sk_…`).
+- **WPA Key** (wpa-sec, 32 hex) · **OHC Key** (`sk_…`) · **PWN Key** (PwnCrack UUID).
 - **Ntfy Topic** (ntfy.sh push topic; empty = off, default `capture_alert`) ·
   **Ntfy File** (attach the capture file to the push).
 - Oink tuning: **Ch Hop ms**, **Lock ms**, **Atk RSSI**, **Deauth** on/off,

@@ -107,6 +107,7 @@ struct WiFiConfig {
     bool autoConnect = false;
     char wpaSecKey[33];                 // WPA-SEC.stanev.org user key (32 hex chars)
     char ohcKey[72];                    // OnlineHashCrack API key (sk_...)
+    char pwncrackKey[40];               // PwnCrack.org key (UUID)
     char wigleApiName[65];              // WiGLE API Name (from wigle.net/account)
     char wigleApiToken[65];             // WiGLE API Token (from wigle.net/account)
     char ntfyTopic[64] = "capture_alert"; // ntfy.sh topic for capture alerts ("" = off)

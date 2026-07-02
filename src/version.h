@@ -3,7 +3,7 @@
 // that BBOINK_OTA_URL ("latest") points at.
 #pragma once
 
-#define BBOINK_VERSION "0.9.5"
+#define BBOINK_VERSION "0.9.6"
 
 // App-only image (firmware.bin) published by CI — this is what an SD-card launcher
 // loads (NOT the merged 0x0 image). The self-updater downloads this over WiFi and

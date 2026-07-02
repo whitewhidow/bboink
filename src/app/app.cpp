@@ -135,6 +135,7 @@ void go(Screen s) {
         case Screen::CAPTURE: ScreenCapture::enter(); break;
         case Screen::MANAGE:  ScreenManage::enter();  break;
         case Screen::OHC:     ScreenOHC::enter();     break;
+        case Screen::PWNCRACK:ScreenPwnCrack::enter();break;
         case Screen::OPTIONS: ScreenOptions::enter(); break;
     }
 }
@@ -176,6 +177,7 @@ void tick() {
         case Screen::CAPTURE: ScreenCapture::tick(in); break;
         case Screen::MANAGE:  ScreenManage::tick(in);  break;
         case Screen::OHC:     ScreenOHC::tick(in);     break;
+        case Screen::PWNCRACK:ScreenPwnCrack::tick(in);break;
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
     }
 }

@@ -6,6 +6,8 @@
 #include "../modes/oink.h"
 #include "../web/wpasec.h"
 #include "../web/ohc.h"
+#include "../web/pwncrack.h"
+#include "../web/cracks.h"
 #include <SD.h>
 #include <WiFi.h>
 #include <time.h>
@@ -15,7 +17,7 @@
 namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
-                                "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
 static constexpr int kCount = sizeof(kItems) / sizeof(kItems[0]);
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
@@ -138,8 +140,8 @@ static void captureDetail(int idx) {
     if (idx < 0 || idx >= (int)OinkMode::getExcludedCount()) return;
     OinkMode::BoarBro e = OinkMode::getExcludedList()[idx];   // copy (list shifts on delete)
     char hb[13]; bssidHex(e.bssid, hb);
-    bool cracked = WPASec::isCracked(hb);
-    const char* pass = cracked ? WPASec::getPassword(hb) : "";
+    bool cracked = Cracks::isCracked(hb);
+    const char* pass = cracked ? Cracks::getPassword(hb) : "";
     const char* qrSsid = e.ssid[0] ? e.ssid : WPASec::getSSID(hb);
     const int nActions = cracked ? 2 : 1;   // [SHOW QR], DELETE
     int action = 0; bool redraw = true;
@@ -161,8 +163,9 @@ static void captureDetail(int idx) {
             if (e.ts > 1700000000UL) { time_t t = e.ts; struct tm tmv; localtime_r(&t, &tmv); strftime(line, sizeof(line), "seen: %Y-%m-%d %H:%M", &tmv); }
             else strncpy(line, "seen: (time unknown)", sizeof(line));
             M5.Display.drawString(line, 6, y); y += 14;
-            snprintf(line, sizeof(line), "wpa-sec: %s   ohc: %s",
-                     WPASec::isUploaded(hb) ? "up" : "no", OHC::isUploaded(hb) ? "up" : "no");
+            snprintf(line, sizeof(line), "up wpa:%s ohc:%s pwn:%s",
+                     WPASec::isUploaded(hb) ? "y" : "n", OHC::isUploaded(hb) ? "y" : "n",
+                     PwnCrack::isUploaded(hb) ? "y" : "n");
             M5.Display.drawString(line, 6, y); y += 14;
             if (cracked) {
                 M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -216,9 +219,10 @@ static void capturesFlow() {
             if (list[i].flags & OinkMode::BB_MANUAL)   cm[p++] = 'M';
             cm[p] = '\0';
             char st[8]; int sp = 0;   // upload/crack status
-            if (WPASec::isUploaded(hb)) st[sp++] = 'W';
-            if (OHC::isUploaded(hb))    st[sp++] = 'O';
-            if (WPASec::isCracked(hb))  st[sp++] = 'K';
+            if (WPASec::isUploaded(hb))   st[sp++] = 'W';
+            if (OHC::isUploaded(hb))      st[sp++] = 'O';
+            if (PwnCrack::isUploaded(hb)) st[sp++] = 'P';
+            if (Cracks::isCracked(hb))    st[sp++] = 'K';
             st[sp] = '\0';
             // Status tag first so it stays visible; SSID gets the full width (up to 32).
             snprintf(rb[i + 1], sizeof(rb[i + 1]), "%-2s %-3s %.32s", cm, st,
@@ -246,7 +250,7 @@ static void capturesFlow() {
         if (redraw) {
             App::clear(); App::header("CAPTURES");
             App::drawList(rp, count, sel, first, VIS, 1);
-            App::footer("C/M cap/man  W/O uploaded  K cracked");
+            App::footer("C/M cap/man  W/O/P uploaded  K cracked");
             redraw = false;
         }
         delay(20);
@@ -271,6 +275,7 @@ static void statsFlow() {
         d.close();
     }
     uint16_t cracked = WPASec::getCrackedCount();
+    uint16_t crackedPwn = PwnCrack::getCrackedCount();
     uint64_t total = Storage::totalBytes(), used = Storage::usedBytes();
     uint64_t freeB = total > used ? total - used : 0;
 
@@ -281,7 +286,7 @@ static void statsFlow() {
     snprintf(line, sizeof(line), "pcap captures : %d", pcap);  M5.Display.drawString(line, 6, y); y += 16;
     snprintf(line, sizeof(line), ".22000 hashes : %d", h22);   M5.Display.drawString(line, 6, y); y += 16;
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-    snprintf(line, sizeof(line), "cracked (pot) : %u", cracked); M5.Display.drawString(line, 6, y); y += 16;
+    snprintf(line, sizeof(line), "cracked wpa:%u pwn:%u", cracked, crackedPwn); M5.Display.drawString(line, 6, y); y += 16;
     M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
     snprintf(line, sizeof(line), "storage: %s  %s free", Storage::backendName(), App::fmtBytes(freeB));
     M5.Display.drawString(line, 6, y);
@@ -339,14 +344,15 @@ void tick(const App::Input& in) {
     if (in.enter) {
         switch (sel) {
             case 0: OinkMode::clearTargetLock(); App::go(App::Screen::CAPTURE); return;
-            case 1: captureTargetedFlow();         return;
-            case 2: App::go(App::Screen::MANAGE);  return;
-            case 3: App::go(App::Screen::OHC);     return;
-            case 4: capturesFlow();                return;
-            case 5: statsFlow();                   return;
-            case 6: App::go(App::Screen::OPTIONS); return;
-            case 7: reboot();                      return;
-            case 8: powerOff();                    return;
+            case 1: captureTargetedFlow();          return;
+            case 2: App::go(App::Screen::MANAGE);   return;
+            case 3: App::go(App::Screen::OHC);      return;
+            case 4: App::go(App::Screen::PWNCRACK); return;
+            case 5: capturesFlow();                 return;
+            case 6: statsFlow();                    return;
+            case 7: App::go(App::Screen::OPTIONS);  return;
+            case 8: reboot();                       return;
+            case 9: powerOff();                     return;
         }
     }
     if (dirty) { draw(); dirty = false; }

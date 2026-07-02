@@ -3,6 +3,7 @@
 #include "../core/sd_layout.h"
 #include "../core/config.h"
 #include "../web/wpasec.h"
+#include "../web/cracks.h"
 #include "../core/net_link.h"
 #include <SD.h>
 #include "../core/storage.h"
@@ -51,7 +52,7 @@ static void scan() {
                 files[fileCount][NAME_LEN - 1] = '\0';
                 char bssid[13]; uint8_t st = 0;
                 if (SDLayout::captureBssid(n, bssid)) {
-                    if (WPASec::isCracked(bssid)) st = 2;
+                    if (Cracks::isCracked(bssid)) st = 2;
                     else if (WPASec::isUploaded(bssid)) st = 1;
                 }
                 fileStatus[fileCount] = st;
@@ -356,7 +357,7 @@ static void showCaptureDetail(int fi) {
         M5.Display.drawString(q, 6, y); y += 16;
     }
     if (fileStatus[fi] == 2 && haveBssid) {
-        const char* pw = WPASec::getPassword(bssid);
+        const char* pw = Cracks::getPassword(bssid);
         M5.Display.setTextSize(2);
         M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
         snprintf(line, sizeof(line), "PW: %s", (pw && pw[0]) ? pw : "(?)");
