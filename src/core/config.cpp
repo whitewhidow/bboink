@@ -114,6 +114,7 @@ struct __attribute__((packed)) ConfigBlob {
     uint8_t  ntfyAttachFile;
     uint8_t  maxAttackAttempts;   // 0 (old blob) -> default 4
     uint8_t  autoPurgeCracked;    // 0 (old blob) -> false
+    char     otaBinPath[48];      // empty (old blob) -> default /bboink.bin
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -144,6 +145,7 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.deauthJitterMax      = wifi.deauthJitterMax;
     b.maxAttackAttempts    = wifi.maxAttackAttempts;
     b.autoPurgeCracked     = wifi.autoPurgeCracked ? 1 : 0;
+    strncpy(b.otaBinPath, wifi.otaBinPath, sizeof(b.otaBinPath) - 1);
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
     strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
@@ -233,6 +235,7 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.deauthJitterMax      = b.deauthJitterMax;
     wifi.maxAttackAttempts    = b.maxAttackAttempts ? b.maxAttackAttempts : 4;   // 0 = old blob
     wifi.autoPurgeCracked     = b.autoPurgeCracked != 0;
+    if (b.otaBinPath[0]) { strncpy(wifi.otaBinPath, b.otaBinPath, sizeof(wifi.otaBinPath) - 1); wifi.otaBinPath[sizeof(wifi.otaBinPath) - 1] = '\0'; }
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;

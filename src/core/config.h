@@ -110,6 +110,7 @@ struct WiFiConfig {
     char ntfyTopic[64] = "capture_alert"; // ntfy.sh topic for capture alerts ("" = off)
     bool ntfyAttachFile = true;         // attach the capture file to the ntfy push
     bool autoPurgeCracked = false;      // after WPA-SEC sync, delete local files for cracked nets
+    char otaBinPath[48] = "/bboink.bin"; // SD path the launcher loads; self-update writes here
 };
 
 // BLE settings for PIGGY BLUES mode

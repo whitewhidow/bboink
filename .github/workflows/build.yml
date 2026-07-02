@@ -39,10 +39,11 @@ jobs:
       - name: Build firmware
         run: pio run -e t-embed-cc1101
 
-      - name: Merge single-image bin (flash at 0x0)
+      - name: Package bins
         run: |
           B=.pio/build/t-embed-cc1101
           BA=$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -1)
+          # Merged single-image bin for a full flash at 0x0 (esptool).
           python -m esptool --chip esp32s3 merge_bin \
             -o bboink-t-embed-cc1101.bin \
             --flash_mode dio --flash_size 16MB \
@@ -50,15 +51,21 @@ jobs:
             0x8000  "$B/partitions.bin" \
             0xe000  "$BA" \
             0x10000 "$B/firmware.bin"
+          # App-only image for an SD-card launcher / the in-app self-updater.
+          cp "$B/firmware.bin" bboink-app-t-embed-cc1101.bin
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bboink-t-embed-cc1101
-          path: bboink-t-embed-cc1101.bin
+          name: bboink-bins
+          path: |
+            bboink-t-embed-cc1101.bin
+            bboink-app-t-embed-cc1101.bin
 
       - name: Attach to Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: bboink-t-embed-cc1101.bin
+          files: |
+            bboink-t-embed-cc1101.bin
+            bboink-app-t-embed-cc1101.bin

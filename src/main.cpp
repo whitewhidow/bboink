@@ -7,6 +7,7 @@
 #include "core/network_recon.h"
 #include "modes/oink.h"
 #include "app/app.h"
+#include "version.h"
 
 void setup() {
     // BOARD_PWR_EN (GPIO15): power the peripheral rail (display/backlight).
@@ -54,7 +55,11 @@ void setup() {
 
     App::clear();
     App::centerMsg("BBoink", TFT_CYAN);
-    delay(400);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextDatum(top_center);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    M5.Display.drawString("v" BBOINK_VERSION, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 20);
+    delay(900);
     App::begin();
 }
 
