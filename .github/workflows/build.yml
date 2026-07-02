@@ -1,0 +1,64 @@
+name: build
+
+# Builds the T-Embed CC1101 firmware and produces the single-image .bin that is
+# flashed at 0x0 (bootloader + partitions + otadata + app merged). Every push
+# uploads it as a build artifact; pushing a tag like v1.0 also cuts a GitHub
+# Release with the .bin attached (handy as an OTA / re-flash source).
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed for the release step to upload the .bin
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO + esptool
+        run: pip install --upgrade platformio esptool==4.9.0
+
+      - name: Build firmware
+        run: pio run -e t-embed-cc1101
+
+      - name: Merge single-image bin (flash at 0x0)
+        run: |
+          B=.pio/build/t-embed-cc1101
+          BA=$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -1)
+          python -m esptool --chip esp32s3 merge_bin \
+            -o bboink-t-embed-cc1101.bin \
+            --flash_mode dio --flash_size 16MB \
+            0x0     "$B/bootloader.bin" \
+            0x8000  "$B/partitions.bin" \
+            0xe000  "$BA" \
+            0x10000 "$B/firmware.bin"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bboink-t-embed-cc1101
+          path: bboink-t-embed-cc1101.bin
+
+      - name: Attach to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bboink-t-embed-cc1101.bin
