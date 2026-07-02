@@ -2,6 +2,7 @@
 // per-capture .22000 upload + a potfile sync to pull cracked results.
 #include "app.h"
 #include "../web/pwncrack.h"
+#include "../web/cracks.h"
 #include "../core/config.h"
 #include "../core/sd_layout.h"
 #include "../core/storage.h"
@@ -27,7 +28,7 @@ static void scan() {
     fileCount = 0;
     if (!Config::isSDAvailable()) return;
     PwnCrack::loadUploaded();
-    PwnCrack::loadCache();     // cracked status from PwnCrack's own potfile
+    Cracks::loadAll();         // cracked status from ANY service (wpa-sec + PwnCrack)
     const char* dir = SDLayout::handshakesDir();
     File d = Storage::fs().open(dir);
     if (!d || !d.isDirectory()) { if (d) d.close(); return; }
@@ -40,7 +41,7 @@ static void scan() {
                 strncpy(files[fileCount], n, NAME_LEN - 1); files[fileCount][NAME_LEN - 1] = '\0';
                 char bssid[13]; uint8_t st = 0;
                 if (SDLayout::captureBssid(n, bssid)) {
-                    if (PwnCrack::isCracked(bssid))   st = 2;
+                    if (Cracks::isCracked(bssid))     st = 2;   // cracked by any service
                     else if (PwnCrack::isUploaded(bssid)) st = 1;
                 }
                 fileStatus[fileCount] = st;
@@ -53,7 +54,7 @@ static void scan() {
 }
 
 static void rebuildRows() {
-    snprintf(rowBuf[0], sizeof(rowBuf[0]), ">> SYNC POTFILE (get cracked)");
+    snprintf(rowBuf[0], sizeof(rowBuf[0]), ">> SYNC (upload all + get cracked)");
     rowPtrs[0] = rowBuf[0];
     for (int i = 0; i < fileCount; i++) {
         const char* tag = fileStatus[i] == 2 ? "CRK" : fileStatus[i] == 1 ? "UP " : "-  ";
@@ -83,20 +84,38 @@ static void waitBackKey() {
     while (true) { M5Cardputer.update(); if (porkhal::vkey.back || porkhal::vkey.enter) break; delay(20); }
 }
 
-static void doSyncPotfile() {
+static void doSync() {
     App::clear(); App::header("PWN SYNC");
     if (!PwnCrack::hasApiKey())        { App::centerMsg("NO PWN KEY", TFT_RED); App::footer("set key in OPTIONS"); delay(1500); dirty = true; return; }
     App::centerMsg("connecting wifi...", TFT_CYAN);
     if (!NetLink::connectConfigured()) { App::centerMsg("NO WIFI", TFT_RED); App::footer("reboot to reconnect"); delay(1500); dirty = true; return; }
+
+    // Upload every .22000 not already sent to PwnCrack (tracked BSSIDs -> no dups).
+    int uploaded = 0, failed = 0;
+    for (int i = 0; i < fileCount; i++) {
+        char bssid[13];
+        if (SDLayout::captureBssid(files[i], bssid) && PwnCrack::isUploaded(bssid)) continue;
+        char l[40]; snprintf(l, sizeof(l), "uploading %d/%d...", i + 1, fileCount);
+        App::clear(); App::header("PWN SYNC"); App::centerMsg(l, TFT_CYAN);
+        PwnCrack::UploadResult r = PwnCrack::uploadFile(files[i]);
+        if (r.success) { uploaded++; if (SDLayout::captureBssid(files[i], bssid)) PwnCrack::markUploaded(bssid); }
+        else failed++;
+    }
+
+    // Then pull the cracked potfile.
     App::clear(); App::header("PWN SYNC"); App::centerMsg("fetching potfile...", TFT_CYAN);
     char err[48] = {0};
-    int n = PwnCrack::syncPotfile(err, sizeof(err));
-    App::clear(); App::header("PWN SYNC");
-    if (n >= 0) {
-        char l[32]; snprintf(l, sizeof(l), "cracked: %d", n);
-        App::centerMsg(l, TFT_GREEN);
-    } else {
-        App::centerMsg(err[0] ? err : "FAILED", TFT_RED);
+    int cracked = PwnCrack::syncPotfile(err, sizeof(err));
+
+    App::clear(); App::header("PWN SYNC DONE");
+    M5.Display.setTextSize(2); M5.Display.setTextDatum(top_left); M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    char line[40]; int y = 34;
+    snprintf(line, sizeof(line), "up %d  fail %d", uploaded, failed); M5.Display.drawString(line, 8, y); y += 26;
+    M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+    snprintf(line, sizeof(line), "cracked %d", cracked >= 0 ? cracked : 0); M5.Display.drawString(line, 8, y);
+    if (cracked < 0 && err[0]) {
+        M5.Display.setTextSize(1); M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.drawString(err, 8, PORK_DISPLAY_H - 30);
     }
     App::footer("back: return");
     waitBackKey();
@@ -152,7 +171,7 @@ static void drawDetail(int fi, int action) {
     snprintf(line, sizeof(line), "status: %s", status);
     M5.Display.drawString(line, 6, y); y += 16;
     if (fileStatus[fi] == 2 && haveBssid) {
-        const char* pw = PwnCrack::getPassword(bssid);
+        const char* pw = Cracks::getPassword(bssid);
         M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
         snprintf(line, sizeof(line), "PW: %s", (pw && pw[0]) ? pw : "(?)");
         M5.Display.drawString(line, 6, y); y += 16;
@@ -191,7 +210,7 @@ void tick(const App::Input& in) {
     if (in.down) { sel = (sel + 1) % n;     dirty = true; }
     if (sel < firstVisible) firstVisible = sel;
     if (sel >= firstVisible + VISIBLE) firstVisible = sel - VISIBLE + 1;
-    if (in.enter && sel == 0) { doSyncPotfile(); return; }
+    if (in.enter && sel == 0) { doSync(); return; }
     if (in.enter && sel >= ACTIONS) { int fi = sel - ACTIONS; if (fi >= 0 && fi < fileCount) showCaptureDetail(fi); return; }
     if (dirty) { draw(); dirty = false; }
 }
