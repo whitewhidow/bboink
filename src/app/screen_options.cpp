@@ -177,8 +177,15 @@ static void draw() {
 // and try to connect. Replaces the old separate SSID/Pass text fields.
 static void wifiSetupFlow() {
     App::clear(); App::header("WIFI"); App::centerMsg("scanning...", TFT_CYAN);
+    // Free the radio for a full scan: an active STA association (the boot uplink) or
+    // a sync that left WiFi off both make scanNetworks() return 0. Disconnect, force
+    // STA, let the driver settle, then scan (retry once on a driver error).
+    WiFi.scanDelete();
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false);
+    delay(300);
     int n = WiFi.scanNetworks(false, true);   // synchronous, include hidden
+    if (n < 0) { WiFi.scanDelete(); delay(400); n = WiFi.scanNetworks(false, true); }  // retry
     if (n <= 0) {
         App::centerMsg("no networks found", TFT_RED);
         App::footer("press back");

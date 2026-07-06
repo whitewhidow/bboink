@@ -85,8 +85,12 @@ static void bssidHex(uint64_t b, char out[13]) {
 // Scan + pick an AP to add as a MANUAL never-attack entry.
 static void addIgnoreFlow() {
     App::clear(); App::header("ADD IGNORE"); App::centerMsg("scanning...", TFT_CYAN);
+    WiFi.scanDelete();
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false);   // scanning while associated can return 0 networks
+    delay(300);
     int n = WiFi.scanNetworks(false, true);
+    if (n < 0) { WiFi.scanDelete(); delay(400); n = WiFi.scanNetworks(false, true); }
     if (n <= 0) { App::centerMsg("no networks", TFT_RED); App::footer("back"); waitBack(); WiFi.scanDelete(); return; }
     if (n > 30) n = 30;
     static uint8_t bss[30][6]; static char rb[30][40]; static const char* rp[30];
@@ -298,8 +302,12 @@ static void statsFlow() {
 // CAPTURE TARGETED: scan, pick one AP, lock the engine to it, enter Capture.
 static void captureTargetedFlow() {
     App::clear(); App::header("PICK TARGET"); App::centerMsg("scanning...", TFT_CYAN);
+    WiFi.scanDelete();
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false);   // scanning while associated can return 0 networks
+    delay(300);
     int n = WiFi.scanNetworks(false, true);
+    if (n < 0) { WiFi.scanDelete(); delay(400); n = WiFi.scanNetworks(false, true); }
     if (n <= 0) { App::centerMsg("no networks", TFT_RED); App::footer("back"); waitBack(); WiFi.scanDelete(); dirty = true; return; }
     if (n > 30) n = 30;
     static uint8_t bss[30][6]; static char rb[30][40]; static const char* rp[30];
