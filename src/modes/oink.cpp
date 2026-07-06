@@ -2551,18 +2551,43 @@ bool OinkMode::saveHandshakePCAP(const CapturedHandshake& hs, const char* path) 
     
     // Write beacon frame first (required for hashcat to crack)
     // Try per-handshake beacon first, fall back to global
+    bool wroteBeacon = false;
     if (hs.hasBeacon()) {
         writePCAPPacket(f, hs.beaconData, hs.beaconLen, hs.firstSeen);
+        wroteBeacon = true;
         packetCount++;
     } else if (beaconCaptured && beaconFrame && beaconFrameLen > 0) {
         // Verify global beacon is from same BSSID as handshake
         const uint8_t* beaconBssid = beaconFrame + 16;
         if (memcmp(beaconBssid, hs.bssid, 6) == 0) {
             writePCAPPacket(f, beaconFrame, beaconFrameLen, hs.firstSeen);
+            wroteBeacon = true;
             packetCount++;
         }
     }
-    
+
+    // The 4-way EAPOL frames carry NO ESSID — it lives in the beacon. If no real
+    // beacon was stored (heap pressure / hopped away), hcxpcapngtool/wpa-sec reject
+    // the pcap as "no valid handshakes". Synthesize a minimal beacon with the
+    // BSSID + SSID so the ESSID is always present (the .22000 already has it).
+    if (!wroteBeacon && hs.ssid[0]) {
+        uint8_t bcn[128]; int n = 0;
+        bcn[n++] = 0x80; bcn[n++] = 0x00;                 // FC: beacon
+        bcn[n++] = 0x00; bcn[n++] = 0x00;                 // duration
+        for (int k = 0; k < 6; k++) bcn[n++] = 0xff;      // DA broadcast
+        memcpy(bcn + n, hs.bssid, 6); n += 6;             // SA = BSSID
+        memcpy(bcn + n, hs.bssid, 6); n += 6;             // BSSID
+        bcn[n++] = 0x00; bcn[n++] = 0x00;                 // seq
+        for (int k = 0; k < 8; k++) bcn[n++] = 0x00;      // timestamp
+        bcn[n++] = 0x64; bcn[n++] = 0x00;                 // beacon interval
+        bcn[n++] = 0x01; bcn[n++] = 0x00;                 // capability info
+        uint8_t sl = strnlen(hs.ssid, 32);               // SSID element
+        bcn[n++] = 0x00; bcn[n++] = sl;
+        memcpy(bcn + n, hs.ssid, sl); n += sl;
+        writePCAPPacket(f, bcn, (uint16_t)n, hs.firstSeen);
+        packetCount++;
+    }
+
     // Write EAPOL frames to PCAP
     for (int i = 0; i < 4; i++) {
         if (!(hs.capturedMask & (1 << i))) continue;
