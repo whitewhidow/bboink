@@ -137,6 +137,7 @@ void go(Screen s) {
         case Screen::OHC:     ScreenOHC::enter();     break;
         case Screen::PWNCRACK:ScreenPwnCrack::enter();break;
         case Screen::OPTIONS: ScreenOptions::enter(); break;
+        case Screen::CONFIGAP:ScreenConfigAP::enter();break;
     }
 }
 
@@ -146,10 +147,18 @@ void powerOff() {
     footer("press any button to wake");
     delay(1000);
     M5.Display.setBrightness(0);
+#if defined(PORK_BOARD_TDISPLAY_C5)
+    // Buttons: GPIO0 (BOOT) + GPIO28. UNVERIFIED: confirm both are RTC/LP-IO wake
+    // capable on the C5; if not, fall back to a timer or the hardware PWR button.
+    rtc_gpio_pullup_en(GPIO_NUM_0);   rtc_gpio_pulldown_dis(GPIO_NUM_0);
+    rtc_gpio_pullup_en(GPIO_NUM_28);  rtc_gpio_pulldown_dis(GPIO_NUM_28);
+    esp_sleep_enable_ext1_wakeup((1ULL << 0) | (1ULL << 28), ESP_EXT1_WAKEUP_ANY_LOW);
+#else
     // Hold pull-ups on the button pins so idle=high, press=low wakes it.
     rtc_gpio_pullup_en(GPIO_NUM_0);  rtc_gpio_pulldown_dis(GPIO_NUM_0);
     rtc_gpio_pullup_en(GPIO_NUM_6);  rtc_gpio_pulldown_dis(GPIO_NUM_6);
     esp_sleep_enable_ext1_wakeup((1ULL << 0) | (1ULL << 6), ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
     esp_deep_sleep_start();   // boots fresh on the next button press
 }
 
@@ -179,6 +188,7 @@ void tick() {
         case Screen::OHC:     ScreenOHC::tick(in);     break;
         case Screen::PWNCRACK:ScreenPwnCrack::tick(in);break;
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
+        case Screen::CONFIGAP:ScreenConfigAP::tick(in);break;
     }
 }
 

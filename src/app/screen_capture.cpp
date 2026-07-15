@@ -20,13 +20,15 @@ static uint16_t sessionStartCaps = 0; // baseline at screen entry (for the exit 
 
 // Flash the onboard WS2812 green + chirp the speaker to signal a fresh capture.
 static void captureNotify() {
-    M5.Speaker.tone(2200, 120);                  // beep
+    M5.Speaker.tone(2200, 120);                  // beep (no-op on boards w/o speaker)
+#if PORK_LED_COUNT > 0
     for (int i = 0; i < 3; i++) {
         neopixelWrite(PORK_LED_PIN, 0, 60, 0);   // green
         delay(70);
         neopixelWrite(PORK_LED_PIN, 0, 0, 0);    // off
         delay(70);
     }
+#endif
 }
 
 static void drawFrame() {

@@ -17,7 +17,8 @@
 namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
-                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS", "CONFIG AP",
+                                "REBOOT", "POWER OFF" };
 static constexpr int kCount = sizeof(kItems) / sizeof(kItems[0]);
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
@@ -359,8 +360,9 @@ void tick(const App::Input& in) {
             case 5: capturesFlow();                 return;
             case 6: statsFlow();                    return;
             case 7: App::go(App::Screen::OPTIONS);  return;
-            case 8: reboot();                       return;
-            case 9: powerOff();                     return;
+            case 8: App::go(App::Screen::CONFIGAP); return;
+            case 9: reboot();                       return;
+            case 10: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

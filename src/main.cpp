@@ -10,9 +10,13 @@
 #include "version.h"
 
 void setup() {
+#if defined(PORK_BOARD_TEMBED_CC1101)
     // BOARD_PWR_EN (GPIO15): power the peripheral rail (display/backlight).
+    // T-Embed-specific; the T-Display C5 has no such rail-enable pin (its LCD
+    // power-enable, GPIO25, is driven in bringUpHardware()).
     pinMode(15, OUTPUT);
     digitalWrite(15, HIGH);
+#endif
 
     Serial.begin(115200);
     delay(100);
@@ -29,11 +33,15 @@ void setup() {
     Config::init();                       // load creds (SD; fine before display)
     const char* ssid = Config::wifi().otaSSID;
     if (ssid && ssid[0]) {
-        neopixelWrite(14, 0, 0, 30);      // blue LED: connecting at boot
+#if PORK_LED_COUNT > 0
+        neopixelWrite(PORK_LED_PIN, 0, 0, 30);   // blue LED: connecting at boot
+#endif
         WiFi.begin(ssid, Config::wifi().otaPassword);
         uint32_t t = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - t < 10000) { delay(100); }
-        neopixelWrite(14, 0, 0, 0);
+#if PORK_LED_COUNT > 0
+        neopixelWrite(PORK_LED_PIN, 0, 0, 0);
+#endif
         Serial.printf("[OINK] boot wifi: %s\n",
                       WiFi.status() == WL_CONNECTED ? "connected" : "not connected");
         // Best-effort NTP (async) so capture registry timestamps are real.
@@ -46,9 +54,12 @@ void setup() {
     M5Cardputer.begin(cfg);
     M5.Display.setBrightness(Config::wifi().displayBrightness);
 
+#if !defined(PORK_BOARD_TDISPLAY_C5)
     // The SD shares the SPI bus with the display; retry the mount now that the
     // ST7789 is initialised (it wouldn't mount before the display was up).
+    // The T-Display C5 has no SD card (captures live on internal LittleFS).
     Config::mountSdAfterDisplay();
+#endif
 
     NetworkRecon::init();
     OinkMode::init();

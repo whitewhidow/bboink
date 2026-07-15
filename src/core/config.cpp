@@ -360,6 +360,12 @@ bool Config::init() {
     // Allow buses to stabilize after M5.begin()
     delay(50);
 
+#if defined(PORK_BOARD_TDISPLAY_C5)
+    // The T-Display C5 has NO microSD. Skip the SD probe entirely (its dedicated
+    // SPI would collide with the display on SPI2) and go straight to internal
+    // LittleFS for captures below.
+    sdAvailable = false;
+#else
 #ifdef PORK_BOARD_TEMBED_CC1101
     // The ST7789 hasn't been initialised yet (display comes up after Config::init)
     // and in its power-on state it loads the shared SPI bus, corrupting SD I/O.
@@ -402,6 +408,7 @@ bool Config::init() {
             sdAvailable = true;
         }
     }
+#endif // !PORK_BOARD_TDISPLAY_C5
 
     // Pick the capture-storage backend: SD card if present, else internal
     // LittleFS (format-on-mount). This is what makes the firmware work without
@@ -590,6 +597,9 @@ bool Config::reinitSD() {
 }
 
 bool Config::mountSdAfterDisplay() {
+#if defined(PORK_BOARD_TDISPLAY_C5)
+    return false;   // no SD on the T-Display C5 — captures stay on LittleFS
+#else
     // On the T-Embed CC1101 the SD, ST7789 display and CC1101 share one SPI bus.
     // The SD frequently won't mount until the display driver has initialised the
     // ST7789 (which leaves the panel in a known state that releases the shared
@@ -604,6 +614,7 @@ bool Config::mountSdAfterDisplay() {
     if (!SD.exists(configBinPathSD())) save();
     Serial.println("[CONFIG] SD mounted after display init; storage -> SD");
     return true;
+#endif
 }
 
 bool Config::loadFrom(fs::FS& fs, const char* path) {

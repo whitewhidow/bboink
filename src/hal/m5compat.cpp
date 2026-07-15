@@ -1,9 +1,11 @@
-// hal/m5compat.cpp — implementation of the T-Embed compatibility facade.
+// hal/m5compat.cpp — implementation of the T-Embed / T-Display C5 compat facade.
 #include "m5compat.h"
-#if defined(PORK_BOARD_TEMBED_CC1101)
+#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5)
 
 #include "board.h"
+#if defined(PORK_BOARD_TEMBED_CC1101)
 #include <RotaryEncoder.h>
+#endif
 #include <time.h>
 #include <cstring>
 #include <Wire.h>
@@ -21,6 +23,10 @@ namespace porkhal {
 
 VKey vkey;
 
+#if defined(PORK_BOARD_TEMBED_CC1101)
+// ===========================================================================
+// T-Embed CC1101 input: rotary encoder + two buttons.
+// ===========================================================================
 static RotaryEncoder* enc = nullptr;
 static long lastPos = 0;
 static bool ready = false;
@@ -83,6 +89,111 @@ void inputPoll() {
 
 void ledInit() { /* neopixelWrite() initialises the RMT channel lazily */ }
 
+#elif defined(PORK_BOARD_TDISPLAY_C5)
+// ===========================================================================
+// T-Display C5 input: CST816S capacitive touch (primary) + two buttons.
+//
+// UNVERIFIED (no hardware): the swipe-direction -> vkey mapping and the tap
+// detection are best-effort against the CST816S register map. In landscape the
+// physical swipe axes may be rotated relative to the panel — confirm on-device
+// and swap the gesture cases below if needed.
+//
+// CST816S register map (addr 0x15):
+//   0x01 GestureID  (0x00 none, 0x01 up, 0x02 down, 0x03 left, 0x04 right,
+//                    0x05 tap/click, 0x0B long-press, 0x0C double-tap)
+//   0x02 FingerNum  (0 = released, 1 = touching)
+//   0x03..0x06      X/Y hi/lo (unused here; gesture is enough for 4 vkeys)
+// Buttons GPIO0 / GPIO28 are INPUT_PULLUP, active-low.
+// ===========================================================================
+static bool ready = false;
+
+struct Btn { uint8_t pin; bool stable; bool lastRead; uint32_t tEdge; };
+static Btn btnSel  { PORK_ENC_KEY,  HIGH, HIGH, 0 };   // GPIO0  -> enter / long=power
+static Btn btnBack { PORK_BTN_BACK, HIGH, HIGH, 0 };   // GPIO28 -> back
+
+// Returns true on the falling (press) edge, debounced ~8ms.
+static bool pressEdge(Btn& b) {
+    bool raw = digitalRead(b.pin);
+    if (raw != b.lastRead) { b.lastRead = raw; b.tEdge = millis(); }
+    if (millis() - b.tEdge > 8 && b.stable != raw) {
+        b.stable = raw;
+        if (raw == LOW) return true;
+    }
+    return false;
+}
+
+static bool tpRead(uint8_t reg, uint8_t* buf, uint8_t len) {
+    Wire.beginTransmission(PORK_TP_ADDR);
+    Wire.write(reg);
+    if (Wire.endTransmission(false) != 0) return false;
+    uint8_t got = Wire.requestFrom((int)PORK_TP_ADDR, (int)len);
+    if (got != len) return false;
+    for (uint8_t i = 0; i < len; i++) buf[i] = Wire.read();
+    return true;
+}
+
+void inputInit() {
+    if (ready) return;
+    // Bus is normally begun in bringUpHardware(); begin() is idempotent enough.
+    Wire.begin(PORK_I2C_SDA, PORK_I2C_SCL);
+    // Reset the CST816S (RST active-low pulse).
+    pinMode(PORK_TP_RST, OUTPUT);
+    digitalWrite(PORK_TP_RST, LOW);  delay(10);
+    digitalWrite(PORK_TP_RST, HIGH); delay(50);
+    pinMode(PORK_TP_INT, INPUT_PULLUP);
+    pinMode(PORK_ENC_KEY,  INPUT_PULLUP);
+    pinMode(PORK_BTN_BACK, INPUT_PULLUP);
+    ready = true;
+}
+
+void inputPoll() {
+    if (!ready) inputInit();
+
+    VKey v;  // all-false
+
+    // --- CST816S touch gesture (edge-latched to fire once per touch) ---
+    static bool gestureLatched = false;
+    uint8_t reg[2];   // [0]=gesture(0x01), [1]=fingers(0x02)
+    if (tpRead(0x01, reg, 2)) {
+        uint8_t gesture = reg[0];
+        uint8_t fingers = reg[1];
+        if (fingers == 0 && gesture == 0) gestureLatched = false;
+        if (gesture != 0 && !gestureLatched) {
+            gestureLatched = true;
+            switch (gesture) {
+                case 0x01: v.up   = true; v.changed = true; break;  // swipe up
+                case 0x02: v.down = true; v.changed = true; break;  // swipe down
+                case 0x04: v.back = true; v.changed = true; break;  // swipe right
+                case 0x05: v.enter= true; v.changed = true; break;  // tap
+                // 0x03 swipe-left / 0x0C double-tap: unused
+                default: break;
+            }
+        }
+    }
+
+    // --- Buttons ---
+    if (pressEdge(btnSel))  { v.enter = true; v.changed = true; }  // GPIO0 short
+    if (pressEdge(btnBack)) { v.back  = true; v.changed = true; }  // GPIO28
+
+    // Long-press GPIO0 (~3s) -> one-shot power-off gesture (App::tick acts on it).
+    static uint32_t downSince = 0;
+    static bool longFired = false;
+    if (digitalRead(PORK_ENC_KEY) == LOW) {
+        if (downSince == 0) downSince = millis();
+        else if (!longFired && millis() - downSince >= 3000) {
+            v.backLongPress = true; v.changed = true; longFired = true;
+        }
+    } else {
+        downSince = 0; longFired = false;
+    }
+
+    vkey = v;
+}
+
+void ledInit() { /* no LED on this board — no-op */ }
+
+#endif // input backend
+
 } // namespace porkhal
 
 // ---------------------------------------------------------------------------
@@ -90,8 +201,13 @@ void ledInit() { /* neopixelWrite() initialises the RMT channel lazily */ }
 // Install the I2S driver only for the tone, then uninstall so the WS pin (40,
 // shared with the display RST net) is released the rest of the time.
 // ---------------------------------------------------------------------------
-#include <driver/i2s.h>
 #include "../core/config.h"
+
+#if defined(PORK_BOARD_TDISPLAY_C5)
+// No I2S speaker on the T-Display C5 — tone is a no-op.
+void SpeakerFacade::tone(uint16_t /*freq*/, uint32_t /*durationMs*/) {}
+#else
+#include <driver/i2s.h>
 
 void SpeakerFacade::tone(uint16_t freq, uint32_t durationMs) {
     if (freq == 0 || durationMs == 0) return;
@@ -141,6 +257,7 @@ void SpeakerFacade::tone(uint16_t freq, uint32_t durationMs) {
     i2s_zero_dma_buffer(I2S_NUM_0);
     i2s_driver_uninstall(I2S_NUM_0);   // release WS pin (40) so display RST stays idle
 }
+#endif // speaker backend
 
 namespace porkhal {
 // (porkhal namespace continues below)
@@ -300,6 +417,14 @@ Keyboard_Class::KeysState Keyboard_Class::keysState() const {
 // PowerFacade
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
+#if defined(PORK_BOARD_TDISPLAY_C5)
+// T-Display C5: AXP2602 PMU present but its register/address map is UNVERIFIED
+// (no hardware). Stub the fuel gauge to a safe 100% / 4.0V until confirmed.
+// TODO(hardware): read state-of-charge / voltage from the AXP2602 over I2C.
+int PowerFacade::getBatteryLevel()   { return 100; }
+int PowerFacade::getBatteryVoltage() { return 4000; }
+#else
+// ---------------------------------------------------------------------------
 // BQ27220 fuel gauge over I2C (graceful fallback if the chip isn't reachable —
 // pins/address still need on-device confirmation, see TEMBED_PORT.md).
 // ---------------------------------------------------------------------------
@@ -341,6 +466,7 @@ int PowerFacade::getBatteryVoltage() {
     if (gaugeRead16(0x08, mv) && mv > 1000 && mv < 6000) return (int)mv;
     return 4000;  // fallback ~4.0 V
 }
+#endif // power backend
 
 // ---------------------------------------------------------------------------
 // RtcFacade — surface the ESP32 system clock as an rtc_datetime_t.
@@ -367,11 +493,28 @@ M5Facade        M5;
 M5CardputerFacade M5Cardputer;
 
 static void bringUpHardware() {
+#if defined(PORK_BOARD_TDISPLAY_C5)
+    // Bring up the shared I2C bus (AXP2602 PMU + CST816S touch) first.
+    Wire.begin(PORK_I2C_SDA, PORK_I2C_SCL);
+    // TODO(hardware): the AXP2602 PMU may gate the LCD power rail. If the panel
+    // stays dark, enable the relevant AXP LDO here over Wire before Display.init()
+    // (see LilyGO Xinyuan-LilyGO/T-Display-C5 examples/factory/factory.ino).
+    // At minimum, drive the LCD_BLK_POWER enable (GPIO25) HIGH.
+    pinMode(PORK_TFT_BL, OUTPUT);
+    digitalWrite(PORK_TFT_BL, HIGH);
+
+    M5.Display.init();
+    M5.Display.setRotation(1);          // 320x170 landscape (UNVERIFIED: try 3 if mirrored)
+    M5.Display.setBrightness(200);
+    porkhal::inputInit();
+    porkhal::ledInit();                 // no-op (no LED)
+#else
     M5.Display.init();
     M5.Display.setRotation(3);          // 320x170 landscape (T-Embed CC1101: wheel on right)
     M5.Display.setBrightness(200);
     porkhal::inputInit();
     porkhal::ledInit();
+#endif
 }
 
 void M5Facade::begin()  { bringUpHardware(); }
@@ -381,4 +524,4 @@ M5CardputerFacade::M5CardputerFacade() : Display(M5.Display) {}
 void M5CardputerFacade::begin(M5Config&, bool) { bringUpHardware(); }
 void M5CardputerFacade::update()               { porkhal::inputPoll(); }
 
-#endif // PORK_BOARD_TEMBED_CC1101
+#endif // PORK_BOARD_TEMBED_CC1101 || PORK_BOARD_TDISPLAY_C5
