@@ -71,9 +71,10 @@ static void drawStats() {
         y += lh;
     };
 
-    snprintf(line, sizeof(line), "ch: %02u   networks: %u   pkts: %lu",
+    snprintf(line, sizeof(line), "ch:%02u nets:%u pkts:%lu mgmt:%lu",
              OinkMode::getChannel(), OinkMode::getNetworkCount(),
-             (unsigned long)OinkMode::getPacketCount());
+             (unsigned long)OinkMode::getPacketCount(),
+             (unsigned long)NetworkRecon::getMgmtCount());
     row(line, TFT_WHITE);
 
     // Always-on pool breakdown across two rows: the attack pipeline, then why the

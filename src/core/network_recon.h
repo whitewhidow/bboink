@@ -107,6 +107,7 @@ void clearHopIntervalOverride();
  * @brief Get packet count since start
  */
 uint32_t getPacketCount();
+uint32_t getMgmtCount();  // management (beacon/probe) frames — C5 discovery diagnostic
 
 // ============================================================================
 // Quality + Client Estimates

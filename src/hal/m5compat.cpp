@@ -107,19 +107,28 @@ void ledInit() { /* neopixelWrite() initialises the RMT channel lazily */ }
 // ===========================================================================
 static bool ready = false;
 
-struct Btn { uint8_t pin; bool stable; bool lastRead; uint32_t tEdge; };
-static Btn btnSel  { PORK_ENC_KEY,  HIGH, HIGH, 0 };   // GPIO0  -> enter / long=power
-static Btn btnBack { PORK_BTN_BACK, HIGH, HIGH, 0 };   // GPIO28 -> back
+// Two-button navigation (decided on RELEASE so tap vs hold are distinct):
+//   TOP button    (GPIO0) : tap = UP,   hold(>=0.5s) = SELECT (enter)
+//   BOTTOM button (GPIO28): tap = DOWN, hold(0.5-3s) = BACK, hold(>=3s) = power off
+// If the physical top/bottom feel swapped, flip PORK_ENC_KEY/PORK_BTN_BACK below.
+// Touch, if present, is a bonus on top.
+struct Btn { uint8_t pin; bool last; uint32_t downAt; };
+static Btn btnTop    { PORK_BTN_BACK, HIGH, 0 };   // GPIO28 (top)
+static Btn btnBottom { PORK_ENC_KEY,  HIGH, 0 };   // GPIO0  (bottom)
+static bool touchPresent = false;
 
-// Returns true on the falling (press) edge, debounced ~8ms.
-static bool pressEdge(Btn& b) {
-    bool raw = digitalRead(b.pin);
-    if (raw != b.lastRead) { b.lastRead = raw; b.tEdge = millis(); }
-    if (millis() - b.tEdge > 8 && b.stable != raw) {
-        b.stable = raw;
-        if (raw == LOW) return true;
+// Returns held-ms on the release edge (0 = no release this poll / debounce noise).
+static uint32_t releaseHeld(Btn& b) {
+    bool raw = digitalRead(b.pin);          // LOW = pressed (INPUT_PULLUP)
+    uint32_t held = 0;
+    if (b.last == HIGH && raw == LOW) {
+        b.downAt = millis();
+    } else if (b.last == LOW && raw == HIGH) {
+        held = millis() - b.downAt;
+        if (held <= 25) held = 0;           // debounce
     }
-    return false;
+    b.last = raw;
+    return held;
 }
 
 static bool tpRead(uint8_t reg, uint8_t* buf, uint8_t len) {
@@ -134,7 +143,6 @@ static bool tpRead(uint8_t reg, uint8_t* buf, uint8_t len) {
 
 void inputInit() {
     if (ready) return;
-    // Bus is normally begun in bringUpHardware(); begin() is idempotent enough.
     Wire.begin(PORK_I2C_SDA, PORK_I2C_SCL);
     // Reset the CST816S (RST active-low pulse).
     pinMode(PORK_TP_RST, OUTPUT);
@@ -143,6 +151,19 @@ void inputInit() {
     pinMode(PORK_TP_INT, INPUT_PULLUP);
     pinMode(PORK_ENC_KEY,  INPUT_PULLUP);
     pinMode(PORK_BTN_BACK, INPUT_PULLUP);
+
+    // Diagnostic: scan the I2C bus and probe the touch controller so we know
+    // for certain whether this unit has a CST816S bonded.
+    Serial.println("[C5] I2C scan:");
+    for (uint8_t a = 1; a < 127; a++) {
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() == 0) Serial.printf("  found 0x%02X\n", a);
+    }
+    Wire.beginTransmission(PORK_TP_ADDR);
+    touchPresent = (Wire.endTransmission() == 0);
+    Serial.printf("[C5] CST816S(0x%02X) touch: %s\n", PORK_TP_ADDR,
+                  touchPresent ? "PRESENT" : "absent (button-only nav)");
+
     ready = true;
 }
 
@@ -151,40 +172,48 @@ void inputPoll() {
 
     VKey v;  // all-false
 
-    // --- CST816S touch gesture (edge-latched to fire once per touch) ---
-    static bool gestureLatched = false;
-    uint8_t reg[2];   // [0]=gesture(0x01), [1]=fingers(0x02)
-    if (tpRead(0x01, reg, 2)) {
-        uint8_t gesture = reg[0];
-        uint8_t fingers = reg[1];
-        if (fingers == 0 && gesture == 0) gestureLatched = false;
-        if (gesture != 0 && !gestureLatched) {
-            gestureLatched = true;
-            switch (gesture) {
-                case 0x01: v.up   = true; v.changed = true; break;  // swipe up
-                case 0x02: v.down = true; v.changed = true; break;  // swipe down
-                case 0x04: v.back = true; v.changed = true; break;  // swipe right
-                case 0x05: v.enter= true; v.changed = true; break;  // tap
-                // 0x03 swipe-left / 0x0C double-tap: unused
-                default: break;
+    // --- CST816S touch gesture (only if the controller actually answered) ---
+    if (touchPresent) {
+        static bool gestureLatched = false;
+        uint8_t reg[2];   // [0]=gesture(0x01), [1]=fingers(0x02)
+        if (tpRead(0x01, reg, 2)) {
+            uint8_t gesture = reg[0];
+            uint8_t fingers = reg[1];
+            if (fingers == 0 && gesture == 0) gestureLatched = false;
+            if (gesture != 0 && !gestureLatched) {
+                gestureLatched = true;
+                switch (gesture) {
+                    case 0x01: v.up   = true; v.changed = true; break;  // swipe up
+                    case 0x02: v.down = true; v.changed = true; break;  // swipe down
+                    case 0x04: v.back = true; v.changed = true; break;  // swipe right
+                    case 0x05: v.enter= true; v.changed = true; break;  // tap
+                    default: break;
+                }
             }
         }
     }
 
-    // --- Buttons ---
-    if (pressEdge(btnSel))  { v.enter = true; v.changed = true; }  // GPIO0 short
-    if (pressEdge(btnBack)) { v.back  = true; v.changed = true; }  // GPIO28
+    // --- Buttons (tap vs hold, decided on release) ---
+    uint32_t hTop = releaseHeld(btnTop);        // GPIO0: tap=UP, hold=SELECT
+    if (hTop) { if (hTop >= 500) v.enter = true; else v.up = true; v.changed = true; }
 
-    // Long-press GPIO0 (~3s) -> one-shot power-off gesture (App::tick acts on it).
-    static uint32_t downSince = 0;
-    static bool longFired = false;
-    if (digitalRead(PORK_ENC_KEY) == LOW) {
-        if (downSince == 0) downSince = millis();
-        else if (!longFired && millis() - downSince >= 3000) {
-            v.backLongPress = true; v.changed = true; longFired = true;
-        }
-    } else {
-        downSince = 0; longFired = false;
+    uint32_t hBot = releaseHeld(btnBottom);     // GPIO28: tap=DOWN, hold=BACK, verylong=power
+    if (hBot) {
+        if (hBot >= 3000)      v.backLongPress = true;
+        else if (hBot >= 500)  v.back = true;
+        else                   v.down = true;
+        v.changed = true;
+    }
+
+    // Heartbeat: re-probe touch + print status every 5s so it's visible even if
+    // the serial monitor is attached after boot.
+    static uint32_t lastHb = 0;
+    if (millis() - lastHb > 5000) {
+        lastHb = millis();
+        Wire.beginTransmission(PORK_TP_ADDR);
+        touchPresent = (Wire.endTransmission() == 0);
+        Serial.printf("[C5] hb: touch=%s  heap=%u\n",
+                      touchPresent ? "PRESENT" : "absent", (unsigned)ESP.getFreeHeap());
     }
 
     vkey = v;
