@@ -2722,14 +2722,12 @@ bool OinkMode::saveHandshake22000(const CapturedHandshake& hs, const char* path)
     const EAPOLFrame* nonceFrame = nullptr;  // M1 or M3 (contains ANonce)
     const EAPOLFrame* eapolFrame = nullptr;  // M2 (contains MIC + full EAPOL)
     
-    if (msgPair == 0x00) {
-        // M1+M2: ANonce from M1, EAPOL from M2
-        nonceFrame = &hs.frames[0];  // M1
-        eapolFrame = &hs.frames[1];  // M2
-    } else {
-        // M2+M3: ANonce from M3, EAPOL from M2
-        nonceFrame = &hs.frames[2];  // M3
-        eapolFrame = &hs.frames[1];  // M2
+    switch (msgPair) {
+        case 0x00: nonceFrame = &hs.frames[0]; eapolFrame = &hs.frames[1]; break; // M1+M2
+        case 0x02: nonceFrame = &hs.frames[2]; eapolFrame = &hs.frames[1]; break; // M2+M3
+        case 0x05: nonceFrame = &hs.frames[2]; eapolFrame = &hs.frames[3]; break; // M3+M4 (MIC from M4)
+        case 0x01: nonceFrame = &hs.frames[0]; eapolFrame = &hs.frames[3]; break; // M1+M4 (MIC from M4)
+        default: return false;
     }
     
     // MIC field is at offset 81-96 (16 bytes), so we need len >= 97 to read it safely

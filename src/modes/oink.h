@@ -73,15 +73,18 @@ struct CapturedHandshake {
     bool hasBeacon() const { return beaconData != nullptr && beaconLen > 0; }
     
     // Valid crackable pairs: M1+M2 (preferred) or M2+M3 (fallback if M1 missed)
-    bool hasValidPair() const { return (hasM1() && hasM2()) || (hasM2() && hasM3()); }
+    bool hasValidPair() const { return (hasM1() && hasM2()) || (hasM2() && hasM3())
+                                     || (hasM3() && hasM4()) || (hasM1() && hasM4()); }
     bool isComplete() const { return hasValidPair(); }  // Alias for backward compat
     bool isFull() const { return (capturedMask & 0x0F) == 0x0F; }
     
     // Get message pair type for hashcat 22000 format:
     // Returns 0x00 for M1+M2, 0x02 for M2+M3, 0xFF for invalid
     uint8_t getMessagePair() const {
-        if (hasM1() && hasM2()) return 0x00;  // M1+M2: EAPOL from M2 (challenge)
-        if (hasM2() && hasM3()) return 0x02;  // M2+M3: EAPOL from M2 (authorized)
+        if (hasM1() && hasM2()) return 0x00;  // M1+M2: ANonce M1, EAPOL/MIC M2
+        if (hasM2() && hasM3()) return 0x02;  // M2+M3: ANonce M3, EAPOL/MIC M2
+        if (hasM3() && hasM4()) return 0x05;  // M3+M4: ANonce M3, EAPOL/MIC M4
+        if (hasM1() && hasM4()) return 0x01;  // M1+M4: ANonce M1, EAPOL/MIC M4
         return 0xFF;  // Invalid
     }
 };
