@@ -32,9 +32,6 @@ static void runBootSyncIfQueued() {
     int svc = bootSyncReq;
     bootSyncMagic = 0; bootSyncReq = 0;   // consume (don't loop on the next reboot)
 
-    App::clear();
-    App::centerMsg(svc == 1 ? "SYNC: wpa-sec" : (svc == 2 ? "SYNC: OHC" : "SYNC: PwnCrack"), TFT_CYAN);
-    App::footer("uploading - do not unplug");
 
     if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
     if (WiFi.status() != WL_CONNECTED) {
@@ -72,10 +69,6 @@ static void runBootSyncIfQueued() {
         snprintf(bootSyncResult, sizeof(bootSyncResult), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
     }
 
-    App::clear();
-    App::centerMsg("SYNC DONE", TFT_GREEN);
-    App::footer(bootSyncResult);
-    delay(1600);
 }
 
 void setup() {
@@ -127,8 +120,8 @@ void setup() {
             configTime(0, 0, "pool.ntp.org", "time.google.com");
     }
 
-    // Reboot-to-sync: run a queued upload NOW, before the display/capture/AP
-    // fragment the heap (TLS needs a big contiguous block). Screen is blank briefly.
+    // Reboot-to-sync: run the queued upload BEFORE the display inits (WiFi/display
+    // GDMA + heap). No on-screen feedback here; result shows on the Status page after.
     if (bootSyncMagic != BOOT_SYNC_MAGIC) strncpy(bootSyncResult, "idle", sizeof(bootSyncResult));
     runBootSyncIfQueued();
 
@@ -143,10 +136,6 @@ void setup() {
     // The T-Display C5 has no SD card (captures live on internal LittleFS).
     Config::mountSdAfterDisplay();
 #endif
-
-    // Reboot-to-sync (OHC/PwnCrack): display is up for feedback, but run BEFORE the
-    // capture engine allocates so TLS still has a clean/contiguous heap.
-    runBootSyncIfQueued();
 
     NetworkRecon::init();
     OinkMode::init();

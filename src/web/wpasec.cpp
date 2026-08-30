@@ -386,7 +386,7 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
         size_t toRead = min((size_t)sizeof(chunk), fileSize - sent);
         size_t bytesRead = capFile.read((uint8_t*)chunk, toRead);
         if (bytesRead > 0) {
-            client.write((uint8_t*)chunk, bytesRead);
+            if (client.write((uint8_t*)chunk, bytesRead) <= 0) break;
             sent += bytesRead;
         }
         yield();  // Let WiFi stack breathe
