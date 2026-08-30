@@ -97,7 +97,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
 <div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
 <div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
-<div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
+<div class="srow"><span>PwnCrack <small>(via phone cellular)</small></span><button class="sbtn" onclick="pwnBrowser(this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
 </div></div>
 
 <div id="caps" hidden><div class="card">
@@ -153,6 +153,19 @@ async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
    else{res.textContent=`up ${d.uploaded} skip ${d.skipped} crk ${d.cracked}`;res.style.color=d.ok?'#34d399':'#f87171';}
   }
  }catch(e){res.textContent='rebooting/failed — rejoin & check Status';res.style.color='#facc15';}
+ btn.disabled=false;}
+async function pwnBrowser(btn){const res=document.getElementById('r_pwncrack');
+ btn.disabled=true;res.textContent='reading captures…';res.style.color='#8aa0b2';
+ try{const info=await (await fetch('/api/pwncrack_upload_info')).json();
+  if(!info.key){res.textContent='set a PwnCrack key in Config first';res.style.color='#f87171';btn.disabled=false;return;}
+  if(!info.files.length){res.textContent='no .22000 captures to upload';res.style.color='#8aa0b2';btn.disabled=false;return;}
+  let sent=0;
+  for(const fi of info.files){res.textContent=`uploading ${sent+1}/${info.files.length} via cellular…`;
+   const blob=await (await fetch('/api/capture_file?name='+encodeURIComponent(fi.name))).blob();
+   const fd=new FormData();fd.append('key',info.key);fd.append('handshake',blob,fi.name);
+   await fetch('https://pwncrack.org/upload_handshake',{method:'POST',mode:'no-cors',body:fd});sent++;}
+  res.textContent=`sent ${sent} file(s) to PwnCrack over cellular (fire-and-forget)`;res.style.color='#34d399';
+ }catch(e){res.textContent='failed — is mobile data on? '+e;res.style.color='#f87171';}
  btn.disabled=false;}
 async function loadCaps(){const el=document.getElementById('capsList');el.innerHTML='<div class="cb">loading…</div>';
  try{const rows=await (await fetch('/api/captures')).json();
@@ -407,6 +420,46 @@ static void deleteCapture() {
     server.send(200, "application/json", "{\"ok\":true}");
 }
 
+static void serveCaptureFile() {
+    noKeepAlive();
+    if (!server.hasArg("name")) { server.send(400, "text/plain", "name required"); return; }
+    String name = server.arg("name");
+    if (name.indexOf('/') >= 0 || name.indexOf("..") >= 0) { server.send(400, "text/plain", "bad name"); return; }
+    String path = String(SDLayout::handshakesDir()) + "/" + name;
+    File f = Storage::fs().open(path, FILE_READ);
+    if (!f) { server.send(404, "text/plain", "not found"); return; }
+    server.streamFile(f, "application/octet-stream");
+    f.close();
+}
+
+// Key + list of .22000 files, so the phone's browser can upload them to PwnCrack
+// over its cellular link (topology 2 — no TLS on the board, no reboot). Serving the
+// key here is acceptable: it's the user's own key over the user's own SoftAP.
+static void pwncrackUploadInfo() {
+    noKeepAlive();
+    String out = "{\"key\":\"";
+    out += Config::wifi().pwncrackKey;
+    out += "\",\"files\":[";
+    File d = Storage::fs().open(SDLayout::handshakesDir());
+    int n = 0;
+    if (d && d.isDirectory()) {
+        for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+            if (!f.isDirectory()) {
+                const char* nm = f.name(); const char* sl = strrchr(nm, '/'); if (sl) nm = sl + 1;
+                size_t L = strlen(nm);
+                if (L > 6 && strcmp(nm + L - 6, ".22000") == 0) {
+                    if (n++) out += ",";
+                    out += "{\"name\":\""; out += nm; out += "\",\"size\":"; out += (uint32_t)f.size(); out += "}";
+                }
+            }
+            f.close();
+        }
+        d.close();
+    }
+    out += "]}";
+    server.send(200, "application/json", out);
+}
+
 static void sendIndex() {
     noKeepAlive();
     server.send_P(200, "text/html", INDEX_HTML);
@@ -424,6 +477,8 @@ void begin() {
     server.on("/api/sync/ohc",      HTTP_POST, syncOhc);
     server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
     server.on("/api/sync/status",   HTTP_GET,  sendSyncStatus);
+    server.on("/api/capture_file", HTTP_GET, serveCaptureFile);
+    server.on("/api/pwncrack_upload_info", HTTP_GET, pwncrackUploadInfo);
     server.on("/api/captures", HTTP_GET,     listCaptures);
     server.on("/api/del_capture", HTTP_POST, deleteCapture);
     server.on("/", HTTP_GET, sendIndex);
