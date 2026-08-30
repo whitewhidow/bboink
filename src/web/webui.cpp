@@ -158,11 +158,13 @@ async function loadCaps(){const el=document.getElementById('capsList');el.innerH
    if(r.w)t+='<span class="tag">W</span>';if(r.o)t+='<span class="tag">O</span>';if(r.p)t+='<span class="tag">P</span>';
    if(r.k)t+='<span class="tag k">K</span>';
    const pw=r.k&&r.pass?`<div class="pw">pass: ${r.pass}</div>`:'';
-   return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}')">delete</button>`+
+   return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}',this)">delete</button>`+
     `<div class="cn">${r.ssid||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;}).join('');
  }catch(e){el.innerHTML='<div class="cb">failed to load</div>';}}
-async function delCap(b){if(!confirm('Forget this capture?'))return;
- try{await fetch('/api/captures?bssid='+b,{method:'DELETE'});loadCaps();}catch(e){}}
+async function delCap(b,el){if(!confirm('Forget this capture?'))return;
+ try{const r=await fetch('/api/captures?bssid='+b,{method:'DELETE'});
+  if(r.ok){const row=el&&el.closest('.cap'); if(row)row.remove();}
+ }catch(e){}}
 st();setInterval(()=>{if(!document.getElementById('status').hidden)st();},2000);
 </script></body></html>)HTML";
 

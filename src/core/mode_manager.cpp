@@ -46,7 +46,8 @@ const char* apSSID() {
 const char* apPassword() {
     static char p[24] = {0};
     if (!p[0]) {
-        uint8_t m[6]; WiFi.macAddress(m);
+        uint8_t m[6];
+        esp_efuse_mac_get_default(m);   // stable across boots + Rnd MAC (was WiFi.macAddress)
         snprintf(p, sizeof(p), "oink%02X%02X%02X", m[3], m[4], m[5]);
     }
     return p;
