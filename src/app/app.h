@@ -15,7 +15,8 @@ struct Input {
     bool down  = false;   // encoder CW
     bool enter = false;   // encoder click
     bool back  = false;   // side button
-    bool any() const { return up || down || enter || back; }
+    bool toggle= false;   // single-button mode swap (Waveshare-class boards)
+    bool any() const { return up || down || enter || back || toggle; }
 };
 
 extern Screen screen;

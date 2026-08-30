@@ -116,6 +116,15 @@ struct WiFiConfig {
     // SD path the launcher loads / self-update writes. Defaults to the CI asset
     // name so you can copy the downloaded .bin verbatim to the SD root.
     char otaBinPath[48] = "/bboink-app-t-embed-cc1101.bin";
+
+    // --- Mode / provisioning (ModeManager, see docs/DESIGN-mode-webui.md) ---
+    // bootModePolicy: 0=auto (capture if captureReady, else management),
+    //                 1=always capture, 2=always management.
+    uint8_t bootModePolicy = 0;
+    // Set true once the device has been taken into CAPTURE at least once
+    // (proxy for "provisioned" until the first-run wizard lands). Gates the
+    // auto boot decision: ready -> boot straight into CAPTURE, run standalone.
+    bool    captureReady   = false;
 };
 
 // BLE settings for PIGGY BLUES mode

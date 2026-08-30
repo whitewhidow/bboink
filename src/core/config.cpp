@@ -45,7 +45,7 @@ static bool littlefsAvailable = false;
 
 // ---- Binary config blob (zero heap allocation) ----
 static constexpr uint32_t CONFIG_MAGIC   = 0x504F524B;  // 'PORK'
-static constexpr uint16_t CONFIG_VERSION = 2;   // v2: ntfy topic + attach toggle
+static constexpr uint16_t CONFIG_VERSION = 3;   // v3: bootModePolicy + captureReady
 #define CONFIG_BIN_FILE "/porkchop.dat"
 
 static const char* configBinPathSD() {
@@ -118,6 +118,9 @@ struct __attribute__((packed)) ConfigBlob {
     uint16_t idleRetryMins;       // 0 (old blob) -> off
     uint8_t  crackedFallback;     // 0 (old blob) -> false
     char     pwncrackKey[40];     // empty (old blob) -> unset
+    // v3 fields (appended; old/shorter blobs read these as 0 -> sane defaults).
+    uint8_t  bootModePolicy;      // 0 (old blob) -> auto
+    uint8_t  captureReady;        // 0 (old blob) -> false
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -152,6 +155,8 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.idleRetryMins        = wifi.idleRetryMins;
     b.crackedFallback      = wifi.crackedFallback ? 1 : 0;
     strncpy(b.pwncrackKey, wifi.pwncrackKey, sizeof(b.pwncrackKey) - 1);
+    b.bootModePolicy       = wifi.bootModePolicy;
+    b.captureReady         = wifi.captureReady ? 1 : 0;
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
     strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
@@ -245,6 +250,8 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.idleRetryMins        = b.idleRetryMins;
     wifi.crackedFallback      = b.crackedFallback != 0;
     strncpy(wifi.pwncrackKey, b.pwncrackKey, sizeof(wifi.pwncrackKey) - 1); wifi.pwncrackKey[sizeof(wifi.pwncrackKey) - 1] = '\0';
+    wifi.bootModePolicy       = b.bootModePolicy;          // 0 = auto
+    wifi.captureReady         = b.captureReady != 0;       // 0 = old blob -> false
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;

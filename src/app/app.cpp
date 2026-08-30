@@ -1,6 +1,7 @@
 // app.cpp — state machine + plain drawing helpers.
 #include "app.h"
 #include "../core/config.h"
+#include "../core/mode_manager.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
@@ -29,6 +30,7 @@ Input readInput() {
     in.down  = porkhal::vkey.down;
     in.enter = porkhal::vkey.enter;
     in.back  = porkhal::vkey.back;
+    in.toggle= porkhal::vkey.toggle;
     return in;
 }
 
@@ -164,12 +166,16 @@ void powerOff() {
 
 void begin() {
     lastInputMs = millis();
-    go(Screen::MENU);
+    ModeManager::begin();   // provisioning-aware: CAPTURE if ready, else MANAGEMENT
 }
 
 void tick() {
     // Hold the side button ~3s anywhere -> power off.
     if (porkhal::vkey.backLongPress) { powerOff(); return; }
+
+    // Single-button mode swap (inert on multi-button boards, which reach the
+    // same transitions via the menu + capture-screen back).
+    if (porkhal::vkey.toggle) { ModeManager::toggle(); return; }
 
     // Auto-dim backlight after idle; restore on any input.
     if (porkhal::vkey.changed) {

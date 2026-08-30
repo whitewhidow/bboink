@@ -55,6 +55,7 @@ namespace porkhal {
         bool down    = false;   // '.'  (encoder CW)
         bool enter    = false;  // encoder push (short)
         bool back    = false;   // side button  -> BACKSPACE
+        bool toggle  = false;   // single-button CAPTURE<->MANAGEMENT swap
         bool backLongPress = false;  // side button held ~3s (power-off gesture)
         bool changed = false;   // any transition this frame
     };

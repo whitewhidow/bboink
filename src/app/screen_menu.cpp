@@ -4,6 +4,7 @@
 #include "../core/sd_layout.h"
 #include "../core/storage.h"
 #include "../modes/oink.h"
+#include "../core/mode_manager.h"
 #include "../web/wpasec.h"
 #include "../web/ohc.h"
 #include "../web/pwncrack.h"
@@ -331,7 +332,7 @@ static void captureTargetedFlow() {
         if (porkhal::vkey.enter) {
             OinkMode::setTargetLock(bss[s], WiFi.SSID(s).c_str());
             WiFi.scanDelete();
-            App::go(App::Screen::CAPTURE);   // capture, locked to this AP
+            ModeManager::enterCapture(false);   // capture, keep the lock
             return;
         }
         if (redraw) {
@@ -352,7 +353,7 @@ void tick(const App::Input& in) {
     if (sel >= firstVisible + VISIBLE) firstVisible = sel - VISIBLE + 1;
     if (in.enter) {
         switch (sel) {
-            case 0: OinkMode::clearTargetLock(); App::go(App::Screen::CAPTURE); return;
+            case 0: ModeManager::enterCapture(); return;   // clears lock, marks ready
             case 1: captureTargetedFlow();          return;
             case 2: App::go(App::Screen::MANAGE);   return;
             case 3: App::go(App::Screen::OHC);      return;
