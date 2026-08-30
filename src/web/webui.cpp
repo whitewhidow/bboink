@@ -1,6 +1,7 @@
 // webui.cpp — MANAGEMENT web server (see webui.h).
 #include "webui.h"
 #include "../app/app.h"
+#include "../core/boot_sync.h"
 #include "../core/mode_manager.h"
 #include "../core/config.h"
 #include "../core/net_link.h"
@@ -23,8 +24,6 @@ namespace WebUI {
 static WebServer  server(80);
 static DNSServer  dns;
 static bool       up = false;
-static int        g_pendingSync = 0;      // 0 none,1 wpasec,2 ohc,3 pwncrack
-static char       g_lastSync[80] = "idle";
 
 // Tabbed SPA: Status + Config. Secrets are write-only (GET returns only presence;
 // the form sends a secret field only when you type a new value). Inlined PROGMEM.
@@ -146,11 +145,14 @@ async function save(){const b={wifi_ssid:document.getElementById('wifi_ssid').va
   if(r.ok){m.textContent='saved ✓';m.style.color='#34d399';for(const s of SEC)document.getElementById(s).value='';loadCfg();}
   else{m.textContent='save failed';m.style.color='#f87171';}}catch(e){m.textContent='save failed';m.style.color='#f87171';}}
 async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
- btn.disabled=true;res.textContent='starting…';res.style.color='#8aa0b2';
+ btn.disabled=true;res.textContent='syncing…';res.style.color='#8aa0b2';
  try{const r=await fetch('/api/sync/'+svc,{method:'POST'});
   if(!r.ok){const d=await r.json();res.textContent=d.error||'failed';res.style.color='#f87171';}
-  else{res.textContent='uploading on device — watch its screen; AP drops ~10-30s then rejoin';res.style.color='#facc15';}
- }catch(e){res.textContent='uploading on device — AP dropped; rejoin then check Status';res.style.color='#facc15';}
+  else{const d=await r.json();
+   if(d.rebooting){res.textContent='rebooting to upload — rejoin AP in ~15s, see Status';res.style.color='#facc15';}
+   else{res.textContent=`up ${d.uploaded} skip ${d.skipped} crk ${d.cracked}`;res.style.color=d.ok?'#34d399':'#f87171';}
+  }
+ }catch(e){res.textContent='rebooting/failed — rejoin & check Status';res.style.color='#facc15';}
  btn.disabled=false;}
 async function loadCaps(){const el=document.getElementById('capsList');el.innerHTML='<div class="cb">loading…</div>';
  try{const rows=await (await fetch('/api/captures')).json();
@@ -185,7 +187,7 @@ static void sendStatus() {
         BBOINK_VERSION, ModeManager::currentName(), (unsigned)ESP.getFreeHeap(),
         ModeManager::apSSID(), WiFi.softAPIP().toString().c_str(), WiFi.softAPgetStationNum(),
         sta ? "true" : "false", staSsid.c_str(), staIp.c_str(),
-        OinkMode::getExcludedCount(), g_lastSync);
+        OinkMode::getExcludedCount(), bootSyncResult);
     server.send(200, "application/json", buf);
 }
 
@@ -294,26 +296,33 @@ static bool uplinkReady(const char* keyErr, bool hasKey) {
 static void syncWpasec() {
     noKeepAlive();
     if (!uplinkReady("no wpa-sec key", WPASec::hasApiKey())) return;
-    g_pendingSync = 1;                       // run it from the main loop with heap freed
-    server.send(200, "application/json", "{\"started\":true}");
+    WPASecSyncResult r = WPASec::syncCaptures();   // plain HTTP -> runs in-place, no reboot
+    snprintf(bootSyncResult, sizeof(bootSyncResult),
+             r.success ? "wpa-sec: up %u skip %u crk %u(+%u)" : "wpa-sec ERR",
+             r.uploaded, r.skipped, r.cracked, r.newCracked);
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+        "{\"ok\":%s,\"uploaded\":%u,\"skipped\":%u,\"cracked\":%u,\"new_cracked\":%u}",
+        r.success ? "true" : "false", r.uploaded, r.skipped, r.cracked, r.newCracked);
+    server.send(200, "application/json", buf);
 }
 static void syncOhc() {
     noKeepAlive();
     if (!uplinkReady("no OHC key", OHC::hasApiKey())) return;
-    g_pendingSync = 2;
-    server.send(200, "application/json", "{\"started\":true}");
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestBootSync(2);
 }
 static void syncPwncrack() {
     noKeepAlive();
     if (!uplinkReady("no PwnCrack key", PwnCrack::hasApiKey())) return;
-    g_pendingSync = 3;
-    server.send(200, "application/json", "{\"started\":true}");
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestBootSync(3);
 }
 static void sendSyncStatus() {
     noKeepAlive();
     char b[128];
     snprintf(b, sizeof(b), "{\"busy\":%s,\"last\":\"%s\"}",
-             g_pendingSync ? "true" : "false", g_lastSync);
+             "false", bootSyncResult);
     server.send(200, "application/json", b);
 }
 
@@ -441,75 +450,7 @@ void loop() {
     server.handleClient();
 }
 
-static void wpasecProg(const char* status, uint8_t pnum, uint8_t tot) {
-    char l[48];
-    if (tot) snprintf(l, sizeof(l), "%s %u/%u", status, pnum, tot);
-    else     snprintf(l, sizeof(l), "%s", status);
-    App::clear(); App::centerMsg("wpa-sec sync", TFT_CYAN); App::footer(l);
-}
-
-void servicePendingSync() {
-    if (!g_pendingSync) return;
-    int svc = g_pendingSync; g_pendingSync = 0;
-
-    // Free the ~35KB contiguous heap TLS needs: drop web + captive DNS + SoftAP,
-    // keep STA. Progress shows on the LCD; the phone briefly loses the AP and
-    // reconnects afterwards (GET /api/sync/status then shows the result).
-    App::clear(); App::centerMsg("SYNCING...", TFT_CYAN); App::footer("AP down while uploading");
-    stop();                          // web server + DNS
-    WiFi.softAPdisconnect(true);     // drop SoftAP
-    WiFi.mode(WIFI_STA);
-    delay(80);
-    App::footer("connecting uplink...");
-    bool sta = NetLink::connectConfigured();   // force a real reconnect (don't trust stale status)
-
-    if (!sta) {
-        snprintf(g_lastSync, sizeof(g_lastSync), "ERR: no uplink (STA didn't connect)");
-    } else if (svc == 1) {
-        WPASecSyncResult r = WPASec::syncCaptures(wpasecProg);
-        if (r.success)
-            snprintf(g_lastSync, sizeof(g_lastSync), "wpa-sec: up %u skip %u crk %u(+%u)",
-                     r.uploaded, r.skipped, r.cracked, r.newCracked);
-        else
-            snprintf(g_lastSync, sizeof(g_lastSync), "wpa-sec ERR: %.45s", WPASec::getLastError());
-    } else if (svc == 2) {
-        App::clear(); App::centerMsg("OHC sync", TFT_CYAN);
-        OHC::UploadResult r = OHC::uploadHashes();
-        snprintf(g_lastSync, sizeof(g_lastSync), "OHC: acc %u skip %u rej %u%s",
-                 r.accepted, r.skipped, r.rejected, r.success ? "" : " ERR");
-    } else {
-        App::clear(); App::centerMsg("PwnCrack sync", TFT_CYAN);
-        int files = 0, hashes = 0;
-        File d = Storage::fs().open(SDLayout::handshakesDir());
-        if (d && d.isDirectory()) {
-            for (File f = d.openNextFile(); f; f = d.openNextFile()) {
-                if (!f.isDirectory()) {
-                    const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
-                    size_t L = strlen(n);
-                    if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
-                        PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
-                        if (r.success) { files++; hashes += r.hashes; }
-                    }
-                }
-                f.close();
-            }
-            d.close();
-        }
-        char err[48] = {0};
-        int cracked = PwnCrack::syncPotfile(err, sizeof(err));
-        snprintf(g_lastSync, sizeof(g_lastSync), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
-    }
-
-    App::clear(); App::centerMsg("SYNC DONE", TFT_GREEN); App::footer(g_lastSync); delay(1800);
-
-    // Restore AP + STA + web, then redraw the connect screen.
-    WiFi.mode(WIFI_AP_STA);
-    delay(200);
-    WiFi.softAP(ModeManager::apSSID(), ModeManager::apPassword());
-    NetLink::connectConfigured();     // re-establish the STA uplink (was dropped for the AP-off sync)
-    begin();                          // restart web + captive DNS
-    App::go(App::Screen::CONNECT);    // redraw
-}
+void servicePendingSync() { /* sync now runs on reboot (boot_sync) */ }
 
 bool running() { return up; }
 

@@ -4,6 +4,14 @@
 #include <M5Cardputer.h>            // shim -> hal/m5compat.h on this board
 #include <WiFi.h>
 #include "core/config.h"
+#include "core/boot_sync.h"
+#include "core/net_link.h"
+#include "core/storage.h"
+#include "core/sd_layout.h"
+#include "web/wpasec.h"
+#include "web/ohc.h"
+#include "web/pwncrack.h"
+#include <FS.h>
 #if defined(__has_include)
 #  if __has_include("core/dev_secrets.h")
 #    include "core/dev_secrets.h"
@@ -13,6 +21,62 @@
 #include "modes/oink.h"
 #include "app/app.h"
 #include "version.h"
+
+RTC_NOINIT_ATTR uint32_t bootSyncMagic;
+RTC_NOINIT_ATTR int      bootSyncReq;
+RTC_NOINIT_ATTR char     bootSyncResult[96];
+
+// Run a queued sync early in boot (clean heap). STA is already associated above.
+static void runBootSyncIfQueued() {
+    if (bootSyncMagic != BOOT_SYNC_MAGIC || bootSyncReq == 0) return;
+    int svc = bootSyncReq;
+    bootSyncMagic = 0; bootSyncReq = 0;   // consume (don't loop on the next reboot)
+
+    App::clear();
+    App::centerMsg(svc == 2 ? "SYNC: OHC" : "SYNC: PwnCrack", TFT_CYAN);
+    App::footer("uploading - do not unplug");
+
+    if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
+    if (WiFi.status() != WL_CONNECTED) {
+        snprintf(bootSyncResult, sizeof(bootSyncResult), "ERR: no uplink at boot");
+        return;
+    }
+    if (svc == 1) {
+        WPASecSyncResult r = WPASec::syncCaptures();
+        if (r.success) snprintf(bootSyncResult, sizeof(bootSyncResult),
+                                "wpa-sec: up %u skip %u crk %u(+%u)", r.uploaded, r.skipped, r.cracked, r.newCracked);
+        else           snprintf(bootSyncResult, sizeof(bootSyncResult), "wpa-sec ERR: %.55s", WPASec::getLastError());
+    } else if (svc == 2) {
+        OHC::UploadResult r = OHC::uploadHashes();
+        snprintf(bootSyncResult, sizeof(bootSyncResult), "OHC: acc %u skip %u rej %u%s",
+                 r.accepted, r.skipped, r.rejected, r.success ? "" : " ERR");
+    } else {
+        int files = 0, hashes = 0;
+        File d = Storage::fs().open(SDLayout::handshakesDir());
+        if (d && d.isDirectory()) {
+            for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+                if (!f.isDirectory()) {
+                    const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
+                    size_t L = strlen(n);
+                    if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
+                        PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
+                        if (r.success) { files++; hashes += r.hashes; }
+                    }
+                }
+                f.close();
+            }
+            d.close();
+        }
+        char err[48] = {0};
+        int cracked = PwnCrack::syncPotfile(err, sizeof(err));
+        snprintf(bootSyncResult, sizeof(bootSyncResult), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
+    }
+
+    App::clear();
+    App::centerMsg("SYNC DONE", TFT_GREEN);
+    App::footer(bootSyncResult);
+    delay(1600);
+}
 
 void setup() {
 #if defined(PORK_BOARD_TEMBED_CC1101)
@@ -63,6 +127,11 @@ void setup() {
             configTime(0, 0, "pool.ntp.org", "time.google.com");
     }
 
+    // Reboot-to-sync: run a queued upload NOW, before the display/capture/AP
+    // fragment the heap (TLS needs a big contiguous block). Screen is blank briefly.
+    if (bootSyncMagic != BOOT_SYNC_MAGIC) strncpy(bootSyncResult, "idle", sizeof(bootSyncResult));
+    runBootSyncIfQueued();
+
     // Now the display + input + engine (display init no longer disturbs WiFi).
     auto cfg = M5.config();
     M5Cardputer.begin(cfg);
@@ -74,6 +143,10 @@ void setup() {
     // The T-Display C5 has no SD card (captures live on internal LittleFS).
     Config::mountSdAfterDisplay();
 #endif
+
+    // Reboot-to-sync (OHC/PwnCrack): display is up for feedback, but run BEFORE the
+    // capture engine allocates so TLS still has a clean/contiguous heap.
+    runBootSyncIfQueued();
 
     NetworkRecon::init();
     OinkMode::init();

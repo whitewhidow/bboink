@@ -17,7 +17,7 @@
 
 // WPA-SEC API
 static const char* WPASEC_HOST = "wpa-sec.stanev.org";
-static const uint16_t WPASEC_PORT = 443;
+static const uint16_t WPASEC_PORT = 80;    // plain HTTP (no TLS) so it syncs in-place without the ~35KB-contiguous heap TLS needs
 static const char* WPASEC_UPLOAD_PATH = "/";
 static const char* WPASEC_POTFILE_PATH = "/?api&dl=1";
 static const size_t WPASEC_MAX_CACHE_ENTRIES = 500;
@@ -306,19 +306,13 @@ bool WPASec::hasApiKey() {
 }
 
 bool WPASec::canSync() {
-    // Free caches to maximize available heap
+    // wpa-sec uploads over plain HTTP now (no TLS) — a modest free-heap check is
+    // enough; no large contiguous block required. (in-place, no reboot)
     freeCacheMemory();
-
-    HeapGates::TlsGateStatus tls = HeapGates::checkTlsGates();
-
-    Serial.printf("[WPASEC] canSync: %u free, %u contiguous (need %u/%u)\n",
-                  (unsigned int)tls.freeHeap, (unsigned int)tls.largestBlock,
-                  (unsigned int)HeapPolicy::kMinHeapForTls,
-                  (unsigned int)HeapPolicy::kMinContigForTls);
-
-    return HeapGates::canTls(tls, lastError, sizeof(lastError));
+    size_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < 15000) { snprintf(lastError, sizeof(lastError), "LOW HEAP %u", (unsigned)freeHeap); return false; }
+    return true;
 }
-
 bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     if (!filepath || !bssid) return false;
     
@@ -341,18 +335,14 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     const char* filename = strrchr(filepath, '/');
     filename = filename ? filename + 1 : filepath;
     
-    // Create WiFiClientSecure with minimal buffers
-    WiFiClientSecure client;
-    client.setInsecure();  // Skip cert validation - saves ~10KB heap
+    WiFiClient client;   // plain HTTP
     
     // Connect with timeout
     Serial.printf("[WPASEC] Connecting to %s:%d\n", WPASEC_HOST, WPASEC_PORT);
     if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
         capFile.close();
-        char tlsErr[64] = {0};
-        int errCode = client.lastError(tlsErr, sizeof(tlsErr) - 1);
-        snprintf(lastError, sizeof(lastError), "TLS CONNECT: %d", errCode);
-        Serial.printf("[WPASEC] TLS connect failed: err=%d (%s)\n", errCode, tlsErr);
+        snprintf(lastError, sizeof(lastError), "HTTP CONNECT FAILED");
+        Serial.println("[WPASEC] HTTP connect failed");
         return false;
     }
     
@@ -450,15 +440,11 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     
     Serial.println("[WPASEC] Downloading potfile...");
     
-    // Create WiFiClientSecure with minimal buffers
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClient client;   // plain HTTP
     
     if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
-        char tlsErr[64] = {0};
-        int errCode = client.lastError(tlsErr, sizeof(tlsErr) - 1);
-        snprintf(lastError, sizeof(lastError), "POTFILE TLS: %d", errCode);
-        Serial.printf("[WPASEC] Potfile TLS failed: err=%d (%s)\n", errCode, tlsErr);
+        snprintf(lastError, sizeof(lastError), "POTFILE HTTP FAILED");
+        Serial.println("[WPASEC] Potfile HTTP connect failed");
         return false;
     }
     
@@ -809,20 +795,12 @@ WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
     bool potfileOk = false;
     
     // Attempt potfile if heap is sufficient - no reconditioning, graceful skip if low
-    HeapGates::GateStatus potGate = HeapGates::checkGate(0, HeapPolicy::kMinContigForTls);
-    if (potGate.failure == HeapGates::TlsGateFailure::None) {
-        potfileOk = downloadPotfile(newCracks);
-        if (potfileOk) {
-            result.newCracked = newCracks;
-            // Reload cache to get cracked count
-            loadCache();
-            result.cracked = crackedCache.size();
-        }
-    } else {
-        Serial.printf("[WPASEC] Skipping potfile: insufficient heap (%u < %u)\n",
-                      (unsigned int)potGate.largestBlock,
-                      (unsigned int)HeapPolicy::kMinContigForTls);
-        snprintf(lastError, sizeof(lastError), "POTFILE SKIP: LOW HEAP");
+    // wpa-sec potfile is plain HTTP now — always attempt (no TLS contiguous gate).
+    potfileOk = downloadPotfile(newCracks);
+    if (potfileOk) {
+        result.newCracked = newCracks;
+        loadCache();
+        result.cracked = crackedCache.size();
     }
     
     // Graceful degradation: partial success if uploads worked but potfile failed
