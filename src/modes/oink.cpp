@@ -1868,7 +1868,7 @@ void OinkMode::processEAPOL(const uint8_t* payload, uint16_t len,
             
             // Look for PMKID KDE: dd 14 00 0f ac 04 (vendor IE, IEEE OUI, PMKID type)
             // Can appear at start or within Key Data
-            for (uint16_t i = 0; i + 22 < keyDataLen; i++) {  // Strict < ensures 22 bytes remain
+            for (uint16_t i = 0; i + 22 <= keyDataLen; i++) {  // <= so an exactly-22-byte PMKID KDE (i=0) is checked
                 if (keyData[i] == 0xdd && keyData[i+1] == 0x14 &&
                     keyData[i+2] == 0x00 && keyData[i+3] == 0x0f &&
                     keyData[i+4] == 0xac && keyData[i+5] == 0x04) {
