@@ -496,10 +496,11 @@ void servicePendingSync() {
 
     App::clear(); App::centerMsg("SYNC DONE", TFT_GREEN); App::footer(g_lastSync); delay(1800);
 
-    // Restore AP + web, then redraw the connect screen.
+    // Restore AP + STA + web, then redraw the connect screen.
     WiFi.mode(WIFI_AP_STA);
     delay(200);
     WiFi.softAP(ModeManager::apSSID(), ModeManager::apPassword());
+    NetLink::connectConfigured();     // re-establish the STA uplink (was dropped for the AP-off sync)
     begin();                          // restart web + captive DNS
     App::go(App::Screen::CONNECT);    // redraw
 }
