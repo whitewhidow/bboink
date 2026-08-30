@@ -2,6 +2,7 @@
 // Provides shared network scanning for OINK, DONOHAM, and SPECTRUM modes
 
 #include "network_recon.h"
+#include "../hal/board.h"   // PORK_CHIP_ESP32C5 gate (else the C5 capture path silently compiles out)
 #include "../modes/oink.h"  // For DetectedNetwork, DetectedClient types
 #include "config.h"
 #include "wsl_bypasser.h"
