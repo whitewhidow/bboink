@@ -460,12 +460,18 @@ void servicePendingSync() {
     WiFi.softAPdisconnect(true);     // drop SoftAP
     WiFi.mode(WIFI_STA);
     delay(80);
-    if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
+    App::footer("connecting uplink...");
+    bool sta = NetLink::connectConfigured();   // force a real reconnect (don't trust stale status)
 
-    if (svc == 1) {
+    if (!sta) {
+        snprintf(g_lastSync, sizeof(g_lastSync), "ERR: no uplink (STA didn't connect)");
+    } else if (svc == 1) {
         WPASecSyncResult r = WPASec::syncCaptures(wpasecProg);
-        snprintf(g_lastSync, sizeof(g_lastSync), "wpa-sec: up %u skip %u crk %u(+%u)%s",
-                 r.uploaded, r.skipped, r.cracked, r.newCracked, r.success ? "" : " ERR");
+        if (r.success)
+            snprintf(g_lastSync, sizeof(g_lastSync), "wpa-sec: up %u skip %u crk %u(+%u)",
+                     r.uploaded, r.skipped, r.cracked, r.newCracked);
+        else
+            snprintf(g_lastSync, sizeof(g_lastSync), "wpa-sec ERR: %.45s", WPASec::getLastError());
     } else if (svc == 2) {
         App::clear(); App::centerMsg("OHC sync", TFT_CYAN);
         OHC::UploadResult r = OHC::uploadHashes();
