@@ -1,5 +1,6 @@
 // webui.cpp — MANAGEMENT web server (see webui.h).
 #include "webui.h"
+#include "../app/app.h"
 #include "../core/mode_manager.h"
 #include "../core/config.h"
 #include "../core/net_link.h"
@@ -22,6 +23,8 @@ namespace WebUI {
 static WebServer  server(80);
 static DNSServer  dns;
 static bool       up = false;
+static int        g_pendingSync = 0;      // 0 none,1 wpasec,2 ohc,3 pwncrack
+static char       g_lastSync[80] = "idle";
 
 // Tabbed SPA: Status + Config. Secrets are write-only (GET returns only presence;
 // the form sends a secret field only when you type a new value). Inlined PROGMEM.
@@ -120,7 +123,8 @@ async function st(){try{const d=await (await fetch('/api/status')).json();
   `<div class="row"><span class="k">AP clients</span><span class="v">${d.ap.clients}</span></div>`+
   `<div class="row"><span class="k">uplink (STA)</span><span class="v">${sta}</span></div>`+
   `<div class="row"><span class="k">captures</span><span class="v">${d.captures}</span></div>`+
-  `<div class="row"><span class="k">free heap</span><span class="v">${(d.heap/1024|0)} KB</span></div>`;
+  `<div class="row"><span class="k">free heap</span><span class="v">${(d.heap/1024|0)} KB</span></div>`+
+   `<div class="row"><span class="k">last sync</span><span class="v">${d.last_sync||'-'}</span></div>`;
  }catch(e){}}
 async function loadCfg(){try{const c=await (await fetch('/api/config')).json();
  document.getElementById('wifi_ssid').value=c.wifi_ssid||'';
@@ -142,14 +146,11 @@ async function save(){const b={wifi_ssid:document.getElementById('wifi_ssid').va
   if(r.ok){m.textContent='saved ✓';m.style.color='#34d399';for(const s of SEC)document.getElementById(s).value='';loadCfg();}
   else{m.textContent='save failed';m.style.color='#f87171';}}catch(e){m.textContent='save failed';m.style.color='#f87171';}}
 async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
- btn.disabled=true;res.textContent='syncing…';res.style.color='#8aa0b2';
- try{const r=await fetch('/api/sync/'+svc,{method:'POST'});const d=await r.json();
-  if(!r.ok){res.textContent=d.error||'failed';res.style.color='#f87171';}
-  else{let t;if(svc=='wpasec')t=`up ${d.uploaded} skip ${d.skipped} crk ${d.cracked}(+${d.new_cracked})`;
-   else if(svc=='ohc')t=`acc ${d.accepted} skip ${d.skipped} rej ${d.rejected}`;
-   else t=`files ${d.files} hash ${d.hashes} crk ${d.cracked}`;
-   res.textContent=t;res.style.color='#34d399';}
- }catch(e){res.textContent='failed';res.style.color='#f87171';}
+ btn.disabled=true;res.textContent='starting…';res.style.color='#8aa0b2';
+ try{const r=await fetch('/api/sync/'+svc,{method:'POST'});
+  if(!r.ok){const d=await r.json();res.textContent=d.error||'failed';res.style.color='#f87171';}
+  else{res.textContent='uploading on device — watch its screen; AP drops ~10-30s then rejoin';res.style.color='#facc15';}
+ }catch(e){res.textContent='uploading on device — AP dropped; rejoin then check Status';res.style.color='#facc15';}
  btn.disabled=false;}
 async function loadCaps(){const el=document.getElementById('capsList');el.innerHTML='<div class="cb">loading…</div>';
  try{const rows=await (await fetch('/api/captures')).json();
@@ -180,11 +181,11 @@ static void sendStatus() {
         "{\"version\":\"%s\",\"mode\":\"%s\",\"heap\":%u,"
         "\"ap\":{\"ssid\":\"%s\",\"ip\":\"%s\",\"clients\":%d},"
         "\"sta\":{\"connected\":%s,\"ssid\":\"%s\",\"ip\":\"%s\"},"
-        "\"captures\":%d}",
+        "\"captures\":%d,\"last_sync\":\"%s\"}",
         BBOINK_VERSION, ModeManager::currentName(), (unsigned)ESP.getFreeHeap(),
         ModeManager::apSSID(), WiFi.softAPIP().toString().c_str(), WiFi.softAPgetStationNum(),
         sta ? "true" : "false", staSsid.c_str(), staIp.c_str(),
-        OinkMode::getExcludedCount());
+        OinkMode::getExcludedCount(), g_lastSync);
     server.send(200, "application/json", buf);
 }
 
@@ -293,51 +294,27 @@ static bool uplinkReady(const char* keyErr, bool hasKey) {
 static void syncWpasec() {
     noKeepAlive();
     if (!uplinkReady("no wpa-sec key", WPASec::hasApiKey())) return;
-    if (!WPASec::canSync()) { server.send(503, "application/json", "{\"error\":\"low heap, retry\"}"); return; }
-    WPASecSyncResult r = WPASec::syncCaptures();
-    char buf[160];
-    snprintf(buf, sizeof(buf),
-        "{\"ok\":%s,\"uploaded\":%u,\"skipped\":%u,\"cracked\":%u,\"new_cracked\":%u}",
-        r.success ? "true" : "false", r.uploaded, r.skipped, r.cracked, r.newCracked);
-    server.send(200, "application/json", buf);
+    g_pendingSync = 1;                       // run it from the main loop with heap freed
+    server.send(200, "application/json", "{\"started\":true}");
 }
-
 static void syncOhc() {
     noKeepAlive();
     if (!uplinkReady("no OHC key", OHC::hasApiKey())) return;
-    OHC::UploadResult r = OHC::uploadHashes();
-    char buf[160];
-    snprintf(buf, sizeof(buf),
-        "{\"ok\":%s,\"accepted\":%u,\"skipped\":%u,\"rejected\":%u,\"hashes\":%u}",
-        r.success ? "true" : "false", r.accepted, r.skipped, r.rejected, r.totalHashes);
-    server.send(200, "application/json", buf);
+    g_pendingSync = 2;
+    server.send(200, "application/json", "{\"started\":true}");
 }
-
 static void syncPwncrack() {
     noKeepAlive();
     if (!uplinkReady("no PwnCrack key", PwnCrack::hasApiKey())) return;
-    int files = 0, hashes = 0;
-    File d = Storage::fs().open(SDLayout::handshakesDir());
-    if (d && d.isDirectory()) {
-        for (File f = d.openNextFile(); f; f = d.openNextFile()) {
-            if (!f.isDirectory()) {
-                const char* n = f.name(); const char* slash = strrchr(n, '/'); if (slash) n = slash + 1;
-                size_t L = strlen(n);
-                if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
-                    PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
-                    if (r.success) { files++; hashes += r.hashes; }
-                }
-            }
-            f.close();
-        }
-        d.close();
-    }
-    char err[48] = {0};
-    int cracked = PwnCrack::syncPotfile(err, sizeof(err));
-    char buf[160];
-    snprintf(buf, sizeof(buf), "{\"ok\":true,\"files\":%d,\"hashes\":%d,\"cracked\":%d}",
-             files, hashes, cracked);
-    server.send(200, "application/json", buf);
+    g_pendingSync = 3;
+    server.send(200, "application/json", "{\"started\":true}");
+}
+static void sendSyncStatus() {
+    noKeepAlive();
+    char b[128];
+    snprintf(b, sizeof(b), "{\"busy\":%s,\"last\":\"%s\"}",
+             g_pendingSync ? "true" : "false", g_lastSync);
+    server.send(200, "application/json", b);
 }
 
 static void bssidHex64(uint64_t b, char out[13]) {
@@ -437,6 +414,7 @@ void begin() {
     server.on("/api/sync/wpasec",   HTTP_POST, syncWpasec);
     server.on("/api/sync/ohc",      HTTP_POST, syncOhc);
     server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
+    server.on("/api/sync/status",   HTTP_GET,  sendSyncStatus);
     server.on("/api/captures", HTTP_GET,     listCaptures);
     server.on("/api/del_capture", HTTP_POST, deleteCapture);
     server.on("/", HTTP_GET, sendIndex);
@@ -461,6 +439,69 @@ void loop() {
     if (!up) return;
     dns.processNextRequest();
     server.handleClient();
+}
+
+static void wpasecProg(const char* status, uint8_t pnum, uint8_t tot) {
+    char l[48];
+    if (tot) snprintf(l, sizeof(l), "%s %u/%u", status, pnum, tot);
+    else     snprintf(l, sizeof(l), "%s", status);
+    App::clear(); App::centerMsg("wpa-sec sync", TFT_CYAN); App::footer(l);
+}
+
+void servicePendingSync() {
+    if (!g_pendingSync) return;
+    int svc = g_pendingSync; g_pendingSync = 0;
+
+    // Free the ~35KB contiguous heap TLS needs: drop web + captive DNS + SoftAP,
+    // keep STA. Progress shows on the LCD; the phone briefly loses the AP and
+    // reconnects afterwards (GET /api/sync/status then shows the result).
+    App::clear(); App::centerMsg("SYNCING...", TFT_CYAN); App::footer("AP down while uploading");
+    stop();                          // web server + DNS
+    WiFi.softAPdisconnect(true);     // drop SoftAP
+    WiFi.mode(WIFI_STA);
+    delay(80);
+    if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
+
+    if (svc == 1) {
+        WPASecSyncResult r = WPASec::syncCaptures(wpasecProg);
+        snprintf(g_lastSync, sizeof(g_lastSync), "wpa-sec: up %u skip %u crk %u(+%u)%s",
+                 r.uploaded, r.skipped, r.cracked, r.newCracked, r.success ? "" : " ERR");
+    } else if (svc == 2) {
+        App::clear(); App::centerMsg("OHC sync", TFT_CYAN);
+        OHC::UploadResult r = OHC::uploadHashes();
+        snprintf(g_lastSync, sizeof(g_lastSync), "OHC: acc %u skip %u rej %u%s",
+                 r.accepted, r.skipped, r.rejected, r.success ? "" : " ERR");
+    } else {
+        App::clear(); App::centerMsg("PwnCrack sync", TFT_CYAN);
+        int files = 0, hashes = 0;
+        File d = Storage::fs().open(SDLayout::handshakesDir());
+        if (d && d.isDirectory()) {
+            for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+                if (!f.isDirectory()) {
+                    const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
+                    size_t L = strlen(n);
+                    if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
+                        PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
+                        if (r.success) { files++; hashes += r.hashes; }
+                    }
+                }
+                f.close();
+            }
+            d.close();
+        }
+        char err[48] = {0};
+        int cracked = PwnCrack::syncPotfile(err, sizeof(err));
+        snprintf(g_lastSync, sizeof(g_lastSync), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
+    }
+
+    App::clear(); App::centerMsg("SYNC DONE", TFT_GREEN); App::footer(g_lastSync); delay(1800);
+
+    // Restore AP + web, then redraw the connect screen.
+    WiFi.mode(WIFI_AP_STA);
+    delay(200);
+    WiFi.softAP(ModeManager::apSSID(), ModeManager::apPassword());
+    begin();                          // restart web + captive DNS
+    App::go(App::Screen::CONNECT);    // redraw
 }
 
 bool running() { return up; }

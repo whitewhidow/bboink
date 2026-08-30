@@ -109,6 +109,7 @@ void tick(const App::Input& in) {
     //  returns to CAPTURE; this screen just displays + refreshes STA status.)
 
     WebUI::loop();   // pump captive-DNS + HTTP while the connect screen is up
+    WebUI::servicePendingSync();   // runs a queued upload (frees heap by dropping the AP)
 
     if (!framed) drawFrame();
     if (millis() - lastSta >= 1000) { drawStatus(); lastSta = millis(); }
