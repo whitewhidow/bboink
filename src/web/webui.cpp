@@ -162,7 +162,7 @@ async function loadCaps(){const el=document.getElementById('capsList');el.innerH
     `<div class="cn">${r.ssid||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;}).join('');
  }catch(e){el.innerHTML='<div class="cb">failed to load</div>';}}
 async function delCap(b,el){if(!confirm('Forget this capture?'))return;
- try{const r=await fetch('/api/captures?bssid='+b,{method:'DELETE'});
+ try{const r=await fetch('/api/del_capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bssid:b})});
   if(r.ok){const row=el&&el.closest('.cap'); if(row)row.remove();}
  }catch(e){}}
 st();setInterval(()=>{if(!document.getElementById('status').hidden)st();},2000);
@@ -390,8 +390,12 @@ static void listCaptures() {
 
 static void deleteCapture() {
     noKeepAlive();
-    if (!server.hasArg("bssid")) { server.send(400, "application/json", "{\"error\":\"bssid required\"}"); return; }
-    uint64_t b = strtoull(server.arg("bssid").c_str(), nullptr, 16);
+    JsonDocument doc;
+    if (deserializeJson(doc, server.arg("plain")) || !doc["bssid"].is<const char*>()) {
+        server.send(400, "application/json", "{\"error\":\"bssid required\"}");
+        return;
+    }
+    uint64_t b = strtoull(doc["bssid"].as<const char*>(), nullptr, 16);
     OinkMode::removeBoarBro(b);   // persists internally
     server.send(200, "application/json", "{\"ok\":true}");
 }
@@ -412,8 +416,8 @@ void begin() {
     server.on("/api/sync/wpasec",   HTTP_POST, syncWpasec);
     server.on("/api/sync/ohc",      HTTP_POST, syncOhc);
     server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
-    server.on("/api/captures", HTTP_GET,    listCaptures);
-    server.on("/api/captures", HTTP_DELETE, deleteCapture);
+    server.on("/api/captures", HTTP_GET,     listCaptures);
+    server.on("/api/del_capture", HTTP_POST, deleteCapture);
     server.on("/", HTTP_GET, sendIndex);
     server.on("/generate_204", HTTP_GET, sendIndex);
     server.on("/hotspot-detect.html", HTTP_GET, sendIndex);
