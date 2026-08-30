@@ -24,6 +24,7 @@ namespace WebUI {
 static WebServer  server(80);
 static DNSServer  dns;
 static bool       up = false;
+static int        g_pendingSync = 0;   // 1 = wpa-sec (AP-drop, HTTP)
 
 // Tabbed SPA: Status + Config. Secrets are write-only (GET returns only presence;
 // the form sends a secret field only when you type a new value). Inlined PROGMEM.
@@ -149,7 +150,8 @@ async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
  try{const r=await fetch('/api/sync/'+svc,{method:'POST'});
   if(!r.ok){const d=await r.json();res.textContent=d.error||'failed';res.style.color='#f87171';}
   else{const d=await r.json();
-   if(d.rebooting){res.textContent='rebooting to upload — rejoin AP in ~15s, see Status';res.style.color='#facc15';}
+   if(d.apdrop){res.textContent='uploading — AP drops ~5s, rejoin then check Status';res.style.color='#facc15';}
+   else if(d.rebooting){res.textContent='rebooting to upload — rejoin AP in ~15s, see Status';res.style.color='#facc15';}
    else{res.textContent=`up ${d.uploaded} skip ${d.skipped} crk ${d.cracked}`;res.style.color=d.ok?'#34d399':'#f87171';}
   }
  }catch(e){res.textContent='rebooting/failed — rejoin & check Status';res.style.color='#facc15';}
@@ -309,15 +311,8 @@ static bool uplinkReady(const char* keyErr, bool hasKey) {
 static void syncWpasec() {
     noKeepAlive();
     if (!uplinkReady("no wpa-sec key", WPASec::hasApiKey())) return;
-    WPASecSyncResult r = WPASec::syncCaptures();   // plain HTTP -> runs in-place, no reboot
-    snprintf(bootSyncResult, sizeof(bootSyncResult),
-             r.success ? "wpa-sec: up %u skip %u crk %u(+%u)" : "wpa-sec ERR",
-             r.uploaded, r.skipped, r.cracked, r.newCracked);
-    char buf[160];
-    snprintf(buf, sizeof(buf),
-        "{\"ok\":%s,\"uploaded\":%u,\"skipped\":%u,\"cracked\":%u,\"new_cracked\":%u}",
-        r.success ? "true" : "false", r.uploaded, r.skipped, r.cracked, r.newCracked);
-    server.send(200, "application/json", buf);
+    g_pendingSync = 1;   // run it from the connect-screen tick with the AP dropped (STA stable)
+    server.send(200, "application/json", "{\"apdrop\":true}");
 }
 static void syncOhc() {
     noKeepAlive();
@@ -505,7 +500,37 @@ void loop() {
     server.handleClient();
 }
 
-void servicePendingSync() { /* sync now runs on reboot (boot_sync) */ }
+void servicePendingSync() {
+    if (g_pendingSync != 1) return;
+    g_pendingSync = 0;
+
+    // Drop the AP (+web+DNS) so the STA has the radio to itself — AP+STA on the C5
+    // drops the uplink under active upload. Plain HTTP, so no heap trick needed.
+    App::clear(); App::centerMsg("wpa-sec sync", TFT_CYAN); App::footer("AP down ~5s - uploading");
+    stop();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+    delay(120);
+    bool sta = NetLink::connectConfigured();
+    if (!sta) {
+        snprintf(bootSyncResult, sizeof(bootSyncResult), "ERR: no uplink (STA didn't connect)");
+    } else {
+        WPASecSyncResult r = WPASec::syncCaptures();
+        if (r.success) snprintf(bootSyncResult, sizeof(bootSyncResult),
+                                "wpa-sec: up %u skip %u crk %u(+%u)", r.uploaded, r.skipped, r.cracked, r.newCracked);
+        else           snprintf(bootSyncResult, sizeof(bootSyncResult), "wpa-sec ERR: %.45s", WPASec::getLastError());
+    }
+    App::clear(); App::centerMsg("SYNC DONE", TFT_GREEN); App::footer(bootSyncResult); delay(1600);
+
+    // Restore AP + web (web first so the page is reachable), STA reconnect in background.
+    WiFi.mode(WIFI_AP_STA);
+    delay(200);
+    WiFi.softAP(ModeManager::apSSID(), ModeManager::apPassword());
+    begin();
+    App::go(App::Screen::CONNECT);
+    const char* us = Config::wifi().otaSSID;
+    if (us && us[0]) WiFi.begin(us, Config::wifi().otaPassword);
+}
 
 bool running() { return up; }
 
