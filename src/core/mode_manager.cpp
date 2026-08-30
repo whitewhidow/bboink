@@ -50,16 +50,19 @@ const char* apPassword() {
 }
 
 // Raise the management SoftAP (WPA2). AP IP defaults to 192.168.4.1.
+static bool apUp = false;
 static void startSoftAP() {
     WiFi.softAP(apSSID(), apPassword());
+    apUp = true;
 }
 
 void enterCapture(bool clearLock) {
     if (clearLock) OinkMode::clearTargetLock();
     markCaptureReady();
     // Drop the web server + management SoftAP; capture needs the radio to itself.
-    WebUI::stop();
-    WiFi.softAPdisconnect(true);
+    // Only touch the AP interface if we actually started one — calling
+    // softAPdisconnect() at boot (no AP netif) faults in hostap_attach on the C5.
+    if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
     WiFi.mode(WIFI_STA);
     mode_ = Mode::CAPTURE;
     // ScreenCapture::enter() releases the boot STA link, disables auto-reconnect
@@ -83,7 +86,11 @@ void enterManagement() {
 
     // MANAGEMENT is AP+STA: the SoftAP hosts the connect screen / web UI, while the
     // STA joins the configured network for cracking sync (topology #1, docs §7.4).
+    // Bring the AP up robustly: the AP_STA netif must be fully created before
+    // softAP() or the C5 faults in hostap_attach (a boot-time race). Give the
+    // stack a solid settle window after the mode switch.
     WiFi.mode(WIFI_AP_STA);
+    delay(250);
     startSoftAP();
     WebUI::begin();          // serve the management page off the SoftAP
 
@@ -131,7 +138,7 @@ void begin() {
     switch (policy) {
         case 1:  goCapture = true;  break;                 // always capture
         case 2:  goCapture = false; break;                 // always management
-        default: goCapture = Config::wifi().captureReady;  // auto: ready -> capture
+        default: goCapture = true;   // auto: boot into CAPTURE (safe; no boot-time SoftAP)
     }
     if (goCapture) { enterCapture(); }
     else {

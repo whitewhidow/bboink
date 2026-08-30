@@ -4,6 +4,13 @@
 #include "../core/config.h"
 #include "../core/net_link.h"
 #include "../modes/oink.h"
+#include "../core/sd_layout.h"
+#include "../core/storage.h"
+#include "wpasec.h"
+#include "ohc.h"
+#include "pwncrack.h"
+#include "cracks.h"
+#include <FS.h>
 #include "version.h"
 #include <WiFi.h>
 #include <WebServer.h>
@@ -37,11 +44,16 @@ border:1px solid #2a3947;background:#0c141c;color:#e6edf3;font:14px system-ui}
 button{margin-top:14px;width:100%;padding:11px;border:0;border-radius:8px;background:#2dd4bf;color:#04211d;
 font-weight:700;font-size:15px;cursor:pointer}#msg{text-align:center;margin-top:8px;font-weight:600}
 h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
+.srow{display:flex;align-items:center;gap:10px;margin:12px 0}.srow>span:first-child{flex:1}
+.sbtn{width:auto;margin:0;padding:8px 14px}.sres{font-size:13px;min-width:70px;text-align:right;color:#8aa0b2}
+.cap{border-bottom:1px solid #1b2530;padding:8px 0}.cap:last-child{border:0}.tag{display:inline-block;font-size:11px;padding:1px 5px;border-radius:4px;margin-right:3px;background:#1b2a36;color:#8aa0b2}.tag.k{background:#134e2e;color:#34d399}.cn{font-weight:600}.cb{color:#6b7d8f;font-size:12px}.del{float:right;background:#3a1720;color:#f87171;border:0;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px}.pw{color:#facc15;font-size:13px}
 </style></head><body>
 <header><h1>BBoink</h1></header>
 <div class="wrap">
 <div class="tabs"><div class="tab on" id="t_status" onclick="show('status')">Status</div>
-<div class="tab" id="t_config" onclick="show('config')">Config</div></div>
+<div class="tab" id="t_config" onclick="show('config')">Config</div>
+<div class="tab" id="t_sync" onclick="show('sync')">Sync</div>
+<div class="tab" id="t_caps" onclick="show('caps')">Captures</div></div>
 
 <div id="status"><div class="card" id="statusCard"><div class="row"><span class="k">loading…</span></div></div></div>
 
@@ -74,13 +86,28 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div class="chk"><input type="checkbox" id="sound"><label style="margin:0">sound</label></div>
 <button onclick="save()">Save</button><div id="msg"></div>
 </div></div>
+
+<div id="sync" hidden><div class="card">
+<h3>Upload captures to crack services</h3>
+<small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
+<div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
+<div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
+<div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
+</div></div>
+
+<div id="caps" hidden><div class="card">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h3 style="margin:0">Capture registry</h3><button class="sbtn" style="width:auto;margin:0" onclick="loadCaps()">Refresh</button></div>
+<small>C captured · M manual · W/O/P uploaded (wpa-sec/OHC/PwnCrack) · K cracked</small>
+<div id="capsList"></div>
+</div></div>
 </div>
 <script>
 const NUM=['ch_hop_ms','lock_ms','atk_rssi','max_tries','burst','jitter','idle_retry_min','brightness'];
 const BOOL=['ntfy_attach','deauth','rnd_mac','cracked_fallback','auto_purge','sound'];
 const SEC=['wifi_pass','wpa_key','ohc_key','pwn_key'];
-function show(w){for(const x of ['status','config']){document.getElementById(x).hidden=(x!=w);
- document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w='config')loadCfg();}
+function show(w){for(const x of ['status','config','sync','caps']){document.getElementById(x).hidden=(x!=w);
+ document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps')loadCaps();}
 async function st(){try{const d=await (await fetch('/api/status')).json();
  const sta=d.sta.connected?`<span class="on2">${d.sta.ssid} (${d.sta.ip})</span>`:'<span class="off2">not connected</span>';
  document.getElementById('statusCard').innerHTML=
@@ -109,6 +136,28 @@ async function save(){const b={wifi_ssid:document.getElementById('wifi_ssid').va
  try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
   if(r.ok){m.textContent='saved ✓';m.style.color='#34d399';for(const s of SEC)document.getElementById(s).value='';loadCfg();}
   else{m.textContent='save failed';m.style.color='#f87171';}}catch(e){m.textContent='save failed';m.style.color='#f87171';}}
+async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
+ btn.disabled=true;res.textContent='syncing…';res.style.color='#8aa0b2';
+ try{const r=await fetch('/api/sync/'+svc,{method:'POST'});const d=await r.json();
+  if(!r.ok){res.textContent=d.error||'failed';res.style.color='#f87171';}
+  else{let t;if(svc=='wpasec')t=`up ${d.uploaded} skip ${d.skipped} crk ${d.cracked}(+${d.new_cracked})`;
+   else if(svc=='ohc')t=`acc ${d.accepted} skip ${d.skipped} rej ${d.rejected}`;
+   else t=`files ${d.files} hash ${d.hashes} crk ${d.cracked}`;
+   res.textContent=t;res.style.color='#34d399';}
+ }catch(e){res.textContent='failed';res.style.color='#f87171';}
+ btn.disabled=false;}
+async function loadCaps(){const el=document.getElementById('capsList');el.innerHTML='<div class="cb">loading…</div>';
+ try{const rows=await (await fetch('/api/captures')).json();
+  if(!rows.length){el.innerHTML='<div class="cb">no captures yet</div>';return;}
+  el.innerHTML=rows.map(r=>{let t='';if(r.captured)t+='<span class="tag">C</span>';if(r.manual)t+='<span class="tag">M</span>';
+   if(r.w)t+='<span class="tag">W</span>';if(r.o)t+='<span class="tag">O</span>';if(r.p)t+='<span class="tag">P</span>';
+   if(r.k)t+='<span class="tag k">K</span>';
+   const pw=r.k&&r.pass?`<div class="pw">pass: ${r.pass}</div>`:'';
+   return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}')">delete</button>`+
+    `<div class="cn">${r.ssid||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;}).join('');
+ }catch(e){el.innerHTML='<div class="cb">failed to load</div>';}}
+async function delCap(b){if(!confirm('Forget this capture?'))return;
+ try{await fetch('/api/captures?bssid='+b,{method:'DELETE'});loadCaps();}catch(e){}}
 st();setInterval(()=>{if(!document.getElementById('status').hidden)st();},2000);
 </script></body></html>)HTML";
 
@@ -217,6 +266,127 @@ static void saveConfig() {
     sendConfig();   // echo the updated config back
 }
 
+static bool uplinkReady(const char* keyErr, bool hasKey) {
+    if (WiFi.status() != WL_CONNECTED) {
+        server.send(400, "application/json", "{\"error\":\"no uplink (set WiFi in Config)\"}");
+        return false;
+    }
+    if (!hasKey) {
+        char b[64]; snprintf(b, sizeof(b), "{\"error\":\"%s\"}", keyErr);
+        server.send(400, "application/json", b);
+        return false;
+    }
+    return true;
+}
+
+static void syncWpasec() {
+    noKeepAlive();
+    if (!uplinkReady("no wpa-sec key", WPASec::hasApiKey())) return;
+    if (!WPASec::canSync()) { server.send(503, "application/json", "{\"error\":\"low heap, retry\"}"); return; }
+    WPASecSyncResult r = WPASec::syncCaptures();
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+        "{\"ok\":%s,\"uploaded\":%u,\"skipped\":%u,\"cracked\":%u,\"new_cracked\":%u}",
+        r.success ? "true" : "false", r.uploaded, r.skipped, r.cracked, r.newCracked);
+    server.send(200, "application/json", buf);
+}
+
+static void syncOhc() {
+    noKeepAlive();
+    if (!uplinkReady("no OHC key", OHC::hasApiKey())) return;
+    OHC::UploadResult r = OHC::uploadHashes();
+    char buf[160];
+    snprintf(buf, sizeof(buf),
+        "{\"ok\":%s,\"accepted\":%u,\"skipped\":%u,\"rejected\":%u,\"hashes\":%u}",
+        r.success ? "true" : "false", r.accepted, r.skipped, r.rejected, r.totalHashes);
+    server.send(200, "application/json", buf);
+}
+
+static void syncPwncrack() {
+    noKeepAlive();
+    if (!uplinkReady("no PwnCrack key", PwnCrack::hasApiKey())) return;
+    int files = 0, hashes = 0;
+    File d = Storage::fs().open(SDLayout::handshakesDir());
+    if (d && d.isDirectory()) {
+        for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+            if (!f.isDirectory()) {
+                const char* n = f.name(); const char* slash = strrchr(n, '/'); if (slash) n = slash + 1;
+                size_t L = strlen(n);
+                if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
+                    PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
+                    if (r.success) { files++; hashes += r.hashes; }
+                }
+            }
+            f.close();
+        }
+        d.close();
+    }
+    char err[48] = {0};
+    int cracked = PwnCrack::syncPotfile(err, sizeof(err));
+    char buf[160];
+    snprintf(buf, sizeof(buf), "{\"ok\":true,\"files\":%d,\"hashes\":%d,\"cracked\":%d}",
+             files, hashes, cracked);
+    server.send(200, "application/json", buf);
+}
+
+static void bssidHex64(uint64_t b, char out[13]) {
+    snprintf(out, 13, "%02X%02X%02X%02X%02X%02X",
+             (uint8_t)(b >> 40), (uint8_t)(b >> 32), (uint8_t)(b >> 24),
+             (uint8_t)(b >> 16), (uint8_t)(b >> 8), (uint8_t)b);
+}
+static void jsonEsc(const char* in, char* out, size_t cap) {
+    size_t o = 0;
+    for (size_t i = 0; in && in[i] && o < cap - 2; i++) {
+        char c = in[i];
+        if (c == '"' || c == '\\') { if (o < cap - 3) out[o++] = '\\'; out[o++] = c; }
+        else if ((uint8_t)c >= 0x20) out[o++] = c;   // drop control chars
+    }
+    out[o] = 0;
+}
+
+static void listCaptures() {
+    noKeepAlive();
+    OinkMode::loadBoarBros();
+    OinkMode::importCapturedFiles();
+    WPASec::loadCache(); OHC::loadUploaded(); PwnCrack::loadUploaded(); PwnCrack::loadCache();
+
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+    server.sendContent("[");
+
+    const OinkMode::BoarBro* list = OinkMode::getExcludedList();
+    int n = OinkMode::getExcludedCount();
+    char hb[13], es[80], ep[80], obj[320];
+    for (int i = 0; i < n; i++) {
+        bssidHex64(list[i].bssid, hb);
+        jsonEsc(list[i].ssid, es, sizeof(es));
+        bool cracked = Cracks::isCracked(hb);
+        jsonEsc(cracked ? Cracks::getPassword(hb) : "", ep, sizeof(ep));
+        snprintf(obj, sizeof(obj),
+            "%s{\"bssid\":\"%s\",\"ssid\":\"%s\",\"captured\":%s,\"manual\":%s,"
+            "\"w\":%s,\"o\":%s,\"p\":%s,\"k\":%s,\"pass\":\"%s\",\"ts\":%lu}",
+            i ? "," : "", hb, es,
+            (list[i].flags & OinkMode::BB_CAPTURED) ? "true" : "false",
+            (list[i].flags & OinkMode::BB_MANUAL) ? "true" : "false",
+            WPASec::isUploaded(hb) ? "true" : "false",
+            OHC::isUploaded(hb) ? "true" : "false",
+            PwnCrack::isUploaded(hb) ? "true" : "false",
+            cracked ? "true" : "false", ep, (unsigned long)list[i].ts);
+        server.sendContent(obj);
+    }
+    server.sendContent("]");
+    server.sendContent("");   // end chunked
+}
+
+static void deleteCapture() {
+    noKeepAlive();
+    if (!server.hasArg("bssid")) { server.send(400, "application/json", "{\"error\":\"bssid required\"}"); return; }
+    uint64_t b = strtoull(server.arg("bssid").c_str(), nullptr, 16);
+    OinkMode::removeBoarBro(b);
+    OinkMode::saveBoarBros();
+    server.send(200, "application/json", "{\"ok\":true}");
+}
+
 static void sendIndex() {
     noKeepAlive();
     server.send_P(200, "text/html", INDEX_HTML);
@@ -230,6 +400,11 @@ void begin() {
     server.on("/api/status", HTTP_GET,  sendStatus);
     server.on("/api/config", HTTP_GET,  sendConfig);
     server.on("/api/config", HTTP_POST, saveConfig);
+    server.on("/api/sync/wpasec",   HTTP_POST, syncWpasec);
+    server.on("/api/sync/ohc",      HTTP_POST, syncOhc);
+    server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
+    server.on("/api/captures", HTTP_GET,    listCaptures);
+    server.on("/api/captures", HTTP_DELETE, deleteCapture);
     server.on("/", HTTP_GET, sendIndex);
     server.on("/generate_204", HTTP_GET, sendIndex);
     server.on("/hotspot-detect.html", HTTP_GET, sendIndex);

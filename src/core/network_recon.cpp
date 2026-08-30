@@ -44,7 +44,7 @@ static std::atomic<bool> busy{false};  // [BUG3 FIX] Atomic for cross-core visib
 static uint8_t reconBand = 0;  // 0=unset, 2=2.4GHz, 5=5GHz
 
 static inline void reconTune(uint8_t ch) {
-#if defined(PORK_BOARD_TDISPLAY_C5)
+#if defined(PORK_CHIP_ESP32C5)
     uint8_t wantBand = (ch >= 36) ? 5 : 2;
     if (wantBand != reconBand) {
         esp_wifi_set_band(wantBand == 5 ? WIFI_BAND_5G : WIFI_BAND_2G);
@@ -59,7 +59,7 @@ static inline void reconTune(uint8_t ch) {
 // discovered even though data packets flow. Request ALL frame types explicitly
 // (this matches the on-device WiFi-capability spike that saw mgmt+data).
 static inline void reconApplyPromiscFilter() {
-#if defined(PORK_BOARD_TDISPLAY_C5)
+#if defined(PORK_CHIP_ESP32C5)
     wifi_promiscuous_filter_t f;
     f.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL;
     esp_wifi_set_promiscuous_filter(&f);
@@ -73,7 +73,7 @@ static bool heapStabilized = false;
 // shrinkDeferCount removed — shrink_to_fit no longer runs during operation
 
 // Channel hop order (most common channels first for faster discovery).
-#if defined(PORK_BOARD_TDISPLAY_C5)
+#if defined(PORK_CHIP_ESP32C5)
 // Dual-band: all 2.4 GHz first, then common 5 GHz UNII channels — grouped so we
 // only cross the 2.4<->5 band boundary twice per full sweep (each crossing does
 // one esp_wifi_set_band). Channels >=36 are auto-tuned to 5 GHz by reconTune().
@@ -101,7 +101,7 @@ static const uint32_t CLIENT_BITMAP_RESET_MS = 30000;
 static uint32_t getHopIntervalMsInternal() {
     uint32_t overrideMs = hopIntervalOverrideMs.load();
     uint32_t interval = overrideMs > 0 ? overrideMs : Config::wifi().channelHopInterval;
-#if defined(PORK_BOARD_TDISPLAY_C5)
+#if defined(PORK_CHIP_ESP32C5)
     // C5: give the radio a little more settle time per channel than the S3, but
     // keep it responsive. (The "found only 2 networks" issue turned out to be
     // reception/antenna, not dwell — this floor is just a sane minimum; raise the

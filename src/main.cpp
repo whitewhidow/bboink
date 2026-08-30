@@ -4,6 +4,11 @@
 #include <M5Cardputer.h>            // shim -> hal/m5compat.h on this board
 #include <WiFi.h>
 #include "core/config.h"
+#if defined(__has_include)
+#  if __has_include("core/dev_secrets.h")
+#    include "core/dev_secrets.h"
+#  endif
+#endif
 #include "core/network_recon.h"
 #include "modes/oink.h"
 #include "app/app.h"
@@ -31,6 +36,15 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     Config::init();                       // load creds (SD; fine before display)
+#if defined(DEV_WIFI_SSID)
+    // DEV: a git-ignored core/dev_secrets.h can pin the uplink creds so they never
+    // need re-entering during development (overrides stored config each boot).
+    if (DEV_WIFI_SSID[0]) {
+        strncpy(Config::wifi().otaSSID,     DEV_WIFI_SSID, sizeof(Config::wifi().otaSSID) - 1);
+        strncpy(Config::wifi().otaPassword, DEV_WIFI_PASS, sizeof(Config::wifi().otaPassword) - 1);
+        Serial.println("[DEV] uplink creds overridden from dev_secrets.h");
+    }
+#endif
     const char* ssid = Config::wifi().otaSSID;
     if (ssid && ssid[0]) {
 #if PORK_LED_COUNT > 0

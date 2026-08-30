@@ -205,5 +205,19 @@
 #endif
 // ---------------------------------------------------------------------------
 
+// Both C5 boards (T-Display C5 + Waveshare C5-LCD) are the dual-band ESP32-C5 and
+// share the same capture path (band-switching, promiscuous filter mask, dual-band
+// channel hop list, dwell floor). Chip-level code gates on this, NOT on a single
+// board macro — otherwise a new C5 board silently runs the S3 capture path and
+// never captures DATA/EAPOL frames.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#define PORK_CHIP_ESP32C5
+#endif
+// Full dual-band capture (2.4 + 5 GHz via esp_wifi_set_band) on all C5 boards.
+// (The earlier boot crash was an AP-interface-at-boot bug, not set_band.)
+#if defined(PORK_CHIP_ESP32C5)
+#define PORK_C5_DUAL_BAND
+#endif
+
 // Derived main content height — common to all boards.
 #define PORK_MAIN_H (PORK_DISPLAY_H - PORK_TOP_BAR_H - PORK_BOTTOM_BAR_H)
