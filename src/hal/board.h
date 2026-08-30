@@ -11,7 +11,7 @@
 #pragma once
 
 #if !defined(PORK_BOARD_CARDPUTER) && !defined(PORK_BOARD_TEMBED_CC1101) && \
-    !defined(PORK_BOARD_TDISPLAY_C5)
+    !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD)
 // Default to the original board so legacy builds are unaffected.
 #define PORK_BOARD_CARDPUTER
 #endif
@@ -160,6 +160,47 @@
 #define PORK_TP_INT         27
 #define PORK_TP_RST         24
 #define PORK_TP_ADDR        0x15
+
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
+// ---------------------------------------------------------------------------
+// Waveshare ESP32-C5-LCD-1.47 (ESP32-C5, 4MB flash). Dual-band WiFi 6.
+// Display: ST7789 172x320 native IPS, driven landscape as 320x172. ONE usable
+// button (BOOT = GPIO28; the second physical button is RESET = chip-enable, not
+// a readable GPIO). Onboard WS2812 (GPIO8) + microSD (shares the LCD SPI bus).
+// NO speaker, NO touch, NO PMU/battery. Pins verified from the Waveshare BSP
+// (waveshareteam/esp32-c5-lcd-1.47) + board schematic. See
+// docs/DESIGN-mode-webui.md (single-button = mode toggle; management via web UI).
+
+#define PORK_DISPLAY_W      320
+#define PORK_DISPLAY_H      172
+#define PORK_TOP_BAR_H      18
+#define PORK_BOTTOM_BAR_H   18
+
+// Display (ST7789) on SPI2_HOST. No MISO wired to the panel; the SD's MISO
+// (GPIO5) lives on the same bus with its own CS.
+#define PORK_TFT_SCLK       7
+#define PORK_TFT_MOSI       6
+#define PORK_TFT_MISO       -1
+#define PORK_TFT_CS         23
+#define PORK_TFT_DC         24
+#define PORK_TFT_RST        26
+#define PORK_TFT_BL         10   // backlight (PWM), driven by LovyanGFX Light_PWM
+
+// Onboard WS2812 status LED (single).
+#define PORK_LED_PIN        8
+#define PORK_LED_COUNT      1
+
+// microSD shares the display SPI bus (SCLK 7 / MOSI 6) with its own MISO + CS.
+// bus_shared=true in the LGFX profile so LovyanGFX releases the bus for SD I/O.
+#define PORK_SD_SCK         7
+#define PORK_SD_MISO        5
+#define PORK_SD_MOSI        6
+#define PORK_SD_CS          4
+
+// Single usable button: BOOT on GPIO28. Tap = CAPTURE<->MANAGEMENT toggle,
+// long-press = power off (see hal/m5compat.cpp Waveshare input backend).
+#define PORK_ENC_KEY        28   // the one button (also the C5 boot strap pin)
+#define PORK_BTN_BACK       28   // same physical button (no second input)
 
 #endif
 // ---------------------------------------------------------------------------

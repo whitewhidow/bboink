@@ -346,6 +346,11 @@ static void ensureSdSpiReady() {
     pinMode(PORK_CC1101_CS, OUTPUT); digitalWrite(PORK_CC1101_CS, HIGH);  // radio
     pinMode(PORK_TFT_CS,    OUTPUT); digitalWrite(PORK_TFT_CS,    HIGH);  // display
 #endif
+#ifdef PORK_BOARD_WAVESHARE_C5_LCD
+    // Waveshare C5-LCD: the SD shares the display SPI bus (SCLK 7 / MOSI 6). Park
+    // the ST7789 CS HIGH so it releases the shared MISO/bus during SD access.
+    pinMode(PORK_TFT_CS, OUTPUT); digitalWrite(PORK_TFT_CS, HIGH);
+#endif
 
     // SCK, MISO, MOSI, SS/CS
     sdSPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);

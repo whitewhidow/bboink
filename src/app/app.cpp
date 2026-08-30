@@ -149,7 +149,11 @@ void powerOff() {
     footer("press any button to wake");
     delay(1000);
     M5.Display.setBrightness(0);
-#if defined(PORK_BOARD_TDISPLAY_C5)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    // Single button: BOOT on GPIO28 (active-low). Wake on its press.
+    rtc_gpio_pullup_en(GPIO_NUM_28);  rtc_gpio_pulldown_dis(GPIO_NUM_28);
+    esp_sleep_enable_ext1_wakeup((1ULL << 28), ESP_EXT1_WAKEUP_ANY_LOW);
+#elif defined(PORK_BOARD_TDISPLAY_C5)
     // Buttons: GPIO0 (BOOT) + GPIO28. UNVERIFIED: confirm both are RTC/LP-IO wake
     // capable on the C5; if not, fall back to a timer or the hardware PWR button.
     rtc_gpio_pullup_en(GPIO_NUM_0);   rtc_gpio_pulldown_dis(GPIO_NUM_0);

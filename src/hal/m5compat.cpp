@@ -1,6 +1,6 @@
 // hal/m5compat.cpp — implementation of the T-Embed / T-Display C5 compat facade.
 #include "m5compat.h"
-#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5)
+#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
 
 #include "board.h"
 #if defined(PORK_BOARD_TEMBED_CC1101)
@@ -221,6 +221,47 @@ void inputPoll() {
 
 void ledInit() { /* no LED on this board — no-op */ }
 
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
+// ===========================================================================
+// Waveshare ESP32-C5-LCD-1.47 input: ONE button (BOOT = GPIO28).
+//   tap (release < 1.5s)  -> vkey.toggle      (CAPTURE <-> MANAGEMENT)
+//   hold >= 3s            -> vkey.backLongPress (power off, fires while held)
+// There is no second input; on-device menu navigation is intentionally not
+// possible here — management happens over the web UI. See docs/DESIGN-mode-webui.md.
+// ===========================================================================
+static bool ready = false;
+
+void inputInit() {
+    if (ready) return;
+    pinMode(PORK_ENC_KEY, INPUT_PULLUP);   // GPIO28, active-low
+    ready = true;
+}
+
+void inputPoll() {
+    if (!ready) inputInit();
+    VKey v;  // all-false
+
+    static bool     last     = HIGH;  // last raw level (HIGH = released)
+    static uint32_t downAt   = 0;
+    static bool     longFired = false;
+
+    bool raw = digitalRead(PORK_ENC_KEY);   // LOW = pressed
+    if (last == HIGH && raw == LOW) {        // press edge
+        downAt = millis();
+        longFired = false;
+    } else if (raw == LOW && !longFired && millis() - downAt >= 3000) {
+        v.backLongPress = true; v.changed = true; longFired = true;   // power off
+    } else if (last == LOW && raw == HIGH) { // release edge
+        uint32_t held = millis() - downAt;
+        if (!longFired && held > 25 && held < 1500) { v.toggle = true; v.changed = true; }  // tap
+    }
+    last = raw;
+
+    vkey = v;
+}
+
+void ledInit() { /* WS2812 on GPIO8 — neopixelWrite() inits the RMT lazily */ }
+
 #endif // input backend
 
 } // namespace porkhal
@@ -232,8 +273,8 @@ void ledInit() { /* no LED on this board — no-op */ }
 // ---------------------------------------------------------------------------
 #include "../core/config.h"
 
-#if defined(PORK_BOARD_TDISPLAY_C5)
-// No I2S speaker on the T-Display C5 — tone is a no-op.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+// No I2S speaker on the C5 boards — tone is a no-op.
 void SpeakerFacade::tone(uint16_t /*freq*/, uint32_t /*durationMs*/) {}
 #else
 #include <driver/i2s.h>
@@ -446,10 +487,10 @@ Keyboard_Class::KeysState Keyboard_Class::keysState() const {
 // PowerFacade
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-#if defined(PORK_BOARD_TDISPLAY_C5)
-// T-Display C5: AXP2602 PMU present but its register/address map is UNVERIFIED
-// (no hardware). Stub the fuel gauge to a safe 100% / 4.0V until confirmed.
-// TODO(hardware): read state-of-charge / voltage from the AXP2602 over I2C.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+// C5 boards: T-Display C5 has an AXP2602 PMU (register map UNVERIFIED); the
+// Waveshare C5-LCD has no battery/PMU at all (USB powered). Stub the fuel gauge
+// to a safe 100% / 4.0V. TODO(hardware): read SoC/voltage on boards that have it.
 int PowerFacade::getBatteryLevel()   { return 100; }
 int PowerFacade::getBatteryVoltage() { return 4000; }
 #else

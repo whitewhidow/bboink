@@ -1,0 +1,11 @@
+# Waveshare ESP32-C5-LCD-1.47 — 4MB flash, single-app bring-up layout.
+# (Dual A/B OTA per docs/DESIGN-mode-webui.md §8.2 lands with the OTA milestone.)
+# Two "spiffs"-subtype partitions by label: "spiffs" (SPIFFS, config blob) and
+# "littlefs" (LittleFS, capture fallback) — matches core/config.cpp mounts.
+# Name,     Type, SubType,  Offset,   Size,     Flags
+nvs,        data, nvs,      0x9000,   0x5000,
+otadata,    data, ota,      0xe000,   0x2000,
+app0,       app,  ota_0,    0x10000,  0x1E0000,
+spiffs,     data, spiffs,   0x1F0000, 0x10000,
+littlefs,   data, spiffs,   0x200000, 0x1F0000,
+coredump,   data, coredump, 0x3F0000, 0x10000,
