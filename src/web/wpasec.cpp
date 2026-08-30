@@ -592,45 +592,16 @@ WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
         cb("prepping heap", 0, 0);
     }
     
-    // Proactive heap conditioning - condition early when heap is marginal
-    // This prevents fragmentation from getting critical before TLS attempts
-    HeapGates::TlsGateStatus tls = HeapGates::checkTlsGates();
-    if (HeapGates::shouldProactivelyCondition(tls)) {
-        if (cb) {
-            cb("OPTIMIZING HEAP", 0, 0);
-        }
-        Serial.printf("[WPASEC] Proactive conditioning: %u < %u threshold\n",
-                      (unsigned int)tls.largestBlock,
-                      (unsigned int)HeapPolicy::kProactiveTlsConditioning);
-        WiFiUtils::conditionHeapForTLS();
-    }
-    
-    // Check if heap is sufficient for TLS operations
+    // wpa-sec uploads over plain HTTP now — do NOT run any TLS heap conditioning.
+    // WiFiUtils::conditionHeapForTLS() reworks the WiFi/promiscuous state and was
+    // dropping the STA uplink ("uplink gone"). Just a modest free-heap check.
     if (!canSync()) {
-        // Heap insufficient - try "OINK bounce" conditioning
-        // This reclaims BLE memory and coalesces fragmented heap blocks
-        if (cb) {
-            cb("CONDITIONING HEAP", 0, 0);
-        }
-        Serial.println("[WPASEC] Heap insufficient, attempting conditioning...");
-        
-        size_t largestAfter = WiFiUtils::conditionHeapForTLS();
-        
-        // Check again after conditioning
-        if (!canSync()) {
-            // Still insufficient - notify user via speech balloon
-            Mood::setStatusMessage("HEAP TIGHT - TRY OINK");
-            snprintf(result.error, sizeof(result.error), 
-                     "%s (TRY OINK)", lastError);
-            if (wasReconRunning) NetworkRecon::resume();
-            busy = false;
-            return result;
-        }
-        
-        Serial.printf("[WPASEC] Conditioning successful: largest=%u\n", 
-                      (unsigned int)largestAfter);
+        strncpy(result.error, lastError, sizeof(result.error) - 1);
+        if (wasReconRunning) NetworkRecon::resume();
+        busy = false;
+        return result;
     }
-    
+
     // Collect files to upload from handshakes directory
     if (cb) {
         cb("scanning caps", 0, 0);
