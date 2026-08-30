@@ -8,6 +8,7 @@
 #include "../app/app.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_mac.h>
 
 namespace ModeManager {
 
@@ -36,7 +37,8 @@ const char* apSSID() {
     if (Config::wifi().apSSID[0]) return Config::wifi().apSSID;   // user override
     static char s[24] = {0};
     if (!s[0]) {
-        uint8_t m[6]; WiFi.macAddress(m);
+        uint8_t m[6];
+        esp_efuse_mac_get_default(m);   // burned-in MAC — stable across boots + Rnd MAC
         snprintf(s, sizeof(s), "BBoink-%02X%02X", m[4], m[5]);
     }
     return s;
