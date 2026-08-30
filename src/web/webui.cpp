@@ -358,30 +358,28 @@ static void jsonEsc(const char* in, char* out, size_t cap) {
 static void listCaptures() {
     noKeepAlive();
     OinkMode::loadBoarBros();
-    WPASec::loadCache(); OHC::loadUploaded(); PwnCrack::loadUploaded(); PwnCrack::loadCache();
-
+    // NOTE: deliberately NOT loading the wpa-sec/OHC/PwnCrack potfile caches here —
+    // in MANAGEMENT mode (AP+STA+web+DNS all up) heap is very tight, and pulling those
+    // potfiles into RAM was leaving too little for the next request, wedging the server
+    // (page unreachable after a delete). List the registry only; upload/crack tags come
+    // back once the caches can be loaded lazily/safely.
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200, "application/json", "");
     server.sendContent("[");
 
     const OinkMode::BoarBro* list = OinkMode::getExcludedList();
     int n = OinkMode::getExcludedCount();
-    char hb[13], es[80], ep[80], obj[320];
+    char hb[13], es[80], obj[220];
     for (int i = 0; i < n; i++) {
         bssidHex64(list[i].bssid, hb);
         jsonEsc(list[i].ssid, es, sizeof(es));
-        bool cracked = Cracks::isCracked(hb);
-        jsonEsc(cracked ? Cracks::getPassword(hb) : "", ep, sizeof(ep));
         snprintf(obj, sizeof(obj),
             "%s{\"bssid\":\"%s\",\"ssid\":\"%s\",\"captured\":%s,\"manual\":%s,"
-            "\"w\":%s,\"o\":%s,\"p\":%s,\"k\":%s,\"pass\":\"%s\",\"ts\":%lu}",
+            "\"w\":false,\"o\":false,\"p\":false,\"k\":false,\"pass\":\"\",\"ts\":%lu}",
             i ? "," : "", hb, es,
             (list[i].flags & OinkMode::BB_CAPTURED) ? "true" : "false",
             (list[i].flags & OinkMode::BB_MANUAL) ? "true" : "false",
-            WPASec::isUploaded(hb) ? "true" : "false",
-            OHC::isUploaded(hb) ? "true" : "false",
-            PwnCrack::isUploaded(hb) ? "true" : "false",
-            cracked ? "true" : "false", ep, (unsigned long)list[i].ts);
+            (unsigned long)list[i].ts);
         server.sendContent(obj);
     }
     server.sendContent("]");
