@@ -80,7 +80,9 @@ static bool heapStabilized = false;
 // one esp_wifi_set_band). Channels >=36 are auto-tuned to 5 GHz by reconTune().
 static const uint8_t CHANNEL_HOP_ORDER[] = {
     1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13,          // 2.4 GHz
-    36, 40, 44, 48, 149, 153, 157, 161                   // 5 GHz (UNII-1 + UNII-3)
+#if defined(PORK_C5_5GHZ)
+    36, 40, 44, 48, 149, 153, 157, 161,                  // 5 GHz (UNII-1 + UNII-3)
+#endif
 };
 #else
 static const uint8_t CHANNEL_HOP_ORDER[RECON_CHANNEL_COUNT] = {

@@ -213,10 +213,12 @@
 #if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
 #define PORK_CHIP_ESP32C5
 #endif
-// Full dual-band capture (2.4 + 5 GHz via esp_wifi_set_band) on all C5 boards.
-// (The earlier boot crash was an AP-interface-at-boot bug, not set_band.)
-#if defined(PORK_CHIP_ESP32C5)
-#define PORK_C5_DUAL_BAND
+// C5 capture path is 2.4 GHz for all C5 boards. 5 GHz (set_band to 5G + the UNII
+// hop channels) needs regulatory/country config for reception and is currently
+// only enabled on the verified T-Display C5 — the Waveshare stays 2.4 GHz until
+// 5 GHz reception (esp_wifi_set_country) and the 5 GHz-hop reboot are sorted.
+#if defined(PORK_BOARD_TDISPLAY_C5)
+#define PORK_C5_5GHZ
 #endif
 
 // Derived main content height — common to all boards.
