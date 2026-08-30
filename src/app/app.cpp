@@ -142,6 +142,7 @@ void go(Screen s) {
         case Screen::PWNCRACK:ScreenPwnCrack::enter();break;
         case Screen::OPTIONS: ScreenOptions::enter(); break;
         case Screen::CONFIGAP:ScreenConfigAP::enter();break;
+        case Screen::CONNECT: ScreenConnect::enter(); break;
     }
 }
 
@@ -169,6 +170,9 @@ void powerOff() {
     M5.Display.wakeup();
     M5.Display.setBrightness(Config::wifi().displayBrightness);
     go(screen);                                  // re-enter current screen -> redraw (+ re-arm capture)
+    // TODO(waveshare): tap-to-wake from light sleep NOT working on-device yet —
+    // GPIO wakeup on GPIO28 doesn't resume; investigate (pin hold/pullup during
+    // sleep, USB-CDC keeping the CPU up, or display wake). Deferred.
     return;
 #elif defined(PORK_BOARD_TDISPLAY_C5)
     // Buttons: GPIO0 (BOOT) + GPIO28. UNVERIFIED: confirm both are RTC/LP-IO wake
@@ -216,6 +220,7 @@ void tick() {
         case Screen::PWNCRACK:ScreenPwnCrack::tick(in);break;
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
         case Screen::CONFIGAP:ScreenConfigAP::tick(in);break;
+        case Screen::CONNECT: ScreenConnect::tick(in); break;
     }
 }
 

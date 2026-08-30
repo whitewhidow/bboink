@@ -42,4 +42,9 @@ void toggle();
 
 bool captureReady();            // has the device been provisioned for capture?
 
+// SoftAP identity for MANAGEMENT mode (stable, MAC-derived). Used by the connect
+// screen (SSID/password + WiFi-join QR) and the AP bring-up.
+const char* apSSID();
+const char* apPassword();
+
 } // namespace ModeManager

@@ -28,9 +28,37 @@ static void markCaptureReady() {
     Config::save();
 }
 
+// SoftAP identity, derived once from the STA MAC so it's stable per device.
+// WPA2 requires >= 8 chars; the password below is 10. (Per-device, shown on the
+// connect screen; a user-set override can come later.)
+const char* apSSID() {
+    static char s[24] = {0};
+    if (!s[0]) {
+        uint8_t m[6]; WiFi.macAddress(m);
+        snprintf(s, sizeof(s), "BBoink-%02X%02X", m[4], m[5]);
+    }
+    return s;
+}
+const char* apPassword() {
+    static char p[24] = {0};
+    if (!p[0]) {
+        uint8_t m[6]; WiFi.macAddress(m);
+        snprintf(p, sizeof(p), "oink%02X%02X%02X", m[3], m[4], m[5]);
+    }
+    return p;
+}
+
+// Raise the management SoftAP (WPA2). AP IP defaults to 192.168.4.1.
+static void startSoftAP() {
+    WiFi.softAP(apSSID(), apPassword());
+}
+
 void enterCapture(bool clearLock) {
     if (clearLock) OinkMode::clearTargetLock();
     markCaptureReady();
+    // Drop the management SoftAP; capture needs the radio to itself (promiscuous).
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
     mode_ = Mode::CAPTURE;
     // ScreenCapture::enter() releases the boot STA link, disables auto-reconnect
     // and calls OinkMode::start() (promiscuous). Kept there so a direct
@@ -39,52 +67,53 @@ void enterCapture(bool clearLock) {
 }
 
 void enterManagement() {
-    // Only tear the radio back down if we're actually leaving capture; a boot or
-    // menu-side entry has no promiscuous session to unwind.
-    if (mode_ == Mode::CAPTURE) {
-        // The per-network session list (OinkMode::getSessionCapture*) survives
-        // stop() — only start() clears it — so it's safe to read after stop().
-        bool wantNtfy = (OinkMode::getSessionCaptureCount() > 0) && Ntfy::enabled();
+    const bool leavingCapture = (mode_ == Mode::CAPTURE);
+    // The per-network session list (OinkMode::getSessionCapture*) survives stop()
+    // — only start() clears it — so it's safe to read after stop() below.
+    const bool wantNtfy = leavingCapture &&
+                          (OinkMode::getSessionCaptureCount() > 0) && Ntfy::enabled();
 
+    if (leavingCapture) {
         OinkMode::stop();
-        // Capture left WiFi promiscuous/disconnected. Restore the STA uplink on
-        // the still-initialised driver (a fresh init post-display would fail) —
-        // needed for sync and the ntfy push below.
-        esp_wifi_set_promiscuous(false);
-        WiFi.setAutoReconnect(true);
+        esp_wifi_set_promiscuous(false);   // capture left the radio in promiscuous
+    }
+    WiFi.setAutoReconnect(true);
 
-        const char* ssid = Config::wifi().otaSSID;
-        bool linked = false;
-        if (ssid && ssid[0]) {
-            App::clear();
-            App::centerMsg("reconnecting wifi", TFT_CYAN);
-            linked = NetLink::connectConfigured();   // robust ~15s reconnect
-        }
+    // MANAGEMENT is AP+STA: the SoftAP hosts the connect screen / web UI, while the
+    // STA joins the configured network for cracking sync (topology #1, docs §7.4).
+    WiFi.mode(WIFI_AP_STA);
+    startSoftAP();
 
-        // One ntfy alert PER captured network (both .pcap + .22000 attached when
-        // Ntfy File is on). Can't send mid-capture (promiscuous drops STA), so do
-        // it here on the way out. Always report the outcome.
-        if (wantNtfy) {
-            if (linked) {
-                int nsc = OinkMode::getSessionCaptureCount();
-                int sent = 0;
-                for (int i = 0; i < nsc; i++) {
-                    char l[40]; snprintf(l, sizeof(l), "notifying %d/%d...", i + 1, nsc);
-                    App::clear(); App::centerMsg(l, TFT_CYAN);
-                    if (Ntfy::sendCaptureFor(OinkMode::getSessionCaptureSSID(i),
-                                             OinkMode::getSessionCaptureBssid(i))) sent++;
-                }
-                char l[40]; snprintf(l, sizeof(l), "ntfy sent %d/%d", sent, nsc);
-                App::clear(); App::centerMsg(l, sent ? TFT_GREEN : TFT_RED);
-            } else {
-                App::clear(); App::centerMsg("ntfy: no wifi", TFT_YELLOW);
+    const char* ssid = Config::wifi().otaSSID;
+    bool linked = false;
+    if (ssid && ssid[0]) {
+        App::clear();
+        App::centerMsg("connecting wifi", TFT_CYAN);
+        linked = NetLink::connectConfigured();   // reconnect on the running driver
+    }
+
+    // One ntfy alert PER captured network on the way out of capture (both .pcap +
+    // .22000 when Ntfy File is on) — can't send mid-capture (promiscuous drops STA).
+    if (wantNtfy) {
+        if (linked) {
+            int nsc = OinkMode::getSessionCaptureCount();
+            int sent = 0;
+            for (int i = 0; i < nsc; i++) {
+                char l[40]; snprintf(l, sizeof(l), "notifying %d/%d...", i + 1, nsc);
+                App::clear(); App::centerMsg(l, TFT_CYAN);
+                if (Ntfy::sendCaptureFor(OinkMode::getSessionCaptureSSID(i),
+                                         OinkMode::getSessionCaptureBssid(i))) sent++;
             }
-            delay(1200);
+            char l[40]; snprintf(l, sizeof(l), "ntfy sent %d/%d", sent, nsc);
+            App::clear(); App::centerMsg(l, sent ? TFT_GREEN : TFT_RED);
+        } else {
+            App::clear(); App::centerMsg("ntfy: no wifi", TFT_YELLOW);
         }
+        delay(1200);
     }
 
     mode_ = Mode::MANAGEMENT;
-    App::go(App::Screen::MENU);   // the management surface (web UI replaces it later)
+    App::go(App::Screen::CONNECT);   // SSID/IP/QR + STA status (web UI serves off this AP later)
 }
 
 void toggle() {
@@ -101,8 +130,12 @@ void begin() {
         case 2:  goCapture = false; break;                 // always management
         default: goCapture = Config::wifi().captureReady;  // auto: ready -> capture
     }
-    if (goCapture) enterCapture();
-    else { mode_ = Mode::MANAGEMENT; App::go(App::Screen::MENU); }
+    if (goCapture) { enterCapture(); }
+    else {
+        // mode_ starts MANAGEMENT, so enterManagement() skips the capture-teardown
+        // path and just raises AP+STA and shows the connect screen.
+        enterManagement();
+    }
 }
 
 } // namespace ModeManager
