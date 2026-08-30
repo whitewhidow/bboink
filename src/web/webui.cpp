@@ -311,8 +311,8 @@ static bool uplinkReady(const char* keyErr, bool hasKey) {
 static void syncWpasec() {
     noKeepAlive();
     if (!uplinkReady("no wpa-sec key", WPASec::hasApiKey())) return;
-    g_pendingSync = 1;   // run it from the connect-screen tick with the AP dropped (STA stable)
-    server.send(200, "application/json", "{\"apdrop\":true}");
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestBootSync(1);   // HTTPS upload needs a clean/unfragmented heap -> reboot-to-sync
 }
 static void syncOhc() {
     noKeepAlive();
@@ -500,37 +500,7 @@ void loop() {
     server.handleClient();
 }
 
-void servicePendingSync() {
-    if (g_pendingSync != 1) return;
-    g_pendingSync = 0;
-
-    // Drop the AP (+web+DNS) so the STA has the radio to itself — AP+STA on the C5
-    // drops the uplink under active upload. Plain HTTP, so no heap trick needed.
-    App::clear(); App::centerMsg("wpa-sec sync", TFT_CYAN); App::footer("AP down ~5s - uploading");
-    stop();
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_STA);
-    delay(120);
-    bool sta = NetLink::connectConfigured();
-    if (!sta) {
-        snprintf(bootSyncResult, sizeof(bootSyncResult), "ERR: no uplink (STA didn't connect)");
-    } else {
-        WPASecSyncResult r = WPASec::syncCaptures();
-        if (r.success) snprintf(bootSyncResult, sizeof(bootSyncResult),
-                                "wpa-sec: up %u skip %u crk %u(+%u)", r.uploaded, r.skipped, r.cracked, r.newCracked);
-        else           snprintf(bootSyncResult, sizeof(bootSyncResult), "wpa-sec ERR: %.45s", WPASec::getLastError());
-    }
-    App::clear(); App::centerMsg("SYNC DONE", TFT_GREEN); App::footer(bootSyncResult); delay(1600);
-
-    // Restore AP + web (web first so the page is reachable), STA reconnect in background.
-    WiFi.mode(WIFI_AP_STA);
-    delay(200);
-    WiFi.softAP(ModeManager::apSSID(), ModeManager::apPassword());
-    begin();
-    App::go(App::Screen::CONNECT);
-    const char* us = Config::wifi().otaSSID;
-    if (us && us[0]) WiFi.begin(us, Config::wifi().otaPassword);
-}
+void servicePendingSync() { /* board-side sync now runs on reboot (boot_sync) */ }
 
 bool running() { return up; }
 

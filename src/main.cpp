@@ -33,7 +33,7 @@ static void runBootSyncIfQueued() {
     bootSyncMagic = 0; bootSyncReq = 0;   // consume (don't loop on the next reboot)
 
     App::clear();
-    App::centerMsg(svc == 2 ? "SYNC: OHC" : "SYNC: PwnCrack", TFT_CYAN);
+    App::centerMsg(svc == 1 ? "SYNC: wpa-sec" : (svc == 2 ? "SYNC: OHC" : "SYNC: PwnCrack"), TFT_CYAN);
     App::footer("uploading - do not unplug");
 
     if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();

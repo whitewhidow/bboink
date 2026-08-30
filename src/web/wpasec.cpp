@@ -17,7 +17,7 @@
 
 // WPA-SEC API
 static const char* WPASEC_HOST = "wpa-sec.stanev.org";
-static const uint16_t WPASEC_PORT = 80;    // plain HTTP (no TLS) so it syncs in-place without the ~35KB-contiguous heap TLS needs
+static const uint16_t WPASEC_PORT = 443;   // HTTPS (wpa-sec redirects HTTP->HTTPS); synced via reboot-to-sync (clean heap)
 static const char* WPASEC_UPLOAD_PATH = "/";
 static const char* WPASEC_POTFILE_PATH = "/?api&dl=1";
 static const size_t WPASEC_MAX_CACHE_ENTRIES = 500;
@@ -306,12 +306,9 @@ bool WPASec::hasApiKey() {
 }
 
 bool WPASec::canSync() {
-    // wpa-sec uploads over plain HTTP now (no TLS) — a modest free-heap check is
-    // enough; no large contiguous block required. (in-place, no reboot)
     freeCacheMemory();
-    size_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < 15000) { snprintf(lastError, sizeof(lastError), "LOW HEAP %u", (unsigned)freeHeap); return false; }
-    return true;
+    HeapGates::TlsGateStatus tls = HeapGates::checkTlsGates();
+    return HeapGates::canTls(tls, lastError, sizeof(lastError));
 }
 bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     if (!filepath || !bssid) return false;
@@ -335,7 +332,8 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     const char* filename = strrchr(filepath, '/');
     filename = filename ? filename + 1 : filepath;
     
-    WiFiClient client;   // plain HTTP
+    WiFiClientSecure client;
+    client.setInsecure();
     
     // Connect with timeout
     Serial.printf("[WPASEC] Connecting to %s:%d\n", WPASEC_HOST, WPASEC_PORT);
@@ -440,7 +438,8 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     
     Serial.println("[WPASEC] Downloading potfile...");
     
-    WiFiClient client;   // plain HTTP
+    WiFiClientSecure client;
+    client.setInsecure();
     
     if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
         snprintf(lastError, sizeof(lastError), "POTFILE HTTP FAILED");
