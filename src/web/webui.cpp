@@ -161,7 +161,7 @@ async function loadCaps(){const el=document.getElementById('capsList');el.innerH
    return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}',this)">delete</button>`+
     `<div class="cn">${r.ssid||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;}).join('');
  }catch(e){el.innerHTML='<div class="cb">failed to load</div>';}}
-async function delCap(b,el){if(!confirm('Forget this capture?'))return;
+async function delCap(b,el){if(!confirm('Delete this capture (removes saved files, re-enables attack)?'))return;
  try{const r=await fetch('/api/del_capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bssid:b})});
   if(r.ok){const row=el&&el.closest('.cap'); if(row)row.remove();}
  }catch(e){}}
@@ -393,8 +393,31 @@ static void deleteCapture() {
         server.send(400, "application/json", "{\"error\":\"bssid required\"}");
         return;
     }
-    uint64_t b = strtoull(doc["bssid"].as<const char*>(), nullptr, 16);
-    OinkMode::removeBoarBro(b);   // persists internally
+    const char* bhex = doc["bssid"].as<const char*>();
+    uint64_t b = strtoull(bhex, nullptr, 16);
+    OinkMode::removeBoarBro(b);   // registry entry (persists)
+
+    // Also delete the on-disk capture files for this BSSID — otherwise
+    // importCapturedFiles() re-adds it to the exclusion registry on the next
+    // capture start (so the network would never be attacked again). Heap-light
+    // (fixed char buffers, capped count).
+    const char* dir = SDLayout::handshakesDir();
+    File d = Storage::fs().open(dir);
+    if (d && d.isDirectory()) {
+        char paths[8][100]; int nd = 0;
+        for (File f = d.openNextFile(); f && nd < 8; f = d.openNextFile()) {
+            if (!f.isDirectory()) {
+                const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
+                char fb[13];
+                if (SDLayout::captureBssid(n, fb) && strcasecmp(fb, bhex) == 0) {
+                    snprintf(paths[nd], sizeof(paths[nd]), "%s/%s", dir, n); nd++;
+                }
+            }
+            f.close();
+        }
+        d.close();
+        for (int i = 0; i < nd; i++) Storage::fs().remove(paths[i]);
+    }
     server.send(200, "application/json", "{\"ok\":true}");
 }
 
