@@ -45,7 +45,7 @@ static bool littlefsAvailable = false;
 
 // ---- Binary config blob (zero heap allocation) ----
 static constexpr uint32_t CONFIG_MAGIC   = 0x504F524B;  // 'PORK'
-static constexpr uint16_t CONFIG_VERSION = 3;   // v3: bootModePolicy + captureReady
+static constexpr uint16_t CONFIG_VERSION = 4;   // v4: pmkidEnabled + apSSID
 #define CONFIG_BIN_FILE "/porkchop.dat"
 
 static const char* configBinPathSD() {
@@ -121,6 +121,8 @@ struct __attribute__((packed)) ConfigBlob {
     // v3 fields (appended; old/shorter blobs read these as 0 -> sane defaults).
     uint8_t  bootModePolicy;      // 0 (old blob) -> auto
     uint8_t  captureReady;        // 0 (old blob) -> false
+    uint8_t  pmkidCapture;        // 0(old)/1 -> on, 2 -> off
+    char     apSSID[24];          // empty -> MAC-derived default
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -157,6 +159,8 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     strncpy(b.pwncrackKey, wifi.pwncrackKey, sizeof(b.pwncrackKey) - 1);
     b.bootModePolicy       = wifi.bootModePolicy;
     b.captureReady         = wifi.captureReady ? 1 : 0;
+    b.pmkidCapture         = wifi.pmkidEnabled ? 1 : 2;
+    strncpy(b.apSSID, wifi.apSSID, sizeof(b.apSSID) - 1);
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
     strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
@@ -252,6 +256,8 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     strncpy(wifi.pwncrackKey, b.pwncrackKey, sizeof(wifi.pwncrackKey) - 1); wifi.pwncrackKey[sizeof(wifi.pwncrackKey) - 1] = '\0';
     wifi.bootModePolicy       = b.bootModePolicy;          // 0 = auto
     wifi.captureReady         = b.captureReady != 0;       // 0 = old blob -> false
+    wifi.pmkidEnabled         = (b.pmkidCapture != 2);     // 0(old)/1 -> on, 2 -> off
+    strncpy(wifi.apSSID, b.apSSID, sizeof(wifi.apSSID) - 1); wifi.apSSID[sizeof(wifi.apSSID) - 1] = '\0';
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;

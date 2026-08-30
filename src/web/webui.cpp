@@ -58,6 +58,8 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div id="status"><div class="card" id="statusCard"><div class="row"><span class="k">loading…</span></div></div></div>
 
 <div id="config" hidden><div class="card">
+<h3>Management AP</h3>
+<label>SoftAP SSID <small>(blank = BBoink-XXXX)</small></label><input type="text" id="ap_ssid">
 <h3>Uplink WiFi (STA)</h3>
 <label>SSID</label><input type="text" id="wifi_ssid">
 <label>Password <small id="p_wifi_pass"></small></label><input type="password" id="wifi_pass" placeholder="(unchanged)">
@@ -84,6 +86,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div class="chk"><input type="checkbox" id="cracked_fallback"><label style="margin:0">cracked-AP uplink fallback</label></div>
 <div class="chk"><input type="checkbox" id="auto_purge"><label style="margin:0">purge cracked after sync</label></div>
 <div class="chk"><input type="checkbox" id="sound"><label style="margin:0">sound</label></div>
+<div class="chk"><input type="checkbox" id="pmkid"><label style="margin:0">capture PMKID (off = keep attacking for handshake)</label></div>
 <button onclick="save()">Save</button><div id="msg"></div>
 </div></div>
 
@@ -104,7 +107,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 </div>
 <script>
 const NUM=['ch_hop_ms','lock_ms','atk_rssi','max_tries','burst','jitter','idle_retry_min','brightness'];
-const BOOL=['ntfy_attach','deauth','rnd_mac','cracked_fallback','auto_purge','sound'];
+const BOOL=['ntfy_attach','deauth','rnd_mac','cracked_fallback','auto_purge','sound','pmkid'];
 const SEC=['wifi_pass','wpa_key','ohc_key','pwn_key'];
 function show(w){for(const x of ['status','config','sync','caps']){document.getElementById(x).hidden=(x!=w);
  document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps')loadCaps();}
@@ -122,13 +125,15 @@ async function st(){try{const d=await (await fetch('/api/status')).json();
 async function loadCfg(){try{const c=await (await fetch('/api/config')).json();
  document.getElementById('wifi_ssid').value=c.wifi_ssid||'';
  document.getElementById('ntfy_topic').value=c.ntfy_topic||'';
+ document.getElementById('ap_ssid').value=c.ap_ssid||'';
  for(const n of NUM)document.getElementById(n).value=c[n];
  for(const b of BOOL)document.getElementById(b).checked=!!c[b];
  const pres={wifi_pass:c.has_wifi_pass,wpa_key:c.has_wpa_key,ohc_key:c.has_ohc_key,pwn_key:c.has_pwn_key};
  for(const s of SEC)document.getElementById('p_'+s).textContent=pres[s]?'(set)':'(unset)';
  }catch(e){}}
 async function save(){const b={wifi_ssid:document.getElementById('wifi_ssid').value,
- ntfy_topic:document.getElementById('ntfy_topic').value};
+ ntfy_topic:document.getElementById('ntfy_topic').value,
+ ap_ssid:document.getElementById('ap_ssid').value};
  for(const n of NUM)b[n]=parseInt(document.getElementById(n).value);
  for(const x of BOOL)b[x]=document.getElementById(x).checked;
  for(const s of SEC){const v=document.getElementById(s).value;if(v)b[s]=v;}
@@ -205,6 +210,8 @@ static void sendConfig() {
     doc["cracked_fallback"] = w.crackedFallback;
     doc["auto_purge"]    = w.autoPurgeCracked;
     doc["sound"]         = w.soundEnabled;
+    doc["pmkid"]         = w.pmkidEnabled;
+    doc["ap_ssid"]       = w.apSSID;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
 }
@@ -254,6 +261,8 @@ static void saveConfig() {
     if (doc["cracked_fallback"].is<bool>())w.crackedFallback  = doc["cracked_fallback"];
     if (doc["auto_purge"].is<bool>())      w.autoPurgeCracked = doc["auto_purge"];
     if (doc["sound"].is<bool>())           w.soundEnabled     = doc["sound"];
+    if (doc["pmkid"].is<bool>())           w.pmkidEnabled     = doc["pmkid"];
+    setStr("ap_ssid", w.apSSID, sizeof(w.apSSID));
 
     Config::setWiFi(w);   // sanitizes + persists
 
@@ -347,7 +356,6 @@ static void jsonEsc(const char* in, char* out, size_t cap) {
 static void listCaptures() {
     noKeepAlive();
     OinkMode::loadBoarBros();
-    OinkMode::importCapturedFiles();
     WPASec::loadCache(); OHC::loadUploaded(); PwnCrack::loadUploaded(); PwnCrack::loadCache();
 
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -382,8 +390,7 @@ static void deleteCapture() {
     noKeepAlive();
     if (!server.hasArg("bssid")) { server.send(400, "application/json", "{\"error\":\"bssid required\"}"); return; }
     uint64_t b = strtoull(server.arg("bssid").c_str(), nullptr, 16);
-    OinkMode::removeBoarBro(b);
-    OinkMode::saveBoarBros();
+    OinkMode::removeBoarBro(b);   // persists internally
     server.send(200, "application/json", "{\"ok\":true}");
 }
 

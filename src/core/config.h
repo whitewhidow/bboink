@@ -118,6 +118,13 @@ struct WiFiConfig {
     char otaBinPath[48] = "/bboink-app-t-embed-cc1101.bin";
 
     // --- Mode / provisioning (ModeManager, see docs/DESIGN-mode-webui.md) ---
+    // Capture a PMKID from M1 when the AP offers one (clientless). Disable to keep
+    // attacking a network for a full 4-way handshake instead of excluding it on the
+    // first PMKID.
+    bool    pmkidEnabled   = true;
+    // SoftAP SSID override for MANAGEMENT mode (empty = MAC-derived BBoink-XXXX).
+    char    apSSID[24]     = "";
+
     // bootModePolicy: 0=auto (capture if captureReady, else management),
     //                 1=always capture, 2=always management.
     uint8_t bootModePolicy = 0;

@@ -1859,7 +1859,7 @@ void OinkMode::processEAPOL(const uint8_t* payload, uint16_t len,
     // Key Data contains RSN IE with PMKID: dd 14 00 0f ac 04 [16-byte PMKID]
     // Only RSN (descriptor type 0x02) has PMKID - WPA1 (0xFE) does not
     uint8_t descriptorType = payload[4];
-    if (messageNum == 1 && descriptorType == 0x02 && len >= 121) {  // RSN + 99 + 22 bytes minimum
+    if (messageNum == 1 && descriptorType == 0x02 && len >= 121 && Config::wifi().pmkidEnabled) {  // RSN + 99 + 22 bytes minimum
         uint16_t keyDataLen = (payload[97] << 8) | payload[98];
         
         // PMKID Key Data is exactly 22 bytes: dd(1) + len(1) + OUI(3) + type(1) + PMKID(16)

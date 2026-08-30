@@ -33,6 +33,7 @@ static void markCaptureReady() {
 // WPA2 requires >= 8 chars; the password below is 10. (Per-device, shown on the
 // connect screen; a user-set override can come later.)
 const char* apSSID() {
+    if (Config::wifi().apSSID[0]) return Config::wifi().apSSID;   // user override
     static char s[24] = {0};
     if (!s[0]) {
         uint8_t m[6]; WiFi.macAddress(m);
