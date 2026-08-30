@@ -372,10 +372,12 @@ bool Config::init() {
     // Allow buses to stabilize after M5.begin()
     delay(50);
 
-#if defined(PORK_BOARD_TDISPLAY_C5)
-    // The T-Display C5 has NO microSD. Skip the SD probe entirely (its dedicated
-    // SPI would collide with the display on SPI2) and go straight to internal
-    // LittleFS for captures below.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    // T-Display C5: no microSD. Waveshare C5-LCD: has an SD slot but it shares the
+    // display SPI bus; that shared-bus access is not yet verified, so DEFER it for
+    // bring-up and use internal LittleFS (avoids an ~8s boot of failed SD retries).
+    // TODO(waveshare): enable SD via the shared bus (park TFT CS, hold RST) — see
+    // ensureSdSpiReady()/mountSdAfterDisplay() and docs/DESIGN-mode-webui.md §8.4.
     sdAvailable = false;
 #else
 #ifdef PORK_BOARD_TEMBED_CC1101
@@ -609,8 +611,8 @@ bool Config::reinitSD() {
 }
 
 bool Config::mountSdAfterDisplay() {
-#if defined(PORK_BOARD_TDISPLAY_C5)
-    return false;   // no SD on the T-Display C5 — captures stay on LittleFS
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    return false;   // C5 boards: SD deferred (see Config::init) — stay on LittleFS
 #else
     // On the T-Embed CC1101 the SD, ST7789 display and CC1101 share one SPI bus.
     // The SD frequently won't mount until the display driver has initialised the

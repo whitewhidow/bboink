@@ -5,6 +5,8 @@
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
+#include <driver/gpio.h>
+#include <esp_wifi.h>
 
 namespace App {
 
@@ -145,14 +147,29 @@ void go(Screen s) {
 
 void powerOff() {
     clear();
-    centerMsg("POWERING OFF", TFT_RED);
-    footer("press any button to wake");
+    centerMsg("SLEEPING", TFT_RED);
+    footer("press the button to wake");
     delay(1000);
     M5.Display.setBrightness(0);
 #if defined(PORK_BOARD_WAVESHARE_C5_LCD)
-    // Single button: BOOT on GPIO28 (active-low). Wake on its press.
-    rtc_gpio_pullup_en(GPIO_NUM_28);  rtc_gpio_pulldown_dis(GPIO_NUM_28);
-    esp_sleep_enable_ext1_wakeup((1ULL << 28), ESP_EXT1_WAKEUP_ANY_LOW);
+    // The one button (BOOT = GPIO28) is a high-power GPIO, NOT an LP/RTC-IO pin,
+    // so it cannot wake DEEP sleep on the ESP32-C5 (only GPIO0-7 can). Use LIGHT
+    // sleep + GPIO wakeup instead: the same button turns the screen back on, and
+    // light sleep keeps RAM so we resume right here and redraw the live screen.
+    esp_wifi_set_promiscuous(false);            // quiesce RX before halting the CPU
+    M5.Display.sleep();
+    while (digitalRead(PORK_ENC_KEY) == LOW) delay(10);   // wait for the long-press release
+    delay(60);
+    gpio_wakeup_enable((gpio_num_t)PORK_ENC_KEY, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+    esp_light_sleep_start();                     // halts until GPIO28 goes LOW (a tap)
+    // --- woke on a button tap ---
+    while (digitalRead(PORK_ENC_KEY) == LOW) delay(10);   // wait for the wake tap to release
+    delay(60);
+    M5.Display.wakeup();
+    M5.Display.setBrightness(Config::wifi().displayBrightness);
+    go(screen);                                  // re-enter current screen -> redraw (+ re-arm capture)
+    return;
 #elif defined(PORK_BOARD_TDISPLAY_C5)
     // Buttons: GPIO0 (BOOT) + GPIO28. UNVERIFIED: confirm both are RTC/LP-IO wake
     // capable on the C5; if not, fall back to a timer or the hardware PWR button.
