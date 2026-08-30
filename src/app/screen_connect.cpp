@@ -13,6 +13,7 @@
 #include "app.h"
 #include "../core/mode_manager.h"
 #include "../core/config.h"
+#include "../web/webui.h"
 #include <WiFi.h>
 
 namespace ScreenConnect {
@@ -106,6 +107,8 @@ void tick(const App::Input& in) {
 #endif
     // (Single-button Waveshare: the global tap = ModeManager::toggle() in App::tick
     //  returns to CAPTURE; this screen just displays + refreshes STA status.)
+
+    WebUI::loop();   // pump captive-DNS + HTTP while the connect screen is up
 
     if (!framed) drawFrame();
     if (millis() - lastSta >= 1000) { drawStatus(); lastSta = millis(); }

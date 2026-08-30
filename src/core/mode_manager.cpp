@@ -4,6 +4,7 @@
 #include "net_link.h"
 #include "../modes/oink.h"
 #include "../web/ntfy.h"
+#include "../web/webui.h"
 #include "../app/app.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -56,7 +57,8 @@ static void startSoftAP() {
 void enterCapture(bool clearLock) {
     if (clearLock) OinkMode::clearTargetLock();
     markCaptureReady();
-    // Drop the management SoftAP; capture needs the radio to itself (promiscuous).
+    // Drop the web server + management SoftAP; capture needs the radio to itself.
+    WebUI::stop();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
     mode_ = Mode::CAPTURE;
@@ -83,6 +85,7 @@ void enterManagement() {
     // STA joins the configured network for cracking sync (topology #1, docs §7.4).
     WiFi.mode(WIFI_AP_STA);
     startSoftAP();
+    WebUI::begin();          // serve the management page off the SoftAP
 
     const char* ssid = Config::wifi().otaSSID;
     bool linked = false;
