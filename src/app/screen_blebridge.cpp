@@ -19,27 +19,29 @@ static uint16_t pFiles = 0xFFFF, pCrk = 0xFFFF;
 
 static void draw() {
     App::clear();
-    App::centerMsg("BLE BRIDGE", TFT_CYAN);
-    M5.Display.setTextSize(1);
+    const int W = PORK_DISPLAY_W;
     M5.Display.setTextDatum(top_center);
+    // Title (top, not vertically centred — the content below must all fit).
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
+    M5.Display.drawString("BLE BRIDGE", W / 2, 6);
+    M5.Display.setTextSize(1);
+    int y = 34;
     const bool conn = BleBridge::connected();
     M5.Display.setTextColor(conn ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
-    M5.Display.drawString(conn ? "phone connected" : "open app + connect",
-                          PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 18);
+    M5.Display.drawString(conn ? "phone connected" : "open the app + connect", W / 2, y); y += 18;
     char l[40]; snprintf(l, sizeof(l), "files %u   cracked %u", BleBridge::filesSent(), BleBridge::crackedIn());
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    M5.Display.drawString(l, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 34);
-    // What the phone needs: the app URL to open, and the relay it targets.
+    M5.Display.drawString(l, W / 2, y); y += 20;
+    // What the phone needs: the app URL to open + the relay it targets.
     const char* au = Config::wifi().appUrl[0] ? Config::wifi().appUrl : CONSOLE_URL;
-    char al[128]; snprintf(al, sizeof(al), "app: %s", au);
-    M5.Display.setTextColor(0x5AEB, TFT_BLACK);
-    M5.Display.drawString(al, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 48);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK); M5.Display.drawString("open on phone:", W / 2, y); y += 14;
+    M5.Display.setTextColor(0x5AEB, TFT_BLACK);       M5.Display.drawString(au, W / 2, y); y += 20;
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK); M5.Display.drawString("relay:", W / 2, y); y += 14;
     const char* ru = Config::wifi().relayUrl;
-    char rl[128];
-    if (ru[0]) { snprintf(rl, sizeof(rl), "relay: %s", ru); M5.Display.setTextColor(0x5AEB, TFT_BLACK); }
-    else       { snprintf(rl, sizeof(rl), "relay url not set (Config)"); M5.Display.setTextColor(TFT_RED, TFT_BLACK); }
-    M5.Display.drawString(rl, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 62);
-    App::footer("tap: exit to capture");
+    if (ru[0]) { M5.Display.setTextColor(0x5AEB, TFT_BLACK); M5.Display.drawString(ru, W / 2, y); }
+    else       { M5.Display.setTextColor(TFT_RED, TFT_BLACK); M5.Display.drawString("(not set)", W / 2, y); }
+    App::footer("exit to capture");
 }
 
 void enter() {

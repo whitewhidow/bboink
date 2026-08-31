@@ -1,10 +1,10 @@
 // mode_manager.cpp — CAPTURE / MANAGEMENT / BLE_BRIDGE coordinator (see mode_manager.h).
 //
-// On the single-button Waveshare (PORK_BOARD_WAVESHARE_C5_LCD) there is NO SoftAP /
-// web UI: all management is over BLE (see docs/DESIGN-ble-bridge.md), so the whole
-// web/AP stack is compiled out. Modes are CAPTURE and BLE_BRIDGE; a tap toggles them
-// (capture -> bridge reboots, since the bridge needs the BT-controller RAM that a
-// normal boot releases). Multi-button boards keep the AP+web MANAGEMENT mode.
+// No board hosts a SoftAP / web UI. Management is either the on-device MENU (buttons,
+// multi-button boards) or the BLE console (all boards). The single-button Waveshare
+// has no menu, so its "management" is the BLE bridge directly.
+//   - Waveshare (PORK_BOARD_WAVESHARE_C5_LCD): tap = CAPTURE <-> BLE_BRIDGE (reboots in).
+//   - Multi-button: back = the MENU (which offers direct sync, options, and BLE bridge).
 #include "mode_manager.h"
 #include "config.h"
 #include "net_link.h"
@@ -17,7 +17,6 @@
 #include <esp_mac.h>
 #if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
 #include "../web/ntfy.h"
-#include "../web/webui.h"
 #endif
 
 namespace ModeManager {
@@ -39,8 +38,8 @@ static void markCaptureReady() {
     Config::save();
 }
 
-// Identity derived once from the burned-in MAC, stable per device. Used for the
-// SoftAP (multi-button boards) AND the BLE advertised name (all boards).
+// Identity derived once from the burned-in MAC (stable per device). Used as the
+// BLE advertised name on every board.
 const char* apSSID() {
     if (Config::wifi().apSSID[0]) return Config::wifi().apSSID;   // user override
     static char s[24] = {0};
@@ -61,28 +60,21 @@ const char* apPassword() {
     return p;
 }
 
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
-static bool apUp = false;
-static void startSoftAP() { WiFi.softAP(apSSID(), apPassword()); apUp = true; }
-#endif
-
 void enterCapture(bool clearLock) {
     if (BleBridge::running()) BleBridge::stop();
     if (clearLock) OinkMode::clearTargetLock();
     markCaptureReady();
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
-    if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
-#endif
     WiFi.mode(WIFI_STA);
     mode_ = Mode::CAPTURE;
     App::go(App::Screen::CAPTURE);
 }
 
 #if defined(PORK_BOARD_WAVESHARE_C5_LCD)
-// No AP/web on this board — "management" is the BLE bridge (reached by a tap or the
-// medium-hold; both reboot in so NimBLE gets the BT-controller RAM).
+// Single-button, no menu: "management" is the BLE bridge (reboots in for the BT RAM).
 void enterManagement() { requestBleBridge(); }
 #else
+// Multi-button: management is the on-device MENU (no AP/web). Leaving capture stops
+// the engine, restores the STA uplink, and fires the per-network ntfy alerts.
 void enterManagement() {
     const bool leavingCapture = (mode_ == Mode::CAPTURE);
     const bool wantNtfy = leavingCapture &&
@@ -92,10 +84,7 @@ void enterManagement() {
         esp_wifi_set_promiscuous(false);
     }
     WiFi.setAutoReconnect(true);
-    WiFi.mode(WIFI_AP_STA);
-    delay(250);
-    startSoftAP();
-    WebUI::begin();
+    WiFi.mode(WIFI_STA);
 
     const char* ssid = Config::wifi().otaSSID;
     bool linked = false;
@@ -122,7 +111,7 @@ void enterManagement() {
         delay(1200);
     }
     mode_ = Mode::MANAGEMENT;
-    App::go(App::Screen::CONNECT);
+    App::go(App::Screen::MENU);
 }
 #endif
 
@@ -130,9 +119,6 @@ void enterBleBridge() {
     // Bridge is BLE-only: WiFi fully off so NimBLE has the radio + heap. Reached at
     // boot (forceBleBridge) or live from the menu (multi-button boards).
     if (OinkMode::isRunning()) { OinkMode::stop(); esp_wifi_set_promiscuous(false); }
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
-    if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
-#endif
     WiFi.disconnect(true, true);
     WiFi.mode(WIFI_OFF);
     delay(150);

@@ -18,7 +18,7 @@
 namespace ScreenMenu {
 
 static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "BLE BRIDGE", "WPASEC SYNC", "OHC SYNC",
-                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS", "CONFIG AP",
+                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS",
                                 "REBOOT", "POWER OFF" };
 static constexpr int kCount = sizeof(kItems) / sizeof(kItems[0]);
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
@@ -362,9 +362,8 @@ void tick(const App::Input& in) {
             case 6: capturesFlow();                 return;
             case 7: statsFlow();                    return;
             case 8: App::go(App::Screen::OPTIONS);  return;
-            case 9: App::go(App::Screen::CONFIGAP); return;
-            case 10: reboot();                      return;
-            case 11: powerOff();                    return;
+            case 9: reboot();                       return;
+            case 10: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

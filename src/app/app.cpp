@@ -147,8 +147,6 @@ void go(Screen s) {
         case Screen::OHC:     ScreenOHC::enter();     break;
         case Screen::PWNCRACK:ScreenPwnCrack::enter();break;
         case Screen::OPTIONS: ScreenOptions::enter(); break;
-        case Screen::CONFIGAP:ScreenConfigAP::enter();break;
-        case Screen::CONNECT: ScreenConnect::enter(); break;
 #endif
         case Screen::BLEBRIDGE: ScreenBleBridge::enter(); break;
     }
@@ -235,8 +233,6 @@ void tick() {
         case Screen::OHC:     ScreenOHC::tick(in);     break;
         case Screen::PWNCRACK:ScreenPwnCrack::tick(in);break;
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
-        case Screen::CONFIGAP:ScreenConfigAP::tick(in);break;
-        case Screen::CONNECT: ScreenConnect::tick(in); break;
 #endif
         case Screen::BLEBRIDGE: ScreenBleBridge::tick(in); break;
     }
