@@ -38,7 +38,7 @@ static bool runBootSyncIfQueued() {
     if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
     if (WiFi.status() != WL_CONNECTED) {
         snprintf(bootSyncResult, sizeof(bootSyncResult), "ERR: no uplink at boot");
-        return;
+        return true;
     }
     if (svc == 1) {
         WPASecSyncResult r = WPASec::syncCaptures();
