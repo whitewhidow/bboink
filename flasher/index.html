@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BBoink Web Flasher</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 15px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    max-width: 640px; margin: 6vh auto; padding: 0 20px; color: #1a1a1a;
+  }
+  @media (prefers-color-scheme: dark) { body { color: #e6e6e6; } a { color: #7bb1ff; } }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: #888; margin: 0 0 24px; }
+  .row { margin: 14px 0; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  select {
+    width: 100%; padding: 9px 10px; font-size: 15px; border-radius: 8px;
+    border: 1px solid #bbb; background: Canvas; color: inherit;
+  }
+  .install { margin: 26px 0 10px; }
+  esp-web-install-button { --esp-tools-button-color: #fff; --esp-tools-button-background-color: #d6336c; }
+  .note { background: rgba(127,127,127,.10); border-radius: 10px; padding: 14px 16px; margin-top: 22px; }
+  .note h3 { margin: 0 0 6px; font-size: .95rem; }
+  .note ul { margin: 6px 0 0; padding-left: 18px; }
+  .warn { color: #d6336c; font-weight: 600; }
+  code { background: rgba(127,127,127,.15); padding: 1px 5px; border-radius: 4px; }
+  footer { margin-top: 30px; color: #888; font-size: .9rem; }
+</style>
+</head>
+<body>
+  <h1>🐷 BBoink Web Flasher</h1>
+  <p class="sub">Flash your board over USB, straight from the browser — no esptool, no drivers.</p>
+
+  <div class="row">
+    <label for="board">Board</label>
+    <select id="board"></select>
+  </div>
+
+  <div class="row">
+    <label for="version">Firmware version</label>
+    <select id="version"></select>
+  </div>
+
+  <div class="install">
+    <esp-web-install-button id="btn">
+      <span slot="unsupported" class="warn">
+        This browser can't flash over USB. Use <b>Chrome or Edge on desktop</b>
+        (Windows / Linux / macOS). Web Serial isn't available on Firefox, Safari, or phones.
+      </span>
+      <span slot="not-allowed" class="warn">
+        You need to open this page over <b>https</b>.
+      </span>
+    </esp-web-install-button>
+  </div>
+
+  <div class="note">
+    <h3>Before you click Install</h3>
+    <ul>
+      <li>Connect the board with a <b>USB-C data cable</b> and pick its serial port in the popup.</li>
+      <li>Choose <b>Erase device</b> if the tool offers it — recommended for a clean flash,
+          and required the first time you put BBoink on a C5 board.</li>
+      <li class="warn">After flashing a C5 board (T-Display C5 / Waveshare), unplug and replug it
+          to start the new firmware — the C5 doesn't auto-reboot after flashing.</li>
+    </ul>
+  </div>
+
+  <footer>
+    Manage/sync the board over Bluetooth in the <a href="../bridge/">BLE console</a> ·
+    <a href="https://github.com/whitewhidow/bboink#readme">README</a> ·
+    <a href="https://github.com/whitewhidow/bboink/releases">Releases</a>
+  </footer>
+
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+  <script>
+  (async () => {
+    const boardSel = document.getElementById('board');
+    const verSel   = document.getElementById('version');
+    const btn      = document.getElementById('btn');
+    let blobUrl = null;
+
+    let cfg;
+    try {
+      cfg = await (await fetch('./versions.json', { cache: 'no-cache' })).json();
+    } catch (e) {
+      document.querySelector('.install').innerHTML =
+        '<p class="warn">Could not load firmware list (versions.json). Try again later.</p>';
+      return;
+    }
+
+    for (const b of cfg.boards) {
+      const o = document.createElement('option');
+      o.value = b.env; o.textContent = b.name;
+      o.dataset.chip = b.chipFamily;
+      boardSel.appendChild(o);
+    }
+    for (const v of cfg.versions) {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      verSel.appendChild(o);
+    }
+
+    function refreshManifest() {
+      const env  = boardSel.value;
+      const chip = boardSel.selectedOptions[0].dataset.chip;
+      const ver  = verSel.value;
+      const name = boardSel.selectedOptions[0].textContent;
+      // Absolute, same-origin URL to the committed bin → no CORS.
+      const binUrl = new URL(`./fw/${ver}/bboink-${env}.bin`, location.href).href;
+      const manifest = {
+        name: `BBoink — ${name}`,
+        version: ver,
+        new_install_prompt_erase: true,
+        builds: [ { chipFamily: chip, parts: [ { path: binUrl, offset: 0 } ] } ],
+      };
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      blobUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' }));
+      btn.setAttribute('manifest', blobUrl);
+    }
+
+    boardSel.addEventListener('change', refreshManifest);
+    verSel.addEventListener('change', refreshManifest);
+    refreshManifest();
+  })();
+  </script>
+</body>
+</html>

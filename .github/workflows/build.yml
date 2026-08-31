@@ -10,6 +10,9 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+    # The publish-flasher job auto-commits bins under flasher/ back to main — don't let
+    # that commit retrigger a full rebuild.
+    paths-ignore: [ 'flasher/**' ]
   workflow_dispatch:
 
 permissions:
@@ -91,3 +94,58 @@ jobs:
           files: |
             bboink-${{ matrix.env }}.bin
             bboink-app-${{ matrix.env }}.bin
+
+  # On a release tag, publish the merged bins into flasher/fw/<tag>/ on main so the
+  # GitHub-Pages web flasher (whitewhidow.github.io/bboink/flasher/) can serve them
+  # same-origin (release assets have no CORS). Keeps only the latest 2 versions.
+  publish-flasher:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download this build's board bins
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bboink-bins-*
+          path: _bins
+          merge-multiple: true
+
+      - name: Stage bins + regenerate versions.json (keep latest 2)
+        run: |
+          set -e
+          VER="${GITHUB_REF_NAME}"
+          mkdir -p "flasher/fw/$VER"
+          for env in t-embed-cc1101 tdisplay-c5 waveshare-c5-lcd; do
+            cp "_bins/bboink-$env.bin" "flasher/fw/$VER/bboink-$env.bin"
+          done
+          rm -rf _bins
+          # prune to the two newest version dirs
+          keep=$(ls -d flasher/fw/v* | xargs -n1 basename | sort -V | tail -2)
+          for d in flasher/fw/v*; do
+            b=$(basename "$d")
+            echo "$keep" | grep -qx "$b" || { echo "prune $b"; rm -rf "$d"; }
+          done
+          vers=$(ls -d flasher/fw/v* | xargs -n1 basename | sort -Vr | jq -R . | jq -s .)
+          jq -n --argjson versions "$vers" '{
+            boards: [
+              {env:"t-embed-cc1101",   name:"LilyGo T-Embed CC1101 / PLUS", chipFamily:"ESP32-S3"},
+              {env:"tdisplay-c5",      name:"LilyGo T-Display C5",           chipFamily:"ESP32-C5"},
+              {env:"waveshare-c5-lcd", name:"Waveshare ESP32-C5-LCD-1.47",   chipFamily:"ESP32-C5"}
+            ],
+            versions: $versions
+          }' > flasher/versions.json
+          cat flasher/versions.json
+
+      - name: Commit to main
+        run: |
+          git config user.name  whitewhidow
+          git config user.email contact@branchbit.be
+          git add flasher/fw flasher/versions.json
+          if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
+          git commit -m "flasher: publish ${GITHUB_REF_NAME} bins (keep latest 2)"
+          git push origin HEAD:main

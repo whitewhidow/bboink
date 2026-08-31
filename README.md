@@ -232,6 +232,11 @@ is present; `.pcap` is validated server-side on upload.
 Settings are saved on exit to a versioned, size-tolerant config blob.
 
 ## Firmware updates
+
+> ⚡ **[Web flasher](https://whitewhidow.github.io/bboink/flasher/)** — flash any board over
+> USB straight from the browser (Chrome/Edge desktop), no esptool needed. Pick the board +
+> version and click Install. This is the easiest way to install or update the **Waveshare**.
+
 How a board updates depends on whether it has the menu **and** a two-slot (A/B) partition:
 
 - **Button boards (T-Embed / T-Display)** — update **over WiFi, no cable**, from the GitHub
@@ -248,8 +253,9 @@ How a board updates depends on whether it has the menu **and** a two-slot (A/B) 
 - **Waveshare ESP32-C5-LCD (BLE-only)** — **no on-device OTA.** Its 4 MB flash holds a
   *single* app slot, and on-device OTA fundamentally needs a **second** slot to write into
   (you can't overwrite the running app) — two ~1.8 MB slots don't fit in 4 MB. It also has
-  no menu to trigger one. So you update it by **reflashing the merged image over USB**,
-  exactly like the first flash:
+  no menu to trigger one. So you update it by **reflashing the merged image over USB** —
+  easiest via the **[web flasher](https://whitewhidow.github.io/bboink/flasher/)** (pick
+  *Waveshare* → Install), or by hand:
 
   ```
   esptool --chip esp32c5 write_flash 0x0 bboink-waveshare-c5-lcd.bin

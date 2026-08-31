@@ -2,4 +2,6 @@
 .vscode/
 build_info.h
 *.bin
+# ...except firmware images published to the web flasher (served by GitHub Pages).
+!flasher/fw/**/*.bin
 src/core/dev_secrets.h
