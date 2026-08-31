@@ -35,6 +35,9 @@ static size_t s_size = 0, s_sent = 0;
 static bool   s_crkStarted = false;   // truncate the cracked cache on the first {"c":"crk"}
 static String s_mem;                  // in-memory stream source (caps/crks/cfg JSON)
 static bool   s_memMode = false;
+static uint8_t  s_cmdBuf[320];
+static size_t   s_cmdLen = 0;
+static volatile bool s_cmdPending = false;
 
 static uint16_t chunkSize() { return s_mtu > 23 ? (uint16_t)(s_mtu - 4) : 20; }
 
@@ -300,7 +303,13 @@ static void handleCommand(const uint8_t* data, size_t len) {
 class RxCB : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
         NimBLEAttValue v = c->getValue();
-        if (v.length()) handleCommand(v.data(), v.length());
+        // Commands are sequential (the phone awaits each response), so one slot is
+        // enough. Defer the actual work to loop().
+        if (v.length() && v.length() < sizeof(s_cmdBuf) && !s_cmdPending) {
+            memcpy(s_cmdBuf, v.data(), v.length());
+            s_cmdLen = v.length();
+            s_cmdPending = true;
+        }
     }
 };
 
@@ -348,7 +357,13 @@ void stop() {
 }
 
 void loop() {
-    if (!s_running || !s_streaming || !s_connected) return;
+    if (!s_running || !s_connected) return;
+    // Handle a queued command in THIS (main-loop) task — safe stack for FS + JSON.
+    if (s_cmdPending && !s_streaming) {
+        s_cmdPending = false;
+        handleCommand(s_cmdBuf, s_cmdLen);
+    }
+    if (!s_streaming) return;
     // Send one chunk per call (paced by the main loop) so we don't flood NimBLE.
     uint16_t cs = chunkSize();
     static uint8_t buf[256];
