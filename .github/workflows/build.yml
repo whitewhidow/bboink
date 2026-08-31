@@ -31,7 +31,7 @@ jobs:
             boot: "0x0"
           - env: tdisplay-c5      # LilyGo T-Display C5 (ESP32-C5)
             chip: esp32c5
-            flash_size: 4MB
+            flash_size: 16MB
             boot: "0x2000"
           - env: waveshare-c5-lcd # Waveshare ESP32-C5-LCD-1.47
             chip: esp32c5
