@@ -26,6 +26,7 @@
 RTC_NOINIT_ATTR uint32_t bootSyncMagic;
 RTC_NOINIT_ATTR int      bootSyncReq;
 RTC_NOINIT_ATTR char     bootSyncResult[96];
+RTC_NOINIT_ATTR uint32_t bootShowMgmt;
 
 // Run a queued sync early in boot (clean heap). STA is already associated above.
 static void runBootSyncIfQueued() {
@@ -69,9 +70,6 @@ static void runBootSyncIfQueued() {
         int cracked = PwnCrack::syncPotfile(err, sizeof(err));
         snprintf(bootSyncResult, sizeof(bootSyncResult), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
     }
-    // A sync ran — land in MANAGEMENT so the result is immediately visible on the
-    // connect screen / Status page (no need to re-toggle from capture).
-    ModeManager::forceManagementBoot();
 }
 
 void setup() {
@@ -127,6 +125,9 @@ void setup() {
     // GDMA + heap). No on-screen feedback here; result shows on the Status page after.
     if (bootSyncMagic != BOOT_SYNC_MAGIC) strncpy(bootSyncResult, "idle", sizeof(bootSyncResult));
     runBootSyncIfQueued();
+    // A sync was requested (this boot or a crashed prior boot) -> land in MANAGEMENT
+    // so the result is visible. RTC flag survives a mid-sync crash.
+    if (bootShowMgmt == BOOT_SYNC_MAGIC) { bootShowMgmt = 0; ModeManager::forceManagementBoot(); }
 
     // Now the display + input + engine (display init no longer disturbs WiFi).
     auto cfg = M5.config();
