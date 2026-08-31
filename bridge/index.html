@@ -89,7 +89,9 @@ function write(obj){ return rxCh.writeValue(new TextEncoder().encode(JSON.string
 function concat(cs){ let n=cs.reduce((a,c)=>a+c.length,0),o=new Uint8Array(n),p=0; for(const c of cs){o.set(c,p);p+=c.length;} return o; }
 // collect a begin->BIN->end stream (files, caps, crks, cfg)
 function cmdCollect(obj){ return new Promise((res,rej)=>{ let cs=[]; waiter={ onText:j=>{ if(j.t==='end'){waiter=null;res(concat(cs));} else if(j.t==='err'){waiter=null;rej(j.e||'err');} }, onBin:b=>cs.push(b) }; write(obj); }); }
-async function cmdJson(obj){ return JSON.parse(new TextDecoder().decode(await cmdCollect(obj))||'null'); }
+async function cmdJson(obj){ const t=new TextDecoder().decode(await cmdCollect(obj))||'null';
+  try{ return JSON.parse(t); }
+  catch(e){ alert('bad JSON (len '+t.length+')\n…'+t.slice(210,280)+'…'); throw e; } }
 function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){waiter=null;res(j);} }}; write(obj); }); }
 function cmdList(all){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){waiter=null;res(j.files||[]);} }}; write({c:'list',all:!!all}); }); }
 
