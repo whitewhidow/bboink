@@ -406,3 +406,33 @@ need SD (flash is too small to hoard them).
 LCD ST7789 172×320 SCLK7/MOSI6/CS23/DC24/RST26/BL10, SD SCLK7/MOSI6/MISO5/CS4,
 WS2812 GPIO8, BOOT=GPIO28, RESET=CHIP_PU, ESP32-C5HF4 (4 MB), onboard 2.4G+5G
 antenna paths. C5 capture/deauth carries over from `tdisplay-c5-port`.*
+
+---
+
+## Addendum — sync architecture (C5 TLS reality + Render relay)
+
+**Finding (ESP32-C5):** mbedtls needs a large *contiguous* heap block (~35 KB) per
+TLS handshake, and after one handshake the heap is fragmented enough that a **second
+handshake in the same boot** fails (`esp-aes: Failed to allocate memory` → `abort()`,
+or a corrupt ClientHello → `-29312` EOF). Management mode (SoftAP+STA+web+DNS) is too
+fragmented for TLS at all. Consequences that shaped the design:
+
+- **Reboot-to-sync**: TLS runs *early in boot* at clean heap (STA only), never in
+  management mode. State survives the soft reset via `RTC_NOINIT` (`boot_sync.h`).
+- **One handshake per boot**: each sync *op* is a single handshake. `HTTPClient`
+  (not raw `WiFiClientSecure`) drives the TLS write/read; `Connection: close` avoids
+  read-timeouts; a `getMaxAllocHeap()` guard bails gracefully (`LOW HEAP`) instead of
+  aborting. Multi-file uploads are **combined into one request** so a service = one
+  handshake regardless of capture count.
+- **Chained-reboot queue** (`bootSyncQueue`, a bitmask of `SyncOp`): *Sync All* /
+  *Check Cracked* queue several ops and reboot through them one at a time, one
+  handshake each, accumulating the result string across reboots.
+
+**Render relay (recommended):** the cleaner end state. The board talks to **one**
+HTTPS host (`relay/`, on Render) and does only *send capture* / *get cracked*. One
+kept-alive connection = **one handshake** for everything; the relay holds the three
+API keys and does all per-service formatting, dedup, and potfile merging. Board side:
+`relayUrl`/`relayToken` config, `SYNC_RELAY` (upload all + fetch cracked) and
+`SYNC_RELAY_PING` (`/healthz` wake + status) ops, exposed as **Sync via Relay** and
+**Wake / Check** in the web UI. This makes the buffer-shrink / runtime-teardown ideas
+unnecessary for the common case.

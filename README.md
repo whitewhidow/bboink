@@ -18,6 +18,34 @@ radio is **not** used (but its chip-select is managed — see *SD card* below).
 > ⚠️ Deauthentication frames are transmitted to force handshakes. Use only on
 > networks you own or are explicitly authorized to test.
 
+## Boards & control models
+
+Two families are supported:
+
+- **T-Embed CC1101 / CC1101 PLUS** (ESP32-S3) — rotary encoder + buttons drive the
+  full **on-device menu** described below.
+- **Waveshare ESP32-C5-LCD-1.47** (ESP32-C5, dual-band, one usable button) — has
+  no room for an on-device menu, so it runs a **two-mode + web-UI** model:
+  - **One button** toggles between **CAPTURE** and **MANAGEMENT**.
+  - In **MANAGEMENT** the board raises a SoftAP (`BBoink-XXXX`) and serves a web UI
+    (Status / Config / Sync / Captures). All config and sync happen there; the
+    device then runs standalone. See `docs/DESIGN-mode-webui.md`.
+
+## Sync: direct or via relay
+
+Captures can reach the cracking services **two** ways:
+
+- **Direct** — the board uploads to each service itself. The ESP32-C5 can only
+  complete **one TLS handshake per boot**, so multi-service sync uses a
+  **chained-reboot queue** (one op per boot; *Sync All* / *Check Cracked* reboot
+  through them). Works, but visibly reboots a few times.
+- **Relay (recommended)** — a tiny HTTPS service (see [`relay/`](relay/), deploys to
+  **Render**) that the board talks to as its **single host**. One kept-alive
+  connection = **one handshake** for *all* uploads **and** the cracked-fetch — no
+  chained reboots, keys held server-side. Set **Relay URL + token** in the web
+  **Config** tab, then **Sync → Sync via Relay**. **Wake / Check** pings the relay
+  to pre-warm Render's free tier and report up/down + latency.
+
 ## Top bar
 Every screen shows: title · **SD** (green = microSD mounted, red `sd` = running on
 internal storage) · connected WiFi SSID (green) · battery %. The version
