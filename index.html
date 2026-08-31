@@ -110,14 +110,16 @@ section{padding:64px 0;border-top:1px solid var(--line)}
 .boards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .board{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:.2s}
 .board:hover{border-color:var(--line2);transform:translateY(-3px)}
-.board .ph{background:var(--tile);aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;padding:14px}
+.board .ph{background:var(--tile);height:230px;display:flex;align-items:center;justify-content:center;padding:16px}
 .board .ph img{max-width:100%;max-height:100%;object-fit:contain}
-.board .bd{padding:16px 17px 18px}
+.board .bd{padding:16px 17px 18px;display:flex;flex-direction:column;flex:1}
+.board .bd .btn{margin-top:auto;align-self:flex-start}
 .board h3{font-size:17px;font-weight:600}
 .board .spec{font-family:var(--mono);font-size:12px;color:var(--muted);margin:7px 0 12px}
 .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1px solid var(--line2);color:var(--cyan);margin-bottom:10px}
 
 .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(min-width:901px){.feat.feat4{grid-template-columns:repeat(4,1fr)}}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;transition:.2s}
 .card:hover{border-color:var(--line2);background:var(--panel2)}
 .card .ic{font-family:var(--mono);font-size:12px;color:var(--cyan-dim);letter-spacing:.16em}
@@ -419,12 +421,12 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
 <section id="services">
   <div class="wrap">
     <div class="sec-head reveal">
-      <div class="eyebrow">Supported cloud services</div>
-      <h2>Bring your own cracking accounts.</h2>
-      <p><b>All three are free</b> (OnlineHashCrack has a free tier). A key from <b>any one</b> is
-        enough to start, and a network cracked by several shows all of them.</p>
+      <div class="eyebrow">Cracking options</div>
+      <h2>Cloud services — or crack it yourself.</h2>
+      <p><b>All free.</b> A key from <b>any one</b> cloud service is enough to start — or skip the
+        cloud and crack the hashes yourself, offline.</p>
     </div>
-    <div class="feat">
+    <div class="feat feat4">
       <a class="card reveal" href="https://wpa-sec.stanev.org" style="text-decoration:none;color:inherit">
         <div class="ic">WPA-SEC</div><h3>wpa-sec →</h3>
         <p>Stanev's community <b>distributed</b> WPA cracker. Free; BBoink uploads the
@@ -437,6 +439,10 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
         <div class="ic">PWNCRACK</div><h3>PwnCrack →</h3>
         <p><b>Free</b> handshake cracking service — BBoink uploads <span class="mono">hc22000</span>
           and reads back the cracked passwords.</p></a>
+      <a class="card reveal" href="https://whitewhidow.github.io/bboink/bridge/" style="text-decoration:none;color:inherit">
+        <div class="ic">LOCAL</div><h3>Crack it yourself →</h3>
+        <p>No account, fully offline — <b>download the hashes</b> from the BLE console and run
+          <span class="mono">hashcat -m 22000</span> on your own machine.</p></a>
     </div>
   </div>
 </section>

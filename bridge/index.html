@@ -64,6 +64,7 @@
     <div id="relaystat" class="sub" style="margin-top:6px"></div>
     <label class="row"><input type="checkbox" id="resyncall"><span style="font-size:13px;color:#8b949e">re-sync everything (ignore already-synced)</span></label>
     <button id="sync" class="wide">Sync captures ↔ relay</button>
+    <button id="dlhash" class="sec wide">⬇ Download hashes (.hc22000) — crack offline</button>
     <div id="log"></div>
   </div>
 
@@ -189,6 +190,31 @@ window.delCap=async(b)=>{ if(!confirm('Delete capture (removes files, re-enables
   try{ await cmdAck({c:'del',bssid:b}); await loadCaps(); }catch(e){} };
 
 // ---------- Sync (post + pull) ----------
+// Pull the raw WPA 22000 hashes over BLE and save one bboink.hc22000 for offline hashcat —
+// no relay, no account. (The 'get' stream is the same one the relay sync uses.)
+$('dlhash').onclick=async()=>{
+  $('dlhash').disabled=true;
+  try{
+    logEl().textContent='';
+    const files=await cmdList(true);
+    const hs=files.filter(f=>f.kind==='22000');
+    if(!hs.length){ log('no hashes on the board yet — capture some first.'); return; }
+    let out='';
+    for(let i=0;i<hs.length;i++){
+      log(`fetching ${i+1}/${hs.length}: ${hs[i].name}`);
+      const b=await cmdCollect({c:'get',name:hs[i].name});
+      out+=new TextDecoder().decode(b).trim()+'\n';
+    }
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([out],{type:'text/plain'}));
+    a.download='bboink.hc22000';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    log(`✔ saved bboink.hc22000 (${hs.length} network(s)).`);
+    log('crack with:  hashcat -m 22000 bboink.hc22000 <wordlist>');
+  }catch(e){ log('download failed: '+(e.message||e)); }
+  finally{ $('dlhash').disabled=false; }
+};
+
 $('sync').onclick=async()=>{
   const url=(cfg.relay_url||'').replace(/\/+$/,''), tok=cfg.relay_token||'';
   if(!url||!tok){ log('✖ set Relay URL + token in the Config tab first'); return; }
