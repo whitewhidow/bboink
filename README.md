@@ -231,32 +231,44 @@ is present; `.pcap` is validated server-side on upload.
 
 Settings are saved on exit to a versioned, size-tolerant config blob.
 
-## Firmware updates (OTA)
-BBoink can update itself over WiFi from its GitHub releases — no cable. Two paths,
-because it can run two ways:
+## Firmware updates
+How a board updates depends on whether it has the menu **and** a two-slot (A/B) partition:
 
-- **Update FW** (*flash OTA*, for a **standalone** install flashed at 0x0) —
-  downloads the app image straight into the spare OTA partition (`ota_0`/`ota_1`),
-  validates the image (magic + checksum), marks it bootable, and reboots into it.
-  No SD, no launcher, no PC.
-- **Update→SD** (for a **launcher** install) — downloads the app image to the
-  configured **OTA Path** on the SD card and reboots so the launcher loads it.
+- **Button boards (T-Embed / T-Display)** — update **over WiFi, no cable**, from the GitHub
+  releases, under **Options → Update FW**. Two paths, because they can run two ways:
+  - **Update FW** (*flash OTA*, for a **standalone** install flashed at 0x0) — downloads the
+    app image straight into the spare OTA partition (`ota_0`/`ota_1`), validates it
+    (magic + checksum), marks it bootable, and reboots into it. No SD, no launcher, no PC.
+  - **Update→SD** (for a **launcher** install) — downloads the app image to the configured
+    **OTA Path** on the SD card and reboots so the launcher loads it.
 
-Both pull the **app-only** asset (`bboink-app-t-embed-cc1101.bin`) from the
-latest release. A launcher must be given the `-app-` image (not the merged 0x0
-image), and its app slot must be ≥ ~1.3 MB.
+  Both pull the **app-only** asset for that board (`bboink-app-<env>.bin`). A launcher must
+  be given the `-app-` image (not the merged 0x0 image), and its app slot must be ≥ ~1.3 MB.
+
+- **Waveshare ESP32-C5-LCD (BLE-only)** — **no on-device OTA.** Its 4 MB flash holds a
+  *single* app slot, and on-device OTA fundamentally needs a **second** slot to write into
+  (you can't overwrite the running app) — two ~1.8 MB slots don't fit in 4 MB. It also has
+  no menu to trigger one. So you update it by **reflashing the merged image over USB**,
+  exactly like the first flash:
+
+  ```
+  esptool --chip esp32c5 write_flash 0x0 bboink-waveshare-c5-lcd.bin
+  ```
 
 ## Releases / CI
-GitHub Actions (`.github/workflows/build.yml`) builds on every push and, on a
-`vX.Y.Z` tag, publishes a Release with two raw assets:
+GitHub Actions (`.github/workflows/build.yml`) builds **all three boards** on every push to
+`main` and, on a `vX.Y.Z` tag, publishes a Release with, **per board env**, two raw assets:
 
 | Asset | Use |
 |---|---|
-| `bboink-t-embed-cc1101.bin` | merged image, full flash at `0x0` (esptool) |
-| `bboink-app-t-embed-cc1101.bin` | app-only image, for a launcher / the self-updater |
+| `bboink-<env>.bin` | merged image, full flash at `0x0` (esptool) — **all** boards |
+| `bboink-app-<env>.bin` | app-only image, for button-board OTA / a launcher |
 
-Release flow: bump `BBOINK_VERSION` in `src/version.h`, `git tag vX.Y.Z`, push the
-tag — CI builds and attaches both assets, and every device sees it via *Update FW*.
+`<env>` is `t-embed-cc1101`, `tdisplay-c5`, or `waveshare-c5-lcd`.
+
+Release flow: bump `BBOINK_VERSION` in `src/version.h`, `git tag vX.Y.Z`, push the tag — CI
+builds and attaches all assets. Button boards then see it via *Update FW*; the Waveshare is
+reflashed over USB.
 
 ## Controls
 Rotary encoder turn = move / adjust, click = select / confirm, side button =

@@ -32,6 +32,11 @@ Grab the latest merged image for your board from
 > `esptool erase_flash` before their first flash. Building it yourself?
 > See [Build / flash](../README.md#build--flash).
 
+> **Updating later:** button boards update themselves over WiFi (**Options → Update FW**).
+> The **Waveshare has no on-device OTA** (single-slot 4 MB flash, no menu) — update it by
+> re-running the `write_flash` command above. See
+> [Firmware updates](../README.md#firmware-updates).
+
 You'll also want a key from **at least one** cracking service (any one is enough):
 [wpa-sec](https://wpa-sec.stanev.org) (32-hex key) ·
 [OnlineHashCrack](https://onlinehashcrack.com) (`sk_…`) ·
