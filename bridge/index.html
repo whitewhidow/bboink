@@ -177,7 +177,7 @@ $('sync').onclick=async()=>{
     // group files into networks (strip the _22000.22000 / _pcap.pcap suffix)
     const nets={};
     for(const f of files){
-      const key=f.name.replace(/_(22000\.22000|pcap\.pcap)$/,'');
+      const key=f.name.replace(/_(22000\.22000|pmkid\.22000|pcap\.pcap)$/,'');
       const b=await cmdCollect({c:'get',name:f.name});
       nets[key]=nets[key]||{key};
       if(f.kind==='22000'){ nets[key].h22=new TextDecoder().decode(b); nets[key].h22name=f.name; }

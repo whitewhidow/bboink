@@ -154,12 +154,12 @@ void setup() {
     // Read the BLE-bridge boot flag first: on a NORMAL boot we don't use BLE, so
     // release the BT controller RAM (~40KB) back to the heap — NimBLE reserves it
     // at startup and it otherwise starves OinkMode::init(). Bridge boots keep it.
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
     bool g_bleBridge = (bootBleBridge == BOOT_SYNC_MAGIC);
     bootBleBridge = 0;
-    if (!g_bleBridge) esp_bt_controller_mem_release(ESP_BT_MODE_BLE);   // reclaim BT RAM when not bridging
-#else
-    const bool g_bleBridge = false;   // BLE-bridge mode is Waveshare-only
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    // Waveshare NimBLE-heap fix: reclaim the BT-controller RAM on non-bridge boots
+    // (other boards have RAM headroom and keep it).
+    if (!g_bleBridge) esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
 #endif
 
     // CRITICAL ORDER: connect WiFi BEFORE initialising the display.
@@ -171,10 +171,8 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     Config::init();                       // load creds (SD; fine before display)
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
     // BLE bridge boot: skip all WiFi (bridge runs radio as BLE only).
     if (g_bleBridge) { WiFi.mode(WIFI_OFF); ModeManager::forceBleBridgeBoot(); }
-#endif
 #if defined(DEV_WIFI_SSID)
     // DEV: a git-ignored core/dev_secrets.h can pin the uplink creds so they never
     // need re-entering during development (overrides stored config each boot).

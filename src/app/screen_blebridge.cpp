@@ -44,9 +44,12 @@ void enter() {
     draw();
 }
 
-void tick(const App::Input&) {
+void tick(const App::Input& in) {
     BleBridge::loop();
     if (BleBridge::exitRequested()) { ModeManager::enterCapture(); return; }
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    if (in.back || in.enter) { ModeManager::enterCapture(); return; }   // multi-button: exit bridge
+#endif
     // Redraw only when something changed (no periodic flicker while streaming).
     if (BleBridge::connected() != pConn || BleBridge::filesSent() != pFiles ||
         BleBridge::crackedIn() != pCrk) {
