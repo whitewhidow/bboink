@@ -362,7 +362,7 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     
     size_t contentLength = 2 + strlen(boundary) + 2 +           // --boundary\r\n
                            strlen(disposition) + 2 +             // disposition\r\n
-                           36 + 4 +                              // Content-Type + \r\n\r\n
+                           38 + 4 +                              // Content-Type: application/octet-stream (38) + \r\n\r\n
                            fileSize +                            // file data
                            2 + 2 + strlen(boundary) + 4;         // \r\n--boundary--\r\n
     
