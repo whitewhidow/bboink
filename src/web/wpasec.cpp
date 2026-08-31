@@ -12,6 +12,7 @@
 #include "../core/storage.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <ctype.h>
 #include <esp_heap_caps.h>
 
@@ -312,10 +313,9 @@ bool WPASec::canSync() {
 }
 bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     if (!filepath || !bssid) return false;
-    
+
     Serial.printf("[WPASEC] Uploading: %s\n", filepath);
-    
-    // Check file exists and get size
+
     File capFile = Storage::fs().open(filepath, FILE_READ);
     if (!capFile) {
         Serial.printf("[WPASEC] Cannot open file: %s\n", filepath);
@@ -327,109 +327,71 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
         Serial.printf("[WPASEC] Invalid file size: %u\n", (unsigned int)fileSize);
         return false;
     }
-    
-    // Extract filename from path
+
     const char* filename = strrchr(filepath, '/');
     filename = filename ? filename + 1 : filepath;
-    
-    WiFiClientSecure client;
-    client.setInsecure();
-    
-    // Connect with timeout
-    Serial.printf("[WPASEC] Connecting to %s:%d\n", WPASEC_HOST, WPASEC_PORT);
-    if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
-        capFile.close();
-        snprintf(lastError, sizeof(lastError), "HTTP CONNECT FAILED");
-        Serial.println("[WPASEC] HTTP connect failed");
-        return false;
-    }
-    
-    // Build multipart boundary
+
+    // Build the whole multipart body in one heap buffer, then POST it via
+    // HTTPClient. HTTPClient drives WiFiClientSecure's TLS write/read loop
+    // correctly on the ESP32-C5, where the hand-rolled client.write() path
+    // silently failed right after the TLS handshake (body sent 0/N).
     char boundary[32];
     snprintf(boundary, sizeof(boundary), "----WPASec%08lX", millis());
-    
-    // Calculate content length
-    // Multipart format:
-    // --boundary\r\n
-    // Content-Disposition: form-data; name="file"; filename="xxx"\r\n
-    // Content-Type: application/octet-stream\r\n\r\n
-    // <file data>
-    // \r\n--boundary--\r\n
-    char disposition[128];
-    snprintf(disposition, sizeof(disposition),
-             "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"",
-             filename);
-    
-    size_t contentLength = 2 + strlen(boundary) + 2 +           // --boundary\r\n
-                           strlen(disposition) + 2 +             // disposition\r\n
-                           38 + 4 +                              // Content-Type: application/octet-stream (38) + \r\n\r\n
-                           fileSize +                            // file data
-                           2 + 2 + strlen(boundary) + 4;         // \r\n--boundary--\r\n
-    
-    // Send HTTP headers
-    client.printf("POST %s HTTP/1.1\r\n", WPASEC_UPLOAD_PATH);
-    client.printf("Host: %s\r\n", WPASEC_HOST);
-    client.printf("Cookie: key=%s\r\n", Config::wifi().wpaSecKey);
-    client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary);
-    client.printf("Content-Length: %u\r\n", (unsigned int)contentLength);
-    client.print("Connection: close\r\n\r\n");
-    
-    // Send multipart body
-    client.printf("--%s\r\n", boundary);
-    client.printf("%s\r\n", disposition);
-    client.print("Content-Type: application/octet-stream\r\n\r\n");
-    
-    // Stream file in chunks (heap-safe)
-    char chunk[256];
-    size_t sent = 0;
-    while (capFile.available() && sent < fileSize) {
-        size_t toRead = min((size_t)sizeof(chunk), fileSize - sent);
-        size_t bytesRead = capFile.read((uint8_t*)chunk, toRead);
-        if (bytesRead > 0) {
-            if (client.write((uint8_t*)chunk, bytesRead) <= 0) break;
-            sent += bytesRead;
-        }
-        yield();  // Let WiFi stack breathe
+
+    String pre = String("--") + boundary + "\r\n"
+               + "Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\n"
+               + "Content-Type: application/octet-stream\r\n\r\n";
+    String post = String("\r\n--") + boundary + "--\r\n";
+
+    size_t bodyLen = pre.length() + fileSize + post.length();
+    uint8_t* body = (uint8_t*)malloc(bodyLen);
+    if (!body) {
+        capFile.close();
+        snprintf(lastError, sizeof(lastError), "OOM %u", (unsigned int)bodyLen);
+        Serial.printf("[WPASEC] malloc(%u) failed\n", (unsigned int)bodyLen);
+        return false;
     }
+    memcpy(body, pre.c_str(), pre.length());
+    size_t rd = capFile.read(body + pre.length(), fileSize);
     capFile.close();
-    
-    // End multipart
-    client.printf("\r\n--%s--\r\n", boundary);
-    
-    // Read response (just check status code)
-    unsigned long timeout = millis() + 10000;
-    while (client.connected() && !client.available() && millis() < timeout) {
-        delay(10);
-        yield();  // Prevent WDT during response wait
+    if (rd != fileSize) {
+        free(body);
+        snprintf(lastError, sizeof(lastError), "READ %u/%u", (unsigned int)rd, (unsigned int)fileSize);
+        return false;
     }
-    
-    bool success = false;
-    if (client.available()) {
-        char response[64];
-        size_t len = client.readBytesUntil('\n', response, sizeof(response) - 1);
-        response[len] = '\0';
-        Serial.printf("[WPASEC] Response: %s\n", response);
-        
-        // HTTP/1.1 200 OK or similar success
-        if (strstr(response, "200") || strstr(response, "201")) {
-            success = true;
-        } else if (strstr(response, "409")) {
-            // Already uploaded - treat as success
-            success = true;
-            Serial.println("[WPASEC] Already uploaded (409)");
-        }
+    memcpy(body + pre.length() + fileSize, post.c_str(), post.length());
+
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient https;
+    https.setTimeout(15000);
+    String url = String("https://") + WPASEC_HOST + WPASEC_UPLOAD_PATH;
+    if (!https.begin(client, url)) {
+        free(body);
+        snprintf(lastError, sizeof(lastError), "BEGIN FAILED");
+        Serial.println("[WPASEC] https.begin failed");
+        return false;
     }
-    
-    client.stop();
-    
+    https.addHeader("Cookie", String("key=") + Config::wifi().wpaSecKey);
+    https.addHeader("Content-Type", String("multipart/form-data; boundary=") + boundary);
+
+    Serial.printf("[WPASEC] POST %s (%u bytes body)\n", url.c_str(), (unsigned int)bodyLen);
+    int code = https.POST(body, bodyLen);
+    free(body);
+
+    String resp = (code > 0) ? https.getString() : String();
+    https.end();
+    Serial.printf("[WPASEC] HTTP %d resp: %s\n", code, resp.c_str());
+
+    bool success = (code == 200 || code == 201 || code == 409);
     if (success) {
-        // NOTE: Don't mark uploaded here - caller handles marking after all TLS operations
-        // This avoids reloading cache during TLS when heap is tight
         Serial.printf("[WPASEC] Upload success: %s\n", bssid);
+    } else if (code > 0) {
+        snprintf(lastError, sizeof(lastError), "HTTP %d", code);
     } else {
-        strncpy(lastError, "UPLOAD REJECTED", sizeof(lastError) - 1);
+        snprintf(lastError, sizeof(lastError), "TLS ERR %d", code);
     }
-    
     return success;
 }
 
