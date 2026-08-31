@@ -167,26 +167,40 @@ $('sync').onclick=async()=>{
   const auth={'Authorization':'Bearer '+tok};
   $('sync').disabled=true;
   try{
-    log('listing captures…'); const files=await cmdList(); log('  '+files.length+' file(s)');
-    let hashes=''; const pcaps=[];
-    for(const f of files){ log('  ← '+f.name+' ('+f.size+'B)'); const b=await cmdCollect({c:'get',name:f.name});
+    logEl().textContent='';
+    const files=await cmdList();
+    let hashes=''; const pcaps=[]; const names=new Set();
+    for(const f of files){ const b=await cmdCollect({c:'get',name:f.name});
+      names.add(f.name.split('_')[0]);
       if(f.kind==='22000') hashes+=new TextDecoder().decode(b); else if(f.kind==='pcap') pcaps.push({name:f.name,bytes:b}); }
+    const netList=[...names].join(', ')||'none';
+    log('Uploading '+[...names].length+' network(s): '+netList);
+    log('');
+
     if(hashes.trim()){
-      log('→ posting hashes (OHC + PwnCrack)…');
       const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:hashes})).json().catch(()=>({}));
-      if(j.hashes!=null) log('  '+j.hashes+' unique hash(es)');
-      if(j.ohc) log('  OHC: '+(j.ohc.error?('✖ '+j.ohc.error):(j.ohc.accepted+' accepted · '+j.ohc.skipped+' skipped(dupe) · '+j.ohc.rejected+' rejected')));
-      if(j.pwncrack) log('  PwnCrack: '+(j.pwncrack.error?('✖ '+j.pwncrack.error):((j.pwncrack.ok?'✔ accepted':'HTTP '+j.pwncrack.http)+(j.pwncrack.note?(' — '+j.pwncrack.note):''))));
-    } else log('  (no hashes to post)');
+      const o=j.ohc||{};
+      const ohcMsg = o.error ? ('error — '+o.error)
+                   : o.accepted ? (o.accepted+' newly queued')
+                   : o.skipped  ? (o.skipped+' already submitted')
+                   : o.rejected ? (o.rejected+' rejected (bad hash)')
+                   : o.success  ? 'already submitted (nothing new)'
+                   : ('HTTP '+o.http);
+      log('OnlineHashCrack:  '+ohcMsg);
+      const p=j.pwncrack||{};
+      log('PwnCrack:         '+(p.error?('error — '+p.error):(p.ok?'accepted':('HTTP '+p.http+(p.note?' '+p.note:'')))));
+    }
     for(const p of pcaps){ const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes})).json().catch(()=>({}))).wpasec||{};
-      log('  wpa-sec '+p.name+': '+(w.error?('✖ '+w.error):(w.status||('HTTP '+w.http)))); }
-    if(!pcaps.length) log('  (no pcaps for wpa-sec)');
-    log('← fetching cracked…');
+      log('wpa-sec:          '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http)))); }
+    if(!hashes.trim()&&!pcaps.length) log('(no captures on the board to upload)');
+
+    log('');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
-    log('  '+cr.count+' cracked'); let n=0;
-    for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
+    let n=0; for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
     await cmdAck({c:'crkdone'});
-    log('✔ done — '+n+' cracked written to board');
+    log('Cracked so far:    '+n+' network(s)  ·  see the Captures tab');
+    log('');
+    log('✔ sync complete');
     await loadCaps();
   }catch(e){ log('✖ '+(e.message||e)); }
   $('sync').disabled=false;

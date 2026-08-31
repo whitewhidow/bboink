@@ -78,6 +78,7 @@ app.post('/v1/hashes', async (req, res) => {
     const j = await r.json().catch(() => ({}));
     out.ohc = {
       http: r.status,
+      success: j?.success === true,
       accepted: j?.accepted?.count ?? 0,
       skipped: j?.skipped?.count ?? 0,
       rejected: j?.rejected?.count ?? 0,
