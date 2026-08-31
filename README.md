@@ -20,6 +20,57 @@ Supported boards (one codebase, one build env each):
 > ⚠️ Deauth frames are transmitted to force handshakes. Use only on networks you own or
 > are explicitly authorized to test.
 
+> 🚀 **New here? Start with the [Getting-started guide](docs/GETTING-STARTED.md)** — a
+> step-by-step setup walkthrough split by device type (buttons+BLE vs BLE-only).
+
+## Supported hardware
+
+Three boards, one firmware. Buy links below are the official vendor stores; the wiki/docs
+links are the manufacturer's own hardware documentation.
+
+<table>
+<tr>
+<td width="33%" valign="top" align="center">
+
+<img src="https://lilygo.cc/cdn/shop/files/T-EMBED-CC1101-PLUS_6_4bda35c0-79ad-41ba-9aa7-52792d723ab1.jpg?v=1755075224" width="240" alt="LilyGo T-Embed CC1101"><br>
+
+**LilyGo T-Embed CC1101 / PLUS**<br>
+ESP32-S3 · 16 MB · encoder + button<br>
+_buttons + on-device menu (or BLE)_
+
+[Buy](https://lilygo.cc/products/t-embed-cc1101-plus) ·
+[Wiki](https://wiki.lilygo.cc/products/t-embed-series/t-embed-cc1101/) ·
+[GitHub](https://github.com/Xinyuan-LilyGO/T-Embed-CC1101)
+
+</td>
+<td width="33%" valign="top" align="center">
+
+<img src="https://lilygo.cc/cdn/shop/files/LILYGO-T-DISPLAY-C5_10.jpg?v=1783057404" width="240" alt="LilyGo T-Display C5"><br>
+
+**LilyGo T-Display C5**<br>
+ESP32-C5 (dual-band) · 2 buttons<br>
+_buttons + on-device menu (or BLE)_
+
+[Buy](https://lilygo.cc/en-us/products/t-display-c5) ·
+[Wiki](https://wiki.lilygo.cc/products/t-display-series/t-display-c5/quick-start.html)
+
+</td>
+<td width="33%" valign="top" align="center">
+
+<img src="https://raw.githubusercontent.com/waveshareteam/esp32-c5-lcd-1.47/main/assets/Product-1.webp" width="240" alt="Waveshare ESP32-C5-LCD-1.47"><br>
+
+**Waveshare ESP32-C5-LCD-1.47**<br>
+ESP32-C5 (dual-band) · **1 button**<br>
+_BLE console only (no menu, no AP)_
+
+[Buy](https://www.waveshare.com/esp32-c5-lcd-1.47.htm) ·
+[Docs](https://docs.waveshare.com/ESP32-C5-LCD-1.47) ·
+[GitHub](https://github.com/waveshareteam/esp32-c5-lcd-1.47)
+
+</td>
+</tr>
+</table>
+
 ## Driving each board
 
 **Button boards (T-Embed / T-Display).** From the capture screen, **back** opens the
