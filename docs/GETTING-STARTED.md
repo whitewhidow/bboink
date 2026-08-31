@@ -19,7 +19,17 @@ authorized to test. New to the project? Skim the [README](../README.md) first.
 
 ## Flash the firmware (everyone)
 
-Grab the latest merged image for your board from
+**Easiest — the web flasher (no tools to install):** open
+**[whitewhidow.github.io/bboink/flasher/](https://whitewhidow.github.io/bboink/flasher/)** in
+**Chrome or Edge on desktop**, connect the board with a **USB-C data cable**, pick your board +
+version, and click **Install**. First install on a C5 board? Tick **Erase device**; *updating* a
+board that already runs BBoink? Leave it unticked to keep your saved config. After a C5 flash,
+**unplug/replug** to run the new firmware.
+
+> If a C5 board doesn't appear in the port chooser: use a real **data** cable, and if needed force
+> download mode — **hold BOOT, tap RESET, release BOOT** — then Connect.
+
+**By hand (esptool):** grab the latest merged image from
 [**Releases**](https://github.com/whitewhidow/bboink/releases) and flash it at `0x0`:
 
 | Board | Merged image | Flash command (esptool) |
@@ -33,8 +43,9 @@ Grab the latest merged image for your board from
 > See [Build / flash](../README.md#build--flash).
 
 > **Updating later:** button boards update themselves over WiFi (**Options → Update FW**).
-> The **Waveshare has no on-device OTA** (single-slot 4 MB flash, no menu) — update it by
-> re-running the `write_flash` command above. See
+> The **Waveshare has no on-device OTA** (single-slot 4 MB flash, no menu) — re-flash it with
+> the [web flasher](https://whitewhidow.github.io/bboink/flasher/) (leave *Erase device* off to
+> keep your config) or the `write_flash` command above. See
 > [Firmware updates](../README.md#firmware-updates).
 
 You'll also want a key from **at least one** cracking service (any one is enough):
