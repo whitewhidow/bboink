@@ -77,7 +77,8 @@ void enterManagement() { requestBleBridge(); }
 // the engine, restores the STA uplink, and fires the per-network ntfy alerts.
 void enterManagement() {
     const bool leavingCapture = (mode_ == Mode::CAPTURE);
-    const bool wantNtfy = leavingCapture &&
+    // ntfy disabled for now (inconsistent across boards) — code kept below.
+    const bool wantNtfy = false && leavingCapture &&
                           (OinkMode::getSessionCaptureCount() > 0) && Ntfy::enabled();
     if (leavingCapture) {
         OinkMode::stop();

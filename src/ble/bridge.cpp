@@ -364,19 +364,23 @@ void loop() {
         handleCommand(s_cmdBuf, s_cmdLen);
     }
     if (!s_streaming) return;
-    // Send one chunk per call (paced by the main loop) so we don't flood NimBLE.
+    // Send ONE chunk, advancing only when notify() succeeds — NimBLE returns false
+    // when its tx buffer is full, giving natural back-pressure (no dropped chunks ->
+    // no truncated JSON). Seek to s_sent so a retry re-sends the exact same chunk.
     uint16_t cs = chunkSize();
     static uint8_t buf[256];
     if (cs > sizeof(buf) - 1) cs = sizeof(buf) - 1;
     buf[0] = T_BIN;
     size_t toRead = s_size - s_sent; if (toRead > cs) toRead = cs;
     size_t rd = 0;
-    if (s_memMode) { memcpy(buf + 1, s_mem.c_str() + s_sent, toRead); rd = toRead; }
-    else           { rd = s_file.read(buf + 1, toRead); }
+    if (toRead > 0) {
+        if (s_memMode) { memcpy(buf + 1, s_mem.c_str() + s_sent, toRead); rd = toRead; }
+        else           { s_file.seek(s_sent); rd = s_file.read(buf + 1, toRead); }
+    }
     if (rd > 0) {
         s_tx->setValue(buf, rd + 1);
-        s_tx->notify();
-        s_sent += rd;
+        if (s_tx->notify()) s_sent += rd;   // advance only if the notify was queued
+        else return;                        // buffer full -> retry same chunk next loop
     }
     if (s_sent >= s_size || rd == 0) {
         if (s_memMode) { s_memMode = false; s_mem = String(); }
