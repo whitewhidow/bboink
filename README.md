@@ -116,7 +116,13 @@ relay path uses your *phone's* connection, so the board needs no WiFi for it.
 
 ## Cracking sync — the relay
 
-Captures reach the three services through a tiny **relay** you host once, so the board (or
+**Supported cloud crackers** — bring a free key from **any one** (a network cracked by several
+shows all of them):
+- [**wpa-sec**](https://wpa-sec.stanev.org) — Stanev's distributed WPA cracker; uploads raw `.pcap`, accepts duplicates.
+- [**OnlineHashCrack**](https://onlinehashcrack.com) — GPU service with a free tier + API; submits WPA `22000` hashes.
+- [**PwnCrack**](https://pwncrack.org) — uploads `hc22000` and reads back the cracked potfile.
+
+Captures reach these services through a tiny **relay** you host once, so the board (or
 phone) only ever talks to **one host**.
 
 ```
