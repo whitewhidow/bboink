@@ -191,6 +191,10 @@ UploadResult uploadFile(const char* basename) {
     if (rd != fileSize) { free(body); snprintf(r.error, sizeof(r.error), "READ %u/%u", (unsigned)rd, (unsigned)fileSize); return r; }
     memcpy(body + pn + fileSize, epi, en);
 
+    size_t maxblk = ESP.getMaxAllocHeap();
+    Serial.printf("[PWN] upload body=%u maxAlloc=%u free=%u\n",
+                  (unsigned)bodyLen, (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
+    if (maxblk < 36000) { free(body); snprintf(r.error, sizeof(r.error), "LOW HEAP %u", (unsigned)maxblk); return r; }
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;
@@ -214,6 +218,9 @@ int syncPotfile(char* err, size_t errLen) {
     if (WiFi.status() != WL_CONNECTED) { if (err) snprintf(err, errLen, "WIFI NOT CONNECTED"); return -1; }
 
     // GET via HTTPClient (raw client GET request write also failed post-handshake on C5).
+    size_t maxblk = ESP.getMaxAllocHeap();
+    Serial.printf("[PWN] potfile maxAlloc=%u free=%u\n", (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
+    if (maxblk < 36000) { if (err) snprintf(err, errLen, "LOW HEAP %u", (unsigned)maxblk); return -1; }
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;

@@ -13,7 +13,7 @@
 static const char*    OHC_HOST = "api.onlinehashcrack.com";
 static const uint16_t OHC_PORT = 443;
 static const int      OHC_ALGO_WPA = 22000;   // hashcat mode for WPA-PMKID+EAPOL
-static const int      OHC_BATCH    = 50;      // max hashes per request
+static const int      OHC_BATCH    = 20;      // max hashes per request (smaller = less heap held during TLS handshake on C5)
 static const size_t   OHC_MAX_HASH = 120;     // cap collected hashes (memory bound)
 
 namespace OHC {
@@ -92,6 +92,16 @@ void markUploaded(const char* bssid) {
 static bool postV2(const String& body, String& resp, char* err, size_t errLen) {
     // HTTPClient drives WiFiClientSecure's TLS write/read on the ESP32-C5, where
     // a hand-rolled client.print(body) after the handshake silently sent 0 bytes.
+    // The TLS handshake needs a large contiguous block (~35KB); if the heap is too
+    // fragmented the esp-aes alloc fails and mbedtls calls abort() -> crash+reboot.
+    // Guard on the largest free block and fail gracefully instead.
+    size_t maxblk = ESP.getMaxAllocHeap();
+    Serial.printf("[OHC] postV2 body=%u maxAlloc=%u free=%u\n",
+                  (unsigned)body.length(), (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
+    if (maxblk < 36000) {
+        if (err) snprintf(err, errLen, "LOW HEAP %u", (unsigned)maxblk);
+        return false;
+    }
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;
@@ -135,14 +145,19 @@ static UploadResult submitHashLines(std::vector<String>& hashes) {
 
     const char* key = Config::wifi().ohcKey;
     for (size_t i = 0; i < hashes.size(); i += OHC_BATCH) {
-        JsonDocument doc;
-        doc["api_key"]     = key;
-        doc["agree_terms"] = "yes";
-        doc["action"]      = "add_tasks";
-        doc["algo_mode"]   = OHC_ALGO_WPA;
-        JsonArray arr = doc["hashes"].to<JsonArray>();
-        for (size_t j = i; j < i + OHC_BATCH && j < hashes.size(); j++) arr.add(hashes[j]);
-        String body; serializeJson(doc, body);
+        String body;
+        {
+            // Build the request body, then let the JsonDocument free BEFORE the
+            // TLS handshake so it isn't fragmenting the heap during it.
+            JsonDocument doc;
+            doc["api_key"]     = key;
+            doc["agree_terms"] = "yes";
+            doc["action"]      = "add_tasks";
+            doc["algo_mode"]   = OHC_ALGO_WPA;
+            JsonArray arr = doc["hashes"].to<JsonArray>();
+            for (size_t j = i; j < i + OHC_BATCH && j < hashes.size(); j++) arr.add(hashes[j]);
+            serializeJson(doc, body);
+        }
         String resp;
         if (!postV2(body, resp, r.error, sizeof(r.error))) return r;
         JsonDocument rd;
