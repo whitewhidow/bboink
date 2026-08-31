@@ -20,16 +20,16 @@
 </style>
 </head>
 <body>
-  <header class="site-head">
-    <div class="brand"><span class="pig">🐷</span> BBoink</div>
+  <header class="nav"><div class="wrap">
+    <div class="brand"><span class="pig">🐷</span>BBoink</div>
     <nav>
       <a href="../">Home</a>
       <a href="../bridge/">Console</a>
-      <a href="https://github.com/whitewhidow/bboink">GitHub</a>
+      <a class="btn" href="https://github.com/whitewhidow/bboink">GitHub</a>
     </nav>
-  </header>
+  </div></header>
 
-  <div class="wrap">
+  <div class="page">
     <h1>Web Flasher</h1>
     <p class="sub">Flash your board over USB, straight from the browser — no esptool, no drivers.</p>
 
@@ -82,7 +82,7 @@
     try {
       cfg = await (await fetch('./versions.json', { cache: 'no-cache' })).json();
     } catch (e) {
-      document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+      document.querySelector('.page').insertAdjacentHTML('beforeend',
         '<p class="warn">Could not load firmware list (versions.json). Try again later.</p>');
       return;
     }

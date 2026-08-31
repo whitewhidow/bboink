@@ -10,7 +10,6 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="../assets/theme.css">
 <style>
-  body{ max-width:640px; margin:0 auto; padding:16px 16px 48px; }
   h1{ font-size:22px; font-weight:700; display:flex; align-items:center; gap:8px; margin:0 0 2px; }
   .sub{ color:var(--muted); font-size:12.5px; font-family:var(--mono); margin:2px 0 12px; }
   label{ font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--cyan-dim); margin:11px 0 4px; display:block; }
@@ -35,15 +34,18 @@
   .del:hover{ background:var(--red); color:#fff; }
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
   .row{ display:flex; align-items:center; gap:8px; margin-top:9px; }
-  .topbar{ display:flex; align-items:center; margin:-16px -16px 14px; padding:13px 16px; border-bottom:1px solid var(--line); background:rgba(10,14,18,.6); }
-  .topbar .brand{ font-family:var(--disp); font-weight:700; font-size:18px; display:flex; gap:8px; align-items:center; }
-  .topbar nav{ margin-left:auto; display:flex; gap:15px; font-family:var(--mono); font-size:13px; }
-  .topbar nav a{ color:var(--muted); } .topbar nav a:hover{ color:var(--cyan); }
 </style>
 </head>
 <body>
-<div class="topbar"><span class="brand"><span class="pig">🐷</span> BBoink</span>
-  <nav><a href="../">Home</a><a href="../flasher/">Flasher</a><a href="https://github.com/whitewhidow/bboink">GitHub</a></nav></div>
+<header class="nav"><div class="wrap">
+  <div class="brand"><span class="pig">🐷</span>BBoink</div>
+  <nav>
+    <a href="../">Home</a>
+    <a href="../flasher/">Flasher</a>
+    <a class="btn" href="https://github.com/whitewhidow/bboink">GitHub</a>
+  </nav>
+</div></header>
+<div class="page">
 <h1>Console</h1>
 <div class="sub">Chrome/Edge (Android or desktop) · manage everything over Bluetooth — the board needs no WiFi.</div>
 <button id="connect" class="sec wide">Connect to board</button>
@@ -77,6 +79,7 @@
     <button id="savecfg" class="wide">Save config to board</button>
     <div id="cfgMsg" class="sub" style="margin-top:6px"></div>
   </div>
+</div>
 </div>
 
 <script>
