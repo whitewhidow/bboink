@@ -284,6 +284,14 @@ static void handleCommand(const uint8_t* data, size_t len) {
     else if (!strcmp(c, "synced"))  { const char* n = doc["name"] | ""; if (n[0]) markSynced(n); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "scfg"))   { const char* k = doc["k"] | ""; const char* v = doc["v"] | ""; if (k[0]) { setCfgField(k, v); notifyText("{\"t\":\"ok\"}"); } }
     else if (!strcmp(c, "savecfg")){ Config::save(); notifyText("{\"t\":\"ok\"}"); }
+    else if (!strcmp(c, "excl"))   {   // add a manual never-attack exclusion (by SSID name, optional BSSID)
+        const char* ssid = doc["s"] | "";
+        const char* bh   = doc["b"] | "";
+        uint8_t bssid[6] = {0};
+        if (bh[0]) { uint64_t v = strtoull(bh, nullptr, 16); for (int i = 0; i < 6; i++) bssid[i] = (uint8_t)(v >> ((5 - i) * 8)); }
+        if (ssid[0] || bh[0]) { OinkMode::excludeNetworkByBSSID(bssid, ssid); notifyText("{\"t\":\"ok\"}"); }
+        else notifyText("{\"t\":\"err\",\"e\":\"need ssid\"}");
+    }
     else if (!strcmp(c, "done"))   { s_exit = true; notifyText("{\"t\":\"bye\"}"); }
 }
 

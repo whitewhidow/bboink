@@ -42,6 +42,8 @@
 
   <div class="pane on" id="p_sync">
     <div class="sub">Uploads captures to the relay + pulls cracked over this phone's connection (WiFi or cellular).</div>
+    <button id="relaychk" class="sec wide">Check / wake relay</button>
+    <div id="relaystat" class="sub" style="margin-top:6px"></div>
     <label class="row"><input type="checkbox" id="resyncall"><span style="font-size:13px;color:#8b949e">re-sync everything (ignore already-synced)</span></label>
     <button id="sync" class="wide">Sync captures ↔ relay</button>
     <div id="log"></div>
@@ -49,6 +51,7 @@
 
   <div class="pane" id="p_caps">
     <div class="row" style="justify-content:space-between"><b>Captures &amp; cracked</b><button class="sec" style="padding:7px 11px" onclick="loadCaps()">Refresh</button></div>
+    <div class="row"><input id="exclssid" placeholder="SSID to never attack"><button class="sec" style="padding:9px 12px" onclick="addExcl()">Exclude</button></div>
     <div id="capsList"></div>
   </div>
 
@@ -171,44 +174,60 @@ $('sync').onclick=async()=>{
   try{
     logEl().textContent='';
     const files=await cmdList($('resyncall').checked);
-    let hashes=''; const pcaps=[]; const h22=[]; const names=new Set();
-    for(const f of files){ const b=await cmdCollect({c:'get',name:f.name});
-      names.add(f.name.split('_')[0]);
-      if(f.kind==='22000'){ hashes+=new TextDecoder().decode(b); h22.push(f.name); } else if(f.kind==='pcap') pcaps.push({name:f.name,bytes:b}); }
-    const netList=[...names].join(', ')||'none';
-    log('Uploading '+[...names].length+' network(s): '+netList);
-    log('');
-
-    if(hashes.trim()){
-      const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:hashes})).json().catch(()=>({}));
-      const o=j.ohc||{};
-      const ohcMsg = o.error ? ('error — '+o.error)
-                   : o.accepted ? (o.accepted+' newly queued')
-                   : o.skipped  ? (o.skipped+' already submitted')
-                   : o.rejected ? (o.rejected+' rejected (bad hash)')
-                   : o.success  ? 'already submitted (nothing new)'
-                   : ('HTTP '+o.http);
-      log('OnlineHashCrack:  '+ohcMsg);
-      const p=j.pwncrack||{};
-      log('PwnCrack:         '+(p.error?('error — '+p.error):(p.ok?'accepted':('HTTP '+p.http+(p.note?' '+p.note:'')))));
-      for(const n of h22) await cmdAck({c:'synced',name:n});   // remember these hashes were sent
+    // group files into networks (strip the _22000.22000 / _pcap.pcap suffix)
+    const nets={};
+    for(const f of files){
+      const key=f.name.replace(/_(22000\.22000|pcap\.pcap)$/,'');
+      const b=await cmdCollect({c:'get',name:f.name});
+      nets[key]=nets[key]||{key};
+      if(f.kind==='22000'){ nets[key].h22=new TextDecoder().decode(b); nets[key].h22name=f.name; }
+      else if(f.kind==='pcap'){ nets[key].pcap=b; nets[key].pcapname=f.name; }
     }
-    for(const p of pcaps){ const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes})).json().catch(()=>({}))).wpasec||{};
-      log('wpa-sec:          '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
-      if(!w.error) await cmdAck({c:'synced',name:p.name}); }
-    if(!hashes.trim()&&!pcaps.length) log('(no captures on the board to upload)');
-
+    const netKeys=Object.keys(nets);
+    if(!netKeys.length) log('(nothing new to upload)');
+    for(const key of netKeys){
+      const rec=nets[key];
+      const ssid=key.replace(/_[0-9A-Fa-f]{12}$/,'')||key;
+      log('• '+ssid);
+      if(rec.h22 && rec.h22.trim()){
+        const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:rec.h22})).json().catch(()=>({}));
+        const o=j.ohc||{};
+        const ohcMsg = o.error?('error — '+o.error): o.accepted?(o.accepted+' queued'): o.skipped?'already submitted': o.rejected?(o.rejected+' rejected'): o.success?'already submitted':('HTTP '+o.http);
+        log('    OHC:       '+ohcMsg);
+        const pc=j.pwncrack||{};
+        log('    PwnCrack:  '+(pc.error?('error — '+pc.error):(pc.ok?'accepted':('HTTP '+pc.http))));
+        if(rec.h22name) await cmdAck({c:'synced',name:rec.h22name});
+      }
+      if(rec.pcap){
+        const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(rec.pcapname),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:rec.pcap})).json().catch(()=>({}))).wpasec||{};
+        log('    wpa-sec:   '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
+        if(!w.error) await cmdAck({c:'synced',name:rec.pcapname});
+      }
+    }
     log('');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
     let n=0; for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
     await cmdAck({c:'crkdone'});
-    log('Cracked so far:    '+n+' network(s)  ·  see the Captures tab');
     log('');
+    log('Cracked so far: '+n+' network(s) · see the Captures tab');
     log('✔ sync complete');
     await loadCaps();
   }catch(e){ log('✖ '+(e.message||e)); }
   $('sync').disabled=false;
 };
+
+$('relaychk').onclick=async()=>{
+  const url=(cfg.relay_url||'').replace(/\/+$/,'');
+  if(!url){ $('relaystat').textContent='set Relay URL in the Config tab first'; return; }
+  $('relaystat').textContent='checking… (free tier can take ~40s to wake)';
+  const t0=Date.now();
+  try{ const c=new AbortController(); const to=setTimeout(()=>c.abort(),70000);
+    const r=await fetch(url+'/healthz',{signal:c.signal}); clearTimeout(to);
+    $('relaystat').textContent=r.ok?('✔ relay UP ('+(Date.now()-t0)+'ms)'):('✖ relay HTTP '+r.status);
+  }catch(e){ $('relaystat').textContent='✖ unreachable — '+(e.name==='AbortError'?'timed out':e.message); }
+};
+window.addExcl=async()=>{ const ssid=$('exclssid').value.trim(); if(!ssid){return;}
+  try{ await cmdAck({c:'excl',s:ssid}); $('exclssid').value=''; await loadCaps(); }catch(e){} };
 
 if(!navigator.bluetooth) $('cstat').textContent='✖ Web Bluetooth unavailable — use Chrome on Android.';
 </script>
