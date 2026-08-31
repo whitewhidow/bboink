@@ -92,6 +92,8 @@ static void clearSyncedForBssid(const char* bhex) {
     if (w) { w.print(keep); w.close(); }
 }
 
+static void startMem(const char* name, const String& json);   // fwd decl (defined below)
+
 // Build + send the capture manifest ({"t":"list","files":[{name,size,kind}]}).
 static void sendList(bool all) {
     s_filesSent = 0;   // new sync sequence -> fresh file count
@@ -117,7 +119,7 @@ static void sendList(bool all) {
         d.close();
     }
     String out; serializeJson(doc, out);
-    notifyText(out);
+    startMem("list", out);   // stream it — a big list overflows one BLE notification
 }
 
 static void startFile(const char* name) {

@@ -116,7 +116,12 @@ function cmdCollect(obj){ return new Promise((res,rej)=>{ let cs=[], started=fal
   write(obj); }); }
 async function cmdJson(obj){ return JSON.parse(new TextDecoder().decode(await cmdCollect(obj))||'null'); }
 function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){waiter=null;res(j);} }}; write(obj); }); }
-function cmdList(all){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){waiter=null;res(j.files||[]);} }}; write({c:'list',all:!!all}); }); }
+function cmdList(all){ return new Promise(res=>{ let cs=[], streaming=false;
+  waiter={ onText:j=>{ if(j.t==='begin'){ streaming=true; cs=[]; }
+                       else if(j.t==='list'){ waiter=null; res(j.files||[]); }            // old fw: single frame
+                       else if(j.t==='end' && streaming){ waiter=null; try{ res((JSON.parse(new TextDecoder().decode(concat(cs)))||{}).files||[]); }catch(_){ res([]); } } },
+           onBin:b=>{ if(streaming) cs.push(b); } };
+  write({c:'list',all:!!all}); }); }
 
 $('connect').onclick=async()=>{
   try{
