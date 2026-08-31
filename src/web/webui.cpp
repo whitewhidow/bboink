@@ -96,7 +96,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div id="sync" hidden><div class="card">
 <h3>Upload captures to crack services</h3>
 <small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
-<div class="srow"><span><b>Relay</b></span><button class="sbtn" onclick="doSync('relayping',this)">Check Relay Status</button><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><span class="sres" id="r_relayping"></span><span class="sres" id="r_relay"></span></div>
+<div class="srow"><span><b>Relay</b></span><button class="sbtn" onclick="doSync('relayping',this)">Check Relay Status</button><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><span class="sres" id="r_relayping"></span><span class="sres" id="r_relay"></span></div><div class="srow"><span><b>Phone sync</b> (BLE, no uplink)</span><button class="sbtn" onclick="doSync('blebridge',this)">Start BLE Bridge</button><span class="sres" id="r_blebridge"></span></div>
 </div></div>
 
 <div id="caps" hidden><div class="card">
@@ -354,6 +354,11 @@ static void syncRelay() {
     server.send(200, "application/json", "{\"rebooting\":true}");
     requestSyncQueue(SYNC_RELAY);
 }
+static void startBleBridge() {
+    noKeepAlive();
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestBleBridge();   // reboots into BLE_BRIDGE (WiFi off, NimBLE peripheral)
+}
 static void syncRelayPing() {
     noKeepAlive();
     if (WiFi.status() != WL_CONNECTED) { server.send(400, "application/json", "{\"error\":\"no uplink\"}"); return; }
@@ -515,6 +520,7 @@ void begin() {
     server.on("/api/sync/checkcracked", HTTP_POST, syncCheckCracked);
     server.on("/api/sync/relay",     HTTP_POST, syncRelay);
     server.on("/api/sync/relayping", HTTP_POST, syncRelayPing);
+    server.on("/api/sync/blebridge", HTTP_POST, startBleBridge);
     server.on("/api/sync/status",   HTTP_GET,  sendSyncStatus);
     server.on("/api/capture_file", HTTP_GET, serveCaptureFile);
     server.on("/api/files", HTTP_GET, listFiles);

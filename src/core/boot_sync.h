@@ -27,6 +27,7 @@ extern RTC_NOINIT_ATTR uint32_t bootSyncMagic;
 extern RTC_NOINIT_ATTR uint32_t bootSyncQueue;      // pending SyncOp bits; one op per boot
 extern RTC_NOINIT_ATTR char     bootSyncResult[96]; // accumulated result, shown via /api/status
 extern RTC_NOINIT_ATTR uint32_t bootShowMgmt;       // set on request (currently boots to capture; kept for future)
+extern RTC_NOINIT_ATTR uint32_t bootBleBridge;      // BOOT_SYNC_MAGIC -> boot straight into BLE_BRIDGE (WiFi off)
 
 // Queue one or more sync ops + reboot to run them (one handshake per boot, chained).
 inline void requestSyncQueue(uint32_t mask) {
@@ -35,6 +36,13 @@ inline void requestSyncQueue(uint32_t mask) {
     bootSyncQueue     = mask;
     bootSyncResult[0] = 0;             // fresh accumulation for this run
     bootShowMgmt      = BOOT_SYNC_MAGIC;
+    delay(150);
+    ESP.restart();
+}
+
+// Reboot into BLE bridge mode (WiFi off, NimBLE peripheral). Called from the web UI.
+inline void requestBleBridge() {
+    bootBleBridge = BOOT_SYNC_MAGIC;
     delay(150);
     ESP.restart();
 }

@@ -7,6 +7,7 @@
 #include "../web/webui.h"
 #include "../app/app.h"
 #include <WiFi.h>
+#include "../ble/bridge.h"
 #include <esp_wifi.h>
 #include <esp_mac.h>
 
@@ -19,7 +20,7 @@ static bool s_forceManagement = false;
 
 Mode        current()     { return mode_; }
 bool        inCapture()   { return mode_ == Mode::CAPTURE; }
-const char* currentName() { return mode_ == Mode::CAPTURE ? "CAPTURE" : "MANAGEMENT"; }
+const char* currentName() { return mode_ == Mode::CAPTURE ? "CAPTURE" : mode_ == Mode::BLE_BRIDGE ? "BLE_BRIDGE" : "MANAGEMENT"; }
 bool        captureReady(){ return Config::wifi().captureReady; }
 
 // Persist the "provisioned for capture" flag the first time we enter capture.
@@ -56,12 +57,14 @@ const char* apPassword() {
 
 // Raise the management SoftAP (WPA2). AP IP defaults to 192.168.4.1.
 static bool apUp = false;
+static bool s_forceBridge = false;
 static void startSoftAP() {
     WiFi.softAP(apSSID(), apPassword());
     apUp = true;
 }
 
 void enterCapture(bool clearLock) {
+    if (BleBridge::running()) BleBridge::stop();
     if (clearLock) OinkMode::clearTargetLock();
     markCaptureReady();
     // Drop the web server + management SoftAP; capture needs the radio to itself.
@@ -131,15 +134,30 @@ void enterManagement() {
     App::go(App::Screen::CONNECT);   // SSID/IP/QR + STA status (web UI serves off this AP later)
 }
 
+void enterBleBridge() {
+    // Bridge is BLE-only: tear down any AP/web and turn WiFi fully off so NimBLE
+    // has the radio + plenty of heap.
+    if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
+    WiFi.disconnect(true, true);
+    WiFi.mode(WIFI_OFF);
+    delay(150);
+    BleBridge::start(apSSID());
+    mode_ = Mode::BLE_BRIDGE;
+    App::go(App::Screen::BLEBRIDGE);
+}
+
 void toggle() {
-    if (mode_ == Mode::CAPTURE) enterManagement();
-    else                        enterCapture();
+    if (mode_ == Mode::BLE_BRIDGE) enterCapture();       // button exits the bridge
+    else if (mode_ == Mode::CAPTURE) enterManagement();
+    else                             enterCapture();
 }
 
 // Resolve the boot mode from the persisted policy, then enter it.
 void forceManagementBoot() { s_forceManagement = true; }
+void forceBleBridgeBoot() { s_forceBridge = true; }
 
 void begin() {
+    if (s_forceBridge)     { s_forceBridge = false; enterBleBridge(); return; }
     if (s_forceManagement) { s_forceManagement = false; enterManagement(); return; }
     uint8_t policy = Config::wifi().bootModePolicy;   // 0=auto, 1=capture, 2=management
     bool goCapture;

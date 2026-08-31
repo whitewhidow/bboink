@@ -143,6 +143,7 @@ void go(Screen s) {
         case Screen::OPTIONS: ScreenOptions::enter(); break;
         case Screen::CONFIGAP:ScreenConfigAP::enter();break;
         case Screen::CONNECT: ScreenConnect::enter(); break;
+        case Screen::BLEBRIDGE: ScreenBleBridge::enter(); break;
     }
 }
 
@@ -221,6 +222,7 @@ void tick() {
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
         case Screen::CONFIGAP:ScreenConfigAP::tick(in);break;
         case Screen::CONNECT: ScreenConnect::tick(in); break;
+        case Screen::BLEBRIDGE: ScreenBleBridge::tick(in); break;
     }
 }
 
