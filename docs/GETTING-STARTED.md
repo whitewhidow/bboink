@@ -4,7 +4,7 @@ Pick the path that matches your board:
 
 - **[Path A — button board, the simple way](#path-a--button-board-the-simple-way)**
   (T-Embed CC1101 / T-Display C5): flash, set one key, capture, sync from the menu.
-  **No relay, no phone, no accounts beyond one cracking service.**
+  **No relay and no phone** — you just need a free key from one cracking service.
 - **[Path B — relay + phone console](#path-b--relay--phone-console)**: needed **only** if
   you have the button-less **Waveshare**, or you *want* to drive a button board from your
   phone (per-network results + cracked write-back). This is the part with the Render relay.
@@ -63,8 +63,9 @@ automatic cracked write-back, add **Path B** on top — it doesn't replace anyth
 *Required for the **Waveshare** (it has no menu). Optional for button boards.*
 
 Here the board talks to **one** small web service you host (the **relay**), which fans your
-captures out to all three cracking services and merges the results. A phone app (the **BLE
-console**) drives it over Bluetooth — so the board needs **no WiFi of its own**.
+captures out to all three cracking services and merges the results. You drive it from a **web
+page you just open in your phone's browser** (the **BLE console** — nothing to install), which
+talks to the board over Bluetooth — so the board needs **no WiFi of its own**.
 
 ### B1 · Deploy the relay (once)
 
@@ -84,8 +85,8 @@ You need a **Web Bluetooth browser**: Chrome / Chromium / Edge on **Android or d
 1. Put the board in **BLE BRIDGE**:
    - **Waveshare:** **tap** the button (it reboots into the bridge, ~15 s).
    - **Button board:** **MENU → BLE BRIDGE**.
-   - The screen shows the board name `BBoink-XXXX` (and, on Waveshare, the console + relay
-     URLs).
+   - The screen shows the board name `BBoink-XXXX`, the console URL to open, and the relay
+     URL — on every board (not just the Waveshare).
 2. Open **https://whitewhidow.github.io/bboink/bridge/**, tap **Connect to board**, pick
    `BBoink-XXXX`. You get three tabs: **Config**, **Captures**, **Sync**.
 
