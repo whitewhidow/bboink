@@ -35,6 +35,10 @@ static bool runBootSyncIfQueued() {
     int svc = bootSyncReq;
     bootSyncReq = 0;   // consume the request (keep magic until result is written, so a crash still shows a result)
 
+    delay(3000);   // DEBUG: let USB CDC re-enumerate so the serial logger catches the heap prints below
+    Serial.printf("[SYNC] start svc=%d maxAlloc=%u free=%u\n",
+                  svc, (unsigned)ESP.getMaxAllocHeap(), (unsigned)ESP.getFreeHeap());
+
 
     if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
     if (WiFi.status() != WL_CONNECTED) {
