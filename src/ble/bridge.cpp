@@ -82,10 +82,14 @@ static void startFile(const char* name) {
     s_streaming = true;
 }
 
-// Append one cracked entry (bssid:ssid:password) to the wpa-sec cracked cache.
+// Write one cracked entry (bssid:ssid:password) to the wpa-sec cracked cache. The
+// relay returns the FULL cracked list every sync, so the first entry of each new
+// sequence TRUNCATES the cache (refresh, not append) and resets the session counter;
+// {"c":"crkdone"} then re-arms the truncate for the next sync.
 static void writeCracked(const char* b, const char* ssid, const char* pass) {
     if (!pass || !pass[0]) return;
     if (!Storage::fs().exists(SDLayout::miscDir())) Storage::fs().mkdir(SDLayout::miscDir());
+    if (!s_crkStarted) s_crackedIn = 0;   // new cracked sequence -> fresh count
     File f = Storage::fs().open(SDLayout::wpasecResultsPath(), s_crkStarted ? FILE_APPEND : FILE_WRITE);
     s_crkStarted = true;
     if (f) { f.printf("%s:%s:%s\n", b ? b : "", ssid ? ssid : "", pass); f.close(); s_crackedIn++; }
@@ -98,7 +102,7 @@ static void handleCommand(const uint8_t* data, size_t len) {
     if (!strcmp(c, "list"))        sendList();
     else if (!strcmp(c, "get"))    { const char* n = doc["name"] | ""; if (n[0]) startFile(n); }
     else if (!strcmp(c, "crk"))    { writeCracked(doc["b"] | "", doc["s"] | "", doc["p"] | ""); notifyText("{\"t\":\"ok\"}"); }
-    else if (!strcmp(c, "crkdone")){ notifyText(String("{\"t\":\"ok\",\"n\":") + s_crackedIn + "}"); }
+    else if (!strcmp(c, "crkdone")){ s_crkStarted = false; notifyText(String("{\"t\":\"ok\",\"n\":") + s_crackedIn + "}"); }
     else if (!strcmp(c, "done"))   { s_exit = true; notifyText("{\"t\":\"bye\"}"); }
 }
 
