@@ -42,6 +42,7 @@
 
   <div class="pane on" id="p_sync">
     <div class="sub">Uploads captures to the relay + pulls cracked over this phone's connection (WiFi or cellular).</div>
+    <label class="row"><input type="checkbox" id="resyncall"><span style="font-size:13px;color:#8b949e">re-sync everything (ignore already-synced)</span></label>
     <button id="sync" class="wide">Sync captures ↔ relay</button>
     <div id="log"></div>
   </div>
@@ -87,7 +88,7 @@ function concat(cs){ let n=cs.reduce((a,c)=>a+c.length,0),o=new Uint8Array(n),p=
 function cmdCollect(obj){ return new Promise((res,rej)=>{ let cs=[]; waiter={ onText:j=>{ if(j.t==='end'){waiter=null;res(concat(cs));} else if(j.t==='err'){waiter=null;rej(j.e||'err');} }, onBin:b=>cs.push(b) }; write(obj); }); }
 async function cmdJson(obj){ return JSON.parse(new TextDecoder().decode(await cmdCollect(obj))||'null'); }
 function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){waiter=null;res(j);} }}; write(obj); }); }
-function cmdList(){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){waiter=null;res(j.files||[]);} }}; write({c:'list'}); }); }
+function cmdList(all){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){waiter=null;res(j.files||[]);} }}; write({c:'list',all:!!all}); }); }
 
 $('connect').onclick=async()=>{
   try{
@@ -169,11 +170,11 @@ $('sync').onclick=async()=>{
   $('sync').disabled=true;
   try{
     logEl().textContent='';
-    const files=await cmdList();
-    let hashes=''; const pcaps=[]; const names=new Set();
+    const files=await cmdList($('resyncall').checked);
+    let hashes=''; const pcaps=[]; const h22=[]; const names=new Set();
     for(const f of files){ const b=await cmdCollect({c:'get',name:f.name});
       names.add(f.name.split('_')[0]);
-      if(f.kind==='22000') hashes+=new TextDecoder().decode(b); else if(f.kind==='pcap') pcaps.push({name:f.name,bytes:b}); }
+      if(f.kind==='22000'){ hashes+=new TextDecoder().decode(b); h22.push(f.name); } else if(f.kind==='pcap') pcaps.push({name:f.name,bytes:b}); }
     const netList=[...names].join(', ')||'none';
     log('Uploading '+[...names].length+' network(s): '+netList);
     log('');
@@ -190,9 +191,11 @@ $('sync').onclick=async()=>{
       log('OnlineHashCrack:  '+ohcMsg);
       const p=j.pwncrack||{};
       log('PwnCrack:         '+(p.error?('error — '+p.error):(p.ok?'accepted':('HTTP '+p.http+(p.note?' '+p.note:'')))));
+      for(const n of h22) await cmdAck({c:'synced',name:n});   // remember these hashes were sent
     }
     for(const p of pcaps){ const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes})).json().catch(()=>({}))).wpasec||{};
-      log('wpa-sec:          '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http)))); }
+      log('wpa-sec:          '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
+      if(!w.error) await cmdAck({c:'synced',name:p.name}); }
     if(!hashes.trim()&&!pcaps.length) log('(no captures on the board to upload)');
 
     log('');

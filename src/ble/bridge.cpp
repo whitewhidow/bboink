@@ -48,8 +48,47 @@ static void notifyText(const String& json) {
     s_tx->notify();
 }
 
+static const char* syncedPath() {
+    static char p[80]; snprintf(p, sizeof(p), "%s/bridge_synced.txt", SDLayout::miscDir()); return p;
+}
+static bool isSynced(const char* name) {
+    File f = Storage::fs().open(syncedPath(), FILE_READ);
+    if (!f) return false;
+    char line[96]; bool found = false;
+    while (f.available()) {
+        size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+        if (L && line[L - 1] == '\r') line[--L] = 0;
+        if (!strcmp(line, name)) { found = true; break; }
+    }
+    f.close(); return found;
+}
+static void markSynced(const char* name) {
+    if (isSynced(name)) return;
+    if (!Storage::fs().exists(SDLayout::miscDir())) Storage::fs().mkdir(SDLayout::miscDir());
+    File f = Storage::fs().open(syncedPath(), FILE_APPEND);
+    if (f) { f.println(name); f.close(); }
+}
+// Drop synced entries whose filename carries this BSSID (so a re-captured, re-added
+// network syncs again after a delete).
+static void clearSyncedForBssid(const char* bhex) {
+    File f = Storage::fs().open(syncedPath(), FILE_READ);
+    if (!f) return;
+    String keep;
+    char line[96];
+    while (f.available()) {
+        size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+        if (L && line[L - 1] == '\r') line[--L] = 0;
+        if (!L) continue;
+        char fb[13];
+        if (!(SDLayout::captureBssid(line, fb) && strcasecmp(fb, bhex) == 0)) { keep += line; keep += '\n'; }
+    }
+    f.close();
+    File w = Storage::fs().open(syncedPath(), FILE_WRITE);
+    if (w) { w.print(keep); w.close(); }
+}
+
 // Build + send the capture manifest ({"t":"list","files":[{name,size,kind}]}).
-static void sendList() {
+static void sendList(bool all) {
     s_filesSent = 0;   // new sync sequence -> fresh file count
     JsonDocument doc;
     doc["t"] = "list";
@@ -63,7 +102,7 @@ static void sendList() {
                 const char* kind = nullptr;
                 if (L > 6 && strcmp(n + L - 6, ".22000") == 0) kind = "22000";
                 else if (L > 5 && strcmp(n + L - 5, ".pcap") == 0) kind = "pcap";
-                if (kind) {
+                if (kind && (all || !isSynced(n))) {
                     JsonObject o = arr.add<JsonObject>();
                     o["name"] = n; o["size"] = (uint32_t)f.size(); o["kind"] = kind;
                 }
@@ -234,14 +273,15 @@ static void handleCommand(const uint8_t* data, size_t len) {
     JsonDocument doc;
     if (deserializeJson(doc, data, len) != DeserializationError::Ok) return;
     const char* c = doc["c"] | "";
-    if (!strcmp(c, "list"))        sendList();
+    if (!strcmp(c, "list"))        sendList(doc["all"] | false);
     else if (!strcmp(c, "get"))    { const char* n = doc["name"] | ""; if (n[0]) startFile(n); }
     else if (!strcmp(c, "crk"))    { writeCracked(doc["b"] | "", doc["s"] | "", doc["p"] | ""); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "crkdone")){ s_crkStarted = false; notifyText(String("{\"t\":\"ok\",\"n\":") + s_crackedIn + "}"); }
     else if (!strcmp(c, "caps"))   startMem("caps", buildCapsJson());
     else if (!strcmp(c, "crks"))   startMem("crks", buildCrksJson());
     else if (!strcmp(c, "getcfg")) startMem("cfg", buildCfgJson());
-    else if (!strcmp(c, "del"))    { const char* b = doc["bssid"] | ""; if (b[0]) { delCapture(b); notifyText("{\"t\":\"ok\"}"); } }
+    else if (!strcmp(c, "del"))    { const char* b = doc["bssid"] | ""; if (b[0]) { delCapture(b); clearSyncedForBssid(b); notifyText("{\"t\":\"ok\"}"); } }
+    else if (!strcmp(c, "synced"))  { const char* n = doc["name"] | ""; if (n[0]) markSynced(n); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "scfg"))   { const char* k = doc["k"] | ""; const char* v = doc["v"] | ""; if (k[0]) { setCfgField(k, v); notifyText("{\"t\":\"ok\"}"); } }
     else if (!strcmp(c, "savecfg")){ Config::save(); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "done"))   { s_exit = true; notifyText("{\"t\":\"bye\"}"); }
