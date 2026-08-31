@@ -121,7 +121,14 @@ function pushCracked(map, bssid, ssid, password, source) {
   if (!password) return;
   const key = (bssid || ssid || '').toLowerCase();
   if (!key) return;
-  if (!map.has(key)) map.set(key, { bssid: bssid || '', ssid: ssid || '', password, source });
+  const e = map.get(key);
+  if (e) {
+    // Same network cracked by another service — record the extra source.
+    if (!e.sources.includes(source)) e.sources.push(source);
+    if (!e.password && password) e.password = password;
+  } else {
+    map.set(key, { bssid: bssid || '', ssid: ssid || '', password, sources: [source] });
+  }
 }
 
 app.get('/v1/cracked', async (req, res) => {
@@ -157,7 +164,10 @@ app.get('/v1/cracked', async (req, res) => {
     } else if (r.status !== 404) errors.pwncrack = r.status;
   } catch (e) { errors.pwncrack = String(e.message || e); }
 
-  const cracked = [...map.values()];
+  const cracked = [...map.values()].map(e => ({
+    bssid: e.bssid, ssid: e.ssid, password: e.password,
+    sources: e.sources, source: e.sources.join('+'),   // e.g. "wpa-sec+pwncrack"
+  }));
   res.json({ count: cracked.length, cracked, errors });
 });
 
