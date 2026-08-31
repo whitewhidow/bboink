@@ -38,17 +38,19 @@ static bool   s_memMode = false;
 static uint8_t  s_cmdBuf[320];
 static size_t   s_cmdLen = 0;
 static volatile bool s_cmdPending = false;
+static String   s_beginFrame;         // the 'begin' JSON, sent reliably from loop()
+static int      s_phase = 0;          // 0=send begin, 1=data, 2=send end
 
 static uint16_t chunkSize() { return s_mtu > 23 ? (uint16_t)(s_mtu - 4) : 20; }
 
-static void notifyText(const String& json) {
-    if (!s_tx || !s_connected) return;
+static bool notifyText(const String& json) {
+    if (!s_tx || !s_connected) return false;
     std::vector<uint8_t> buf;
     buf.reserve(json.length() + 1);
     buf.push_back(T_TEXT);
     for (size_t i = 0; i < json.length(); i++) buf.push_back((uint8_t)json[i]);
     s_tx->setValue(buf.data(), buf.size());
-    s_tx->notify();
+    return s_tx->notify();   // false = tx buffer full (caller retries)
 }
 
 static const char* syncedPath() {
@@ -125,8 +127,8 @@ static void startFile(const char* name) {
     s_memMode = false; s_size = s_file.size(); s_sent = 0;
     const char* sl = strrchr(name, '.'); const char* kind = (sl && !strcmp(sl, ".pcap")) ? "pcap" : "22000";
     JsonDocument doc; doc["t"] = "begin"; doc["name"] = name; doc["size"] = (uint32_t)s_size; doc["kind"] = kind;
-    String out; serializeJson(doc, out); notifyText(out);
-    s_streaming = true;
+    s_beginFrame = ""; serializeJson(doc, s_beginFrame);
+    s_phase = 0; s_streaming = true;
 }
 
 // Write one cracked entry (bssid:ssid:password) to the wpa-sec cracked cache. The
@@ -270,8 +272,8 @@ static void startMem(const char* name, const String& json) {
     if (s_streaming) return;
     s_mem = json; s_memMode = true; s_size = s_mem.length(); s_sent = 0;
     JsonDocument doc; doc["t"] = "begin"; doc["name"] = name; doc["size"] = (uint32_t)s_size; doc["kind"] = "json";
-    String out; serializeJson(doc, out); notifyText(out);
-    s_streaming = true;
+    s_beginFrame = ""; serializeJson(doc, s_beginFrame);
+    s_phase = 0; s_streaming = true;
 }
 
 static void handleCommand(const uint8_t* data, size_t len) {
@@ -364,29 +366,38 @@ void loop() {
         handleCommand(s_cmdBuf, s_cmdLen);
     }
     if (!s_streaming) return;
-    // Send ONE chunk, advancing only when notify() succeeds — NimBLE returns false
-    // when its tx buffer is full, giving natural back-pressure (no dropped chunks ->
-    // no truncated JSON). Seek to s_sent so a retry re-sends the exact same chunk.
-    uint16_t cs = chunkSize();
-    static uint8_t buf[256];
-    if (cs > sizeof(buf) - 1) cs = sizeof(buf) - 1;
-    buf[0] = T_BIN;
-    size_t toRead = s_size - s_sent; if (toRead > cs) toRead = cs;
-    size_t rd = 0;
-    if (toRead > 0) {
-        if (s_memMode) { memcpy(buf + 1, s_mem.c_str() + s_sent, toRead); rd = toRead; }
-        else           { s_file.seek(s_sent); rd = s_file.read(buf + 1, toRead); }
+    // One frame per call, retried until NimBLE accepts it (notify()==false means its
+    // tx buffer is full) — so begin, EVERY data chunk, and end are all delivered in
+    // order. Nothing is dropped, so no truncated/merged JSON.
+    if (s_phase == 0) {                              // begin
+        if (notifyText(s_beginFrame)) s_phase = 1;
+        return;
     }
-    if (rd > 0) {
-        s_tx->setValue(buf, rd + 1);
-        if (s_tx->notify()) s_sent += rd;   // advance only if the notify was queued
-        else return;                        // buffer full -> retry same chunk next loop
+    if (s_phase == 1) {                              // data
+        uint16_t cs = chunkSize();
+        static uint8_t buf[256];
+        if (cs > sizeof(buf) - 1) cs = sizeof(buf) - 1;
+        buf[0] = T_BIN;
+        size_t toRead = s_size - s_sent; if (toRead > cs) toRead = cs;
+        size_t rd = 0;
+        if (toRead > 0) {
+            if (s_memMode) { memcpy(buf + 1, s_mem.c_str() + s_sent, toRead); rd = toRead; }
+            else           { s_file.seek(s_sent); rd = s_file.read(buf + 1, toRead); }
+        }
+        if (rd > 0) {
+            s_tx->setValue(buf, rd + 1);
+            if (s_tx->notify()) s_sent += rd;   // advance only if queued; else retry this chunk
+            else return;
+        }
+        if (s_sent >= s_size || rd == 0) s_phase = 2;
+        return;
     }
-    if (s_sent >= s_size || rd == 0) {
-        if (s_memMode) { s_memMode = false; s_mem = String(); }
-        else           { s_file.close(); s_filesSent++; }   // only count real capture files
-        s_streaming = false;
-        notifyText("{\"t\":\"end\"}");
+    if (s_phase == 2) {                              // end
+        if (notifyText("{\"t\":\"end\"}")) {
+            if (s_memMode) { s_memMode = false; s_mem = String(); }
+            else           { s_file.close(); s_filesSent++; }
+            s_streaming = false;
+        }
     }
 }
 
