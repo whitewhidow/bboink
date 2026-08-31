@@ -67,9 +67,9 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <label>SSID</label><input type="text" id="wifi_ssid">
 <label>Password <small id="p_wifi_pass"></small></label><input type="password" id="wifi_pass" placeholder="(unchanged)">
 <h3>Crack service keys</h3>
-<label>wpa-sec key <small id="p_wpa_key"></small></label><input type="password" id="wpa_key" placeholder="(unchanged)">
-<label>OnlineHashCrack key <small id="p_ohc_key"></small></label><input type="password" id="ohc_key" placeholder="(unchanged)">
-<label>PwnCrack key <small id="p_pwn_key"></small></label><input type="password" id="pwn_key" placeholder="(unchanged)">
+<label>wpa-sec key <small id="p_wpa_key"></small></label><input type="text" id="wpa_key" placeholder="(none)">
+<label>OnlineHashCrack key <small id="p_ohc_key"></small></label><input type="text" id="ohc_key" placeholder="(none)">
+<label>PwnCrack key <small id="p_pwn_key"></small></label><input type="text" id="pwn_key" placeholder="(none)">
 <h3>ntfy</h3>
 <label>Topic</label><input type="text" id="ntfy_topic">
 <div class="chk"><input type="checkbox" id="ntfy_attach"><label style="margin:0">attach capture file</label></div>
@@ -133,6 +133,9 @@ async function loadCfg(){try{const c=await (await fetch('/api/config')).json();
  document.getElementById('wifi_ssid').value=c.wifi_ssid||'';
  document.getElementById('ntfy_topic').value=c.ntfy_topic||'';
  document.getElementById('ap_ssid').value=c.ap_ssid||'';
+ document.getElementById('wpa_key').value=c.wpa_key||'';
+ document.getElementById('ohc_key').value=c.ohc_key||'';
+ document.getElementById('pwn_key').value=c.pwn_key||'';
  for(const n of NUM)document.getElementById(n).value=c[n];
  for(const b of BOOL)document.getElementById(b).checked=!!c[b];
  const pres={wifi_pass:c.has_wifi_pass,wpa_key:c.has_wpa_key,ohc_key:c.has_ohc_key,pwn_key:c.has_pwn_key};
@@ -146,7 +149,7 @@ async function save(){const b={wifi_ssid:document.getElementById('wifi_ssid').va
  for(const s of SEC){const v=document.getElementById(s).value;if(v)b[s]=v;}
  const m=document.getElementById('msg');m.textContent='saving…';m.style.color='#8aa0b2';
  try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
-  if(r.ok){m.textContent='saved ✓';m.style.color='#34d399';for(const s of SEC)document.getElementById(s).value='';loadCfg();}
+  if(r.ok){m.textContent='saved ✓';m.style.color='#34d399';document.getElementById('wifi_pass').value='';loadCfg();}
   else{m.textContent='save failed';m.style.color='#f87171';}}catch(e){m.textContent='save failed';m.style.color='#f87171';}}
 async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
  btn.disabled=true;res.textContent='syncing…';res.style.color='#8aa0b2';
@@ -210,6 +213,9 @@ static void sendConfig() {
     doc["has_wpa_key"]   = w.wpaSecKey[0] != 0;
     doc["has_ohc_key"]   = w.ohcKey[0] != 0;
     doc["has_pwn_key"]   = w.pwncrackKey[0] != 0;
+    doc["wpa_key"]       = w.wpaSecKey;     // shown in the Config form (user asked to display, not mask)
+    doc["ohc_key"]       = w.ohcKey;
+    doc["pwn_key"]       = w.pwncrackKey;
     doc["ntfy_topic"]    = w.ntfyTopic;
     doc["ntfy_attach"]   = w.ntfyAttachFile;
     doc["ch_hop_ms"]     = w.channelHopInterval;
