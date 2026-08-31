@@ -47,10 +47,11 @@ static bool runBootSyncIfQueued() {
         else           snprintf(bootSyncResult, sizeof(bootSyncResult), "wpa-sec ERR: %.55s", WPASec::getLastError());
     } else if (svc == 2) {
         OHC::UploadResult r = OHC::uploadHashes();
-        snprintf(bootSyncResult, sizeof(bootSyncResult), "OHC: acc %u skip %u rej %u%s",
-                 r.accepted, r.skipped, r.rejected, r.success ? "" : " ERR");
+        snprintf(bootSyncResult, sizeof(bootSyncResult), "OHC: acc %u skip %u rej %u %s",
+                 r.accepted, r.skipped, r.rejected, r.success ? "OK" : r.error);
     } else {
         int files = 0, hashes = 0;
+        char uperr[48] = {0};
         File d = Storage::fs().open(SDLayout::handshakesDir());
         if (d && d.isDirectory()) {
             for (File f = d.openNextFile(); f; f = d.openNextFile()) {
@@ -60,6 +61,7 @@ static bool runBootSyncIfQueued() {
                     if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
                         PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
                         if (r.success) { files++; hashes += r.hashes; }
+                        else if (!uperr[0]) strncpy(uperr, r.error, sizeof(uperr) - 1);
                     }
                 }
                 f.close();
@@ -68,7 +70,8 @@ static bool runBootSyncIfQueued() {
         }
         char err[48] = {0};
         int cracked = PwnCrack::syncPotfile(err, sizeof(err));
-        snprintf(bootSyncResult, sizeof(bootSyncResult), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
+        snprintf(bootSyncResult, sizeof(bootSyncResult), "PWN f%d h%d crk%d %s%s",
+                 files, hashes, cracked, uperr[0] ? uperr : "", (cracked < 0) ? err : "");
     }
     return true;
 }
