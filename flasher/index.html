@@ -39,6 +39,19 @@
     <label for="version">Firmware version</label>
     <select id="version"></select>
 
+    <div id="c5note" class="note panel" hidden style="border-left:3px solid var(--amber)">
+      <h3>⚠ T-Display C5 — may need the command line</h3>
+      <p>This board's ROM often rejects the browser flasher's stub loader, so Install can fail with
+        <b>"Failed to initialize"</b> even in download mode. If it does, flash it with esptool and
+        <span class="mono">--no-stub</span> instead:</p>
+      <pre style="background:rgba(127,127,127,.12);padding:11px;border-radius:8px;overflow-x:auto;font:12.5px var(--mono);margin:8px 0">pip install --upgrade "esptool>=5"
+# download mode first: hold BOOT, tap RESET, release BOOT
+esptool --chip esp32c5 --no-stub write_flash 0x0 bboink-tdisplay-c5.bin</pre>
+      <p>Grab <span class="mono">bboink-tdisplay-c5.bin</span> from the
+        <a href="https://github.com/whitewhidow/bboink/releases">latest release</a>. The T-Embed and
+        Waveshare flash fine in the browser.</p>
+    </div>
+
     <div style="margin:22px 0 6px">
       <esp-web-install-button id="btn">
         <span slot="unsupported" class="warn">
@@ -113,6 +126,7 @@
       if (blobUrl) URL.revokeObjectURL(blobUrl);
       blobUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' }));
       btn.setAttribute('manifest', blobUrl);
+      const _n=document.getElementById('c5note'); if(_n) _n.hidden=(env!=='tdisplay-c5');
     }
 
     boardSel.addEventListener('change', refreshManifest);

@@ -29,6 +29,11 @@ board that already runs BBoink? Leave it unticked to keep your saved config. Aft
 > If a C5 board doesn't appear in the port chooser: use a real **data** cable, and if needed force
 > download mode — **hold BOOT, tap RESET, release BOOT** — then Connect.
 
+> **T-Display C5 fails with "Failed to initialize"?** Its ROM often rejects esptool's stub loader,
+> so the browser flasher can't sync it even in download mode. Flash it by hand with `--no-stub`:
+> `esptool --chip esp32c5 --no-stub write_flash 0x0 bboink-tdisplay-c5.bin`. The T-Embed and
+> Waveshare are fine in the browser.
+
 **By hand (esptool):** grab the latest merged image from
 [**Releases**](https://github.com/whitewhidow/bboink/releases) and flash it at `0x0`:
 

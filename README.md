@@ -70,6 +70,11 @@ the board in over USB, pick your board + version, click **Install** — no espto
 (Or grab the `.bin` from [Releases](https://github.com/whitewhidow/bboink/releases) and flash
 it by hand.)
 
+> **Heads-up — T-Display C5:** the browser flasher can fail with *"Failed to initialize"* (its ROM
+> rejects esptool's stub loader). Flash *that* board on the command line instead —
+> `esptool --chip esp32c5 --no-stub write_flash 0x0 bboink-tdisplay-c5.bin` (see
+> [getting started](docs/GETTING-STARTED.md)). The T-Embed and Waveshare flash fine in the browser.
+
 ### 2 · Capture
 
 Drive the board with its **buttons + on-screen menu** (T-Embed / T-Display), or entirely from
