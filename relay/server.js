@@ -33,7 +33,7 @@ const app = express();
 app.use((req, res, next) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'authorization,content-type');
+  res.set('Access-Control-Allow-Headers', 'authorization,content-type,x-keys');
   res.set('Access-Control-Max-Age', '86400');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -42,6 +42,13 @@ app.use((req, res, next) => {
 // Raw bodies: the board POSTs plain bytes (no multipart on the device side).
 app.use('/v1/hashes', express.text({ type: '*/*', limit: '5mb' }));
 app.use('/v1/pcap', express.raw({ type: '*/*', limit: '10mb' }));
+
+// Per-request service keys (semi-dynamic): the device is the single source of truth
+// and sends them as  X-Keys: {"wpasec":"...","ohc":"...","pwncrack":"..."} . Env vars
+// are only a fallback. To add a service later: add its forwarder below + a key field
+// on the device; it arrives here under its name in X-Keys.
+function reqKeys(req) { try { return JSON.parse(req.get('X-Keys') || '{}') || {}; } catch { return {}; } }
+const keyOf = (req, name, envFallback) => (reqKeys(req)[name] || envFallback || '');
 
 function authed(req, res) {
   const h = req.get('authorization') || '';
@@ -71,7 +78,7 @@ app.post('/v1/hashes', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
       body: JSON.stringify({
-        api_key: OHC_KEY, agree_terms: 'yes', action: 'add_tasks',
+        api_key: keyOf(req, 'ohc', OHC_KEY), agree_terms: 'yes', action: 'add_tasks',
         algo_mode: 22000, hashes: uniq,
       }),
     });
@@ -88,7 +95,7 @@ app.post('/v1/hashes', async (req, res) => {
   // PwnCrack — multipart .hc22000
   try {
     const fd = new FormData();
-    fd.append('key', PWNCRACK_KEY);
+    fd.append('key', keyOf(req, 'pwncrack', PWNCRACK_KEY));
     fd.append('handshake', new Blob([uniq.join('\n') + '\n']), 'bboink.hc22000');
     const r = await fetch('https://pwncrack.org/upload_handshake', { method: 'POST', body: fd });
     const t = (await r.text().catch(() => '')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
@@ -109,7 +116,7 @@ app.post('/v1/pcap', async (req, res) => {
     const fd = new FormData();
     fd.append('file', new Blob([buf]), name.endsWith('.pcap') ? name : name + '.pcap');
     const r = await fetch('https://wpa-sec.stanev.org/', {
-      method: 'POST', headers: { Cookie: `key=${WPASEC_KEY}` }, body: fd,
+      method: 'POST', headers: { Cookie: `key=${keyOf(req, 'wpasec', WPASEC_KEY)}` }, body: fd,
     });
     const status = (r.status === 200 || r.status === 201) ? 'accepted'
                  : (r.status === 409) ? 'duplicate' : 'rejected';
@@ -141,7 +148,7 @@ app.get('/v1/cracked', async (req, res) => {
 
   // wpa-sec potfile
   try {
-    const r = await fetch('https://wpa-sec.stanev.org/?api&dl=1', { headers: { Cookie: `key=${WPASEC_KEY}` } });
+    const r = await fetch('https://wpa-sec.stanev.org/?api&dl=1', { headers: { Cookie: `key=${keyOf(req, 'wpasec', WPASEC_KEY)}` } });
     if (r.ok) {
       const t = await r.text();
       for (const line of t.split(/\r?\n/)) {
@@ -153,7 +160,7 @@ app.get('/v1/cracked', async (req, res) => {
 
   // pwncrack potfile
   try {
-    const r = await fetch(`https://pwncrack.org/download_potfile_script?key=${encodeURIComponent(PWNCRACK_KEY)}`);
+    const r = await fetch(`https://pwncrack.org/download_potfile_script?key=${encodeURIComponent(keyOf(req, 'pwncrack', PWNCRACK_KEY))}`);
     if (r.ok) {
       const t = await r.text();
       for (const line of t.split(/\r?\n/)) {

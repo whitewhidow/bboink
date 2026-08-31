@@ -29,7 +29,7 @@
 </head>
 <body>
 <h1>BBoink Console</h1>
-<div class="sub">Android + Chrome · everything over Bluetooth — no board WiFi/AP needed.</div>
+<div class="sub">Android + Chrome · manage everything over Bluetooth — the board needs no WiFi.</div>
 <button id="connect" class="sec wide">Connect to board</button>
 <div id="cstat" class="sub" style="margin-top:8px"></div>
 
@@ -41,7 +41,7 @@
   </div>
 
   <div class="pane on" id="p_sync">
-    <div class="sub">Uploads captures to the relay + pulls cracked, all over cellular via this phone.</div>
+    <div class="sub">Uploads captures to the relay + pulls cracked over this phone's connection (WiFi or cellular).</div>
     <button id="sync" class="wide">Sync captures ↔ relay</button>
     <div id="log"></div>
   </div>
@@ -52,7 +52,7 @@
   </div>
 
   <div class="pane" id="p_cfg">
-    <div class="sub">Stored on the board. Service keys/relay are used by the relay; capture options control the hunt.</div>
+    <div class="sub">Stored on the board (single source of truth). Service keys are sent to the relay per-sync; capture options control the hunt.</div>
     <div id="cfgForm"></div>
     <button id="savecfg" class="wide">Save config to board</button>
     <div id="cfgMsg" class="sub" style="margin-top:6px"></div>
@@ -93,12 +93,12 @@ $('connect').onclick=async()=>{
   try{
     $('cstat').textContent='requesting device…';
     const dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
-    dev.addEventListener('gattserverdisconnected',()=>{ $('cstat').textContent='⚠ disconnected'; $('app').hidden=true; });
+    dev.addEventListener('gattserverdisconnected',()=>{ $('cstat').textContent='⚠ disconnected'; $('app').hidden=true; $('connect').hidden=false; });
     const g=await dev.gatt.connect(), svc=await g.getPrimaryService(SVC);
     rxCh=await svc.getCharacteristic(RX); txCh=await svc.getCharacteristic(TX);
     await txCh.startNotifications(); txCh.addEventListener('characteristicvaluechanged',onNotify);
     $('cstat').textContent='✔ connected to '+(dev.name||'board');
-    $('app').hidden=false;
+    $('connect').hidden=true; $('app').hidden=false;
     await loadCfg(); await loadCaps();
   }catch(e){ $('cstat').textContent='✖ '+e.message; }
 };
@@ -164,7 +164,8 @@ window.delCap=async(b)=>{ if(!confirm('Delete capture (removes files, re-enables
 $('sync').onclick=async()=>{
   const url=(cfg.relay_url||'').replace(/\/+$/,''), tok=cfg.relay_token||'';
   if(!url||!tok){ log('✖ set Relay URL + token in the Config tab first'); return; }
-  const auth={'Authorization':'Bearer '+tok};
+  const keys=JSON.stringify({wpasec:cfg.wpa_key||'',ohc:cfg.ohc_key||'',pwncrack:cfg.pwn_key||''});
+  const auth={'Authorization':'Bearer '+tok,'X-Keys':keys};
   $('sync').disabled=true;
   try{
     logEl().textContent='';
