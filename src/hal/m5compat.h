@@ -60,6 +60,7 @@ namespace porkhal {
         bool back    = false;   // side button  -> BACKSPACE
         bool toggle  = false;   // single-button CAPTURE<->MANAGEMENT swap
         bool backLongPress = false;  // side button held ~3s (power-off gesture)
+        bool bridge  = false;   // single-button medium hold (1.5-3s) -> BLE bridge
         bool changed = false;   // any transition this frame
     };
     extern VKey vkey;

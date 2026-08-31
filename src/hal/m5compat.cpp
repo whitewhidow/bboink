@@ -224,8 +224,9 @@ void ledInit() { /* no LED on this board — no-op */ }
 #elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
 // ===========================================================================
 // Waveshare ESP32-C5-LCD-1.47 input: ONE button (BOOT = GPIO28).
-//   tap (release < 1.5s)  -> vkey.toggle      (CAPTURE <-> MANAGEMENT)
-//   hold >= 3s            -> vkey.backLongPress (power off, fires while held)
+//   tap (release < 1.5s)   -> vkey.toggle       (CAPTURE <-> MANAGEMENT)
+//   medium hold (1.5-3s)   -> vkey.bridge       (reboot into BLE BRIDGE, no AP needed)
+//   hold >= 3s             -> vkey.backLongPress (power off, fires while held)
 // There is no second input; on-device menu navigation is intentionally not
 // possible here — management happens over the web UI. See docs/DESIGN-mode-webui.md.
 // ===========================================================================
@@ -253,7 +254,8 @@ void inputPoll() {
         v.backLongPress = true; v.changed = true; longFired = true;   // power off
     } else if (last == LOW && raw == HIGH) { // release edge
         uint32_t held = millis() - downAt;
-        if (!longFired && held > 25 && held < 1500) { v.toggle = true; v.changed = true; }  // tap
+        if (!longFired && held > 25 && held < 1500) { v.toggle = true; v.changed = true; }        // tap
+        else if (!longFired && held >= 1500 && held < 3000) { v.bridge = true; v.changed = true; } // medium hold -> BLE bridge
     }
     last = raw;
 

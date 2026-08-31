@@ -2,6 +2,7 @@
 #include "app.h"
 #include "../core/config.h"
 #include "../core/mode_manager.h"
+#include "../core/boot_sync.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
@@ -202,6 +203,13 @@ void tick() {
     // Single-button mode swap (inert on multi-button boards, which reach the
     // same transitions via the menu + capture-screen back).
     if (porkhal::vkey.toggle) { ModeManager::toggle(); return; }
+
+    // Medium-hold: reboot straight into BLE bridge (phone sync, no AP needed).
+    if (porkhal::vkey.bridge) {
+        clear(); centerMsg("BLE BRIDGE", TFT_CYAN); footer("rebooting...");
+        requestBleBridge();   // sets RTC flag + reboots (does not return)
+        return;
+    }
 
     // Auto-dim backlight after idle; restore on any input.
     if (porkhal::vkey.changed) {
