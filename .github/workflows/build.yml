@@ -1,9 +1,10 @@
 name: build
 
-# Builds the T-Embed CC1101 firmware and produces the single-image .bin that is
-# flashed at 0x0 (bootloader + partitions + otadata + app merged). Every push
-# uploads it as a build artifact; pushing a tag like v1.0 also cuts a GitHub
-# Release with the .bin attached (handy as an OTA / re-flash source).
+# Builds BBoink for every supported board and produces, per board:
+#   bboink-<env>.bin      merged single image, full flash at 0x0 (esptool)
+#   bboink-app-<env>.bin  app-only image (SD-launcher / in-app self-updater)
+# Every push uploads them as artifacts; pushing a tag (v*) also cuts a Release
+# with all of them attached.
 
 on:
   push:
@@ -12,11 +13,27 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # needed for the release step to upload the .bin
+  contents: write   # release step uploads the .bins
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: t-embed-cc1101   # LilyGo T-Embed CC1101 / PLUS (ESP32-S3)
+            chip: esp32s3
+            flash_size: 16MB
+            boot: "0x0"
+          - env: tdisplay-c5      # LilyGo T-Display C5 (ESP32-C5)
+            chip: esp32c5
+            flash_size: 4MB
+            boot: "0x2000"
+          - env: waveshare-c5-lcd # Waveshare ESP32-C5-LCD-1.47
+            chip: esp32c5
+            flash_size: 4MB
+            boot: "0x2000"
     steps:
       - uses: actions/checkout@v4
 
@@ -30,42 +47,47 @@ jobs:
           path: |
             ~/.platformio
             ~/.cache/pip
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
+          key: pio-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-${{ matrix.env }}-
 
       - name: Install PlatformIO + esptool
-        run: pip install --upgrade platformio esptool==4.9.0
+        run: pip install --upgrade platformio "esptool==5.1.0"   # 5.x knows esp32c5
 
-      - name: Build firmware
-        run: pio run -e t-embed-cc1101
-
-      - name: Package bins
+      - name: Build firmware (${{ matrix.env }})
         run: |
-          B=.pio/build/t-embed-cc1101
-          BA=$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -1)
-          # Merged single-image bin for a full flash at 0x0 (esptool).
-          python -m esptool --chip esp32s3 merge_bin \
-            -o bboink-t-embed-cc1101.bin \
-            --flash_mode dio --flash_size 16MB \
-            0x0     "$B/bootloader.bin" \
+          # pioarduino's ESP32-C5 platform occasionally resolves FRAMEWORK_DIR=None on
+          # a cold cache — retry a couple of times.
+          for i in 1 2 3; do
+            pio run -e ${{ matrix.env }} && exit 0
+            echo "::warning::build attempt $i for ${{ matrix.env }} failed, retrying"; sleep 4
+          done
+          exit 1
+
+      - name: Package bins (${{ matrix.env }})
+        run: |
+          B=.pio/build/${{ matrix.env }}
+          BA=$(find ~/.platformio/packages -name boot_app0.bin -path '*framework-arduinoespressif32*' | head -1)
+          python -m esptool --chip ${{ matrix.chip }} merge_bin \
+            -o bboink-${{ matrix.env }}.bin \
+            --flash_mode dio --flash_size ${{ matrix.flash_size }} \
+            ${{ matrix.boot }} "$B/bootloader.bin" \
             0x8000  "$B/partitions.bin" \
             0xe000  "$BA" \
             0x10000 "$B/firmware.bin"
-          # App-only image for an SD-card launcher / the in-app self-updater.
-          cp "$B/firmware.bin" bboink-app-t-embed-cc1101.bin
+          cp "$B/firmware.bin" bboink-app-${{ matrix.env }}.bin
 
-      - name: Upload build artifacts
+      - name: Upload build artifacts (${{ matrix.env }})
         uses: actions/upload-artifact@v4
         with:
-          name: bboink-bins
+          name: bboink-bins-${{ matrix.env }}
           path: |
-            bboink-t-embed-cc1101.bin
-            bboink-app-t-embed-cc1101.bin
+            bboink-${{ matrix.env }}.bin
+            bboink-app-${{ matrix.env }}.bin
 
       - name: Attach to Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            bboink-t-embed-cc1101.bin
-            bboink-app-t-embed-cc1101.bin
+            bboink-${{ matrix.env }}.bin
+            bboink-app-${{ matrix.env }}.bin
