@@ -277,9 +277,20 @@ builds and attaches all assets. Button boards then see it via *Update FW*; the W
 reflashed over USB.
 
 ## Controls
-Rotary encoder turn = move / adjust, click = select / confirm, side button =
-back / stop. Text fields (SSID / passwords / keys) use the on-screen encoder
-char-picker.
+
+**T-Embed CC1101 — rotary encoder + side button:**
+- **Turn** the encoder = move / adjust
+- **Click** (push the encoder) = select / confirm
+- **Side button** = back / stop; **hold ~3 s** = power off
+
+**T-Display C5 — two buttons** (tap vs hold is decided on release):
+- **Up button:** **tap** = move up · **hold (~0.5 s)** = select / confirm
+- **Down button:** **tap** = move down · **hold (~0.5–3 s)** = back · **hold (~3 s)** = power off
+- If up/down feel reversed on your unit, the two buttons are symmetric — just swap them in your head.
+
+Text fields (SSID / passwords / keys) use the same on-screen **char-picker**: up/down change the
+character, select confirms it, back deletes. (On the button-less Waveshare there's no on-device
+input — do all config from the [BLE console](https://whitewhidow.github.io/bboink/bridge/).)
 
 ## Capture files
 Each capture's type is in its filename so the two upload paths stay separate and
