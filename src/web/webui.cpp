@@ -98,7 +98,10 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
 <div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
 <div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
-<div class="srow"><span>PwnCrack <small>(phone cellular)</small></span><button class="sbtn" onclick="pwnBrowser(this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
+<div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
+<h3>Or download to upload manually</h3>
+<small>Save a capture to this device, then upload it at the service's own site over a normal connection.</small>
+<div id="fileList"></div>
 </div></div>
 
 <div id="caps" hidden><div class="card">
@@ -113,7 +116,7 @@ const NUM=['ch_hop_ms','lock_ms','atk_rssi','max_tries','burst','jitter','idle_r
 const BOOL=['ntfy_attach','deauth','rnd_mac','cracked_fallback','auto_purge','sound','pmkid'];
 const SEC=['wifi_pass','wpa_key','ohc_key','pwn_key'];
 function show(w){for(const x of ['status','config','sync','caps']){document.getElementById(x).hidden=(x!=w);
- document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps')loadCaps();}
+ document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps')loadCaps();if(w=='sync')loadFiles();}
 async function st(){try{const d=await (await fetch('/api/status')).json();
  const sta=d.sta.connected?`<span class="on2">${d.sta.ssid} (${d.sta.ip})</span>`:'<span class="off2">not connected</span>';
  document.getElementById('statusCard').innerHTML=
@@ -156,19 +159,11 @@ async function doSync(svc,btn){const res=document.getElementById('r_'+svc);
   }
  }catch(e){res.textContent='rebooting/failed — rejoin & check Status';res.style.color='#facc15';}
  btn.disabled=false;}
-async function pwnBrowser(btn){const res=document.getElementById('r_pwncrack');
- btn.disabled=true;res.textContent='reading captures…';res.style.color='#8aa0b2';
- try{const info=await (await fetch('/api/pwncrack_upload_info')).json();
-  if(!info.key){res.textContent='set a PwnCrack key in Config first';res.style.color='#f87171';btn.disabled=false;return;}
-  if(!info.files.length){res.textContent='no .22000 captures to upload';res.style.color='#8aa0b2';btn.disabled=false;return;}
-  let sent=0;
-  for(const fi of info.files){res.textContent=`uploading ${sent+1}/${info.files.length} via cellular…`;
-   const blob=await (await fetch('/api/capture_file?name='+encodeURIComponent(fi.name))).blob();
-   const fd=new FormData();fd.append('key',info.key);fd.append('handshake',blob,fi.name);
-   await fetch('https://pwncrack.org/upload_handshake',{method:'POST',mode:'no-cors',body:fd});sent++;}
-  res.textContent=`sent ${sent} file(s) to PwnCrack over cellular (check your account)`;res.style.color='#34d399';
- }catch(e){res.textContent='failed — is mobile data on? '+e;res.style.color='#f87171';}
- btn.disabled=false;}
+async function loadFiles(){const el=document.getElementById('fileList');if(!el)return;
+ try{const fs=await (await fetch('/api/files')).json();
+  if(!fs.length){el.innerHTML='<div class="cb">no capture files</div>';return;}
+  el.innerHTML=fs.map(f=>`<div class="srow"><a href="/api/capture_file?name=${encodeURIComponent(f.name)}" download="${f.name}" style="color:#2dd4bf">${f.name}</a> <small>${f.size}B</small></div>`).join('');
+ }catch(e){el.innerHTML='<div class="cb">failed to list files</div>';}}
 async function loadCaps(){const el=document.getElementById('capsList');el.innerHTML='<div class="cb">loading…</div>';
  try{const rows=await (await fetch('/api/captures')).json();
   if(!rows.length){el.innerHTML='<div class="cb">no captures yet</div>';return;}
@@ -426,11 +421,9 @@ static void serveCaptureFile() {
     server.streamFile(f, "application/octet-stream");
     f.close();
 }
-static void pwncrackUploadInfo() {
+static void listFiles() {
     noKeepAlive();
-    String out = "{\"key\":\"";
-    out += Config::wifi().pwncrackKey;
-    out += "\",\"files\":[";
+    String out = "[";
     File d = Storage::fs().open(SDLayout::handshakesDir());
     int n = 0;
     if (d && d.isDirectory()) {
@@ -438,16 +431,16 @@ static void pwncrackUploadInfo() {
             if (!f.isDirectory()) {
                 const char* nm = f.name(); const char* sl = strrchr(nm, '/'); if (sl) nm = sl + 1;
                 size_t L = strlen(nm);
-                if (L > 6 && strcmp(nm + L - 6, ".22000") == 0) {
-                    if (n++) out += ",";
-                    out += "{\"name\":\""; out += nm; out += "\",\"size\":"; out += (uint32_t)f.size(); out += "}";
-                }
+                bool cap = (L > 5 && !strcmp(nm + L - 5, ".pcap")) ||
+                           (L > 6 && !strcmp(nm + L - 6, ".22000")) ||
+                           (L > 6 && !strcmp(nm + L - 6, ".pmkid"));
+                if (cap) { if (n++) out += ","; out += "{\"name\":\""; out += nm; out += "\",\"size\":"; out += (uint32_t)f.size(); out += "}"; }
             }
             f.close();
         }
         d.close();
     }
-    out += "]}";
+    out += "]";
     server.send(200, "application/json", out);
 }
 
@@ -469,7 +462,7 @@ void begin() {
     server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
     server.on("/api/sync/status",   HTTP_GET,  sendSyncStatus);
     server.on("/api/capture_file", HTTP_GET, serveCaptureFile);
-    server.on("/api/pwncrack_upload_info", HTTP_GET, pwncrackUploadInfo);
+    server.on("/api/files", HTTP_GET, listFiles);
     server.on("/api/captures", HTTP_GET,     listCaptures);
     server.on("/api/del_capture", HTTP_POST, deleteCapture);
     server.on("/", HTTP_GET, sendIndex);
