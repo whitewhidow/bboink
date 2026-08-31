@@ -59,8 +59,10 @@
     <h3>Before you click Install</h3>
     <ul>
       <li>Connect the board with a <b>USB-C data cable</b> and pick its serial port in the popup.</li>
-      <li>Choose <b>Erase device</b> if the tool offers it — recommended for a clean flash,
-          and required the first time you put BBoink on a C5 board.</li>
+      <li><b>Updating a board that already runs BBoink?</b> Leave <b>Erase device</b>
+          <b>unticked</b> — your saved config (relay URL, keys, WiFi, settings) lives in a
+          separate partition and is preserved. Only tick <b>Erase device</b> for a
+          <b>first install</b> on a C5 board (a clean start wipes that config).</li>
       <li class="warn">After flashing a C5 board (T-Display C5 / Waveshare), unplug and replug it
           to start the new firmware — the C5 doesn't auto-reboot after flashing.</li>
     </ul>
