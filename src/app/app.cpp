@@ -140,9 +140,9 @@ const char* fmtBytes(uint64_t b) {
 void go(Screen s) {
     screen = s;
     switch (s) {
+        case Screen::CAPTURE: ScreenCapture::enter(); break;
 #if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
         case Screen::MENU:    ScreenMenu::enter();    break;
-        case Screen::CAPTURE: ScreenCapture::enter(); break;
         case Screen::MANAGE:  ScreenManage::enter();  break;
         case Screen::OHC:     ScreenOHC::enter();     break;
         case Screen::PWNCRACK:ScreenPwnCrack::enter();break;
@@ -228,9 +228,9 @@ void tick() {
 
     Input in = readInput();
     switch (screen) {
+        case Screen::CAPTURE: ScreenCapture::tick(in); break;
 #if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
         case Screen::MENU:    ScreenMenu::tick(in);    break;
-        case Screen::CAPTURE: ScreenCapture::tick(in); break;
         case Screen::MANAGE:  ScreenManage::tick(in);  break;
         case Screen::OHC:     ScreenOHC::tick(in);     break;
         case Screen::PWNCRACK:ScreenPwnCrack::tick(in);break;
