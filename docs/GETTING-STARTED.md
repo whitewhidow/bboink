@@ -59,6 +59,15 @@ You'll also want a key from **at least one** cracking service (any one is enough
 
 *T-Embed CC1101 / T-Display C5. No relay, no phone.*
 
+> **How the buttons work**
+> - **T-Embed CC1101** (encoder + side button): **turn** = move, **click** = select, **side
+>   button** = back (**hold ~3 s** = power off).
+> - **T-Display C5** (two buttons): **tap** up/down = move, **hold (~0.5 s)** = select, **short-hold
+>   the down button** = back, **hold ~3 s** = power off. If up/down feel reversed, the two buttons are
+>   symmetric — just swap them in your head.
+> - Text fields (SSID / keys) use an on-screen char-picker: move to change the character, select to
+>   confirm, back to delete.
+
 1. **Configure.** Power on; press **back** to open the **MENU → OPTIONS** and set:
    - **WiFi SSID / pass** — a network the board can join (this is how it uploads).
    - at least one **service key** (wpa-sec / OHC / PwnCrack).
