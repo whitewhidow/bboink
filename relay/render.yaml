@@ -1,0 +1,21 @@
+# Render blueprint for the bboink relay.
+# Deploy: New + > Blueprint > pick the bboink repo. Set Root Directory = relay/
+# Then fill the 4 secret env vars in the Render dashboard (they are NOT in git).
+services:
+  - type: web
+    name: bboink-relay
+    runtime: node
+    rootDir: relay
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: RELAY_TOKEN
+        sync: false      # a long random string; the board sends it as Bearer <token>
+      - key: WPASEC_KEY
+        sync: false
+      - key: OHC_KEY
+        sync: false
+      - key: PWNCRACK_KEY
+        sync: false

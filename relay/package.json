@@ -1,0 +1,10 @@
+{
+  "name": "bboink-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-host HTTPS relay: board sends captures / gets cracked; relay fans out to wpa-sec, OnlineHashCrack, PwnCrack.",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.19.2" }
+}
