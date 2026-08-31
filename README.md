@@ -24,27 +24,73 @@ Two families are supported:
 
 - **T-Embed CC1101 / CC1101 PLUS** (ESP32-S3) — rotary encoder + buttons drive the
   full **on-device menu** described below.
-- **Waveshare ESP32-C5-LCD-1.47** (ESP32-C5, dual-band, one usable button) — has
-  no room for an on-device menu, so it runs a **two-mode + web-UI** model:
-  - **One button** toggles between **CAPTURE** and **MANAGEMENT**.
-  - In **MANAGEMENT** the board raises a SoftAP (`BBoink-XXXX`) and serves a web UI
-    (Status / Config / Sync / Captures). All config and sync happen there; the
-    device then runs standalone. See `docs/DESIGN-mode-webui.md`.
+- **Waveshare ESP32-C5-LCD-1.47** (ESP32-C5, dual-band, one usable button) — has no
+  room for an on-device menu **and no SoftAP/web UI at all**; everything is managed
+  over **BLE** from a phone (Android/Chrome). The whole AP/web stack is compiled out
+  to save flash/RAM. See `docs/DESIGN-ble-bridge.md`.
+  - **One button**: **tap** toggles **CAPTURE ⇄ BLE BRIDGE** (bridge reboots in),
+    **hold ~3 s** powers off. In BLE BRIDGE the board is a NimBLE peripheral; the
+    phone's **BLE console** (Config / Captures / Sync) drives all setup + syncing —
+    see *Cracking sync* below.
 
-## Sync: direct or via relay
+## Cracking sync — the relay + BLE console (end to end)
 
-Captures can reach the cracking services **two** ways:
+Captures reach the three cracking services through a tiny **relay** you host once,
+so the board only ever talks to **one host**. Two front-ends drive it:
 
-- **Direct** — the board uploads to each service itself. The ESP32-C5 can only
-  complete **one TLS handshake per boot**, so multi-service sync uses a
-  **chained-reboot queue** (one op per boot; *Sync All* / *Check Cracked* reboot
-  through them). Works, but visibly reboots a few times.
-- **Relay (recommended)** — a tiny HTTPS service (see [`relay/`](relay/), deploys to
-  **Render**) that the board talks to as its **single host**. One kept-alive
-  connection = **one handshake** for *all* uploads **and** the cracked-fetch — no
-  chained reboots, keys held server-side. Set **Relay URL + token** in the web
-  **Config** tab, then **Sync → Sync via Relay**. **Wake / Check** pings the relay
-  to pre-warm Render's free tier and report up/down + latency.
+- **Waveshare C5** → the **BLE console** (an Android/Chrome web app); the board has
+  no WiFi/AP at all — the phone bridges it to the relay over its own connection.
+- **T-Embed / T-Display** → the on-board **web UI** (SoftAP), with the relay's
+  *Sync via Relay* button — and they can *also* use the BLE console.
+
+```
+ board  ──(BLE or WiFi)──►  relay (Render)  ──►  wpa-sec / OnlineHashCrack / PwnCrack
+   ▲                                          │
+   └──────────  cracked passwords  ◄──────────┘
+```
+
+### 1 · Deploy the relay (once)
+The relay is [`relay/`](relay/) — a ~50-line Node/Express service. Deploy it to
+**Render** (free tier): New → Blueprint → pick this repo → it reads
+`relay/render.yaml`. Set env vars `RELAY_TOKEN` (a long random string you invent)
+and, optionally, `WPASEC_KEY` / `OHC_KEY` / `PWNCRACK_KEY`. You get a URL like
+`https://bboink.onrender.com`. Full details + endpoint reference: [`relay/README.md`](relay/README.md).
+
+> **Keys live in ONE place.** Put your three service keys **on the device** (Config,
+> below); the front-end passes them to the relay per-request (`X-Keys` header), so the
+> relay's env-var keys are just an optional fallback — you can leave them blank.
+
+### 2 · Configure the device
+Set these once (BLE console **Config** tab, or the web **Config** tab):
+- **Relay URL** = your Render URL, **Relay token** = your `RELAY_TOKEN`
+- **wpa-sec / OHC / PwnCrack keys** (the single source of truth for the keys)
+
+### 3a · Sync from the Waveshare (BLE console)
+1. Host the app: enable **GitHub Pages** for this repo (branch → `/bridge`), giving
+   e.g. `https://<you>.github.io/<repo>/bridge/`. (It's `bridge/index.html`.)
+2. On the board: **tap** the button (or **medium-hold ~2 s**) → the screen shows
+   **BLE BRIDGE** and the configured relay URL.
+3. On the phone (Chrome, on WiFi or cellular — *not* the board): open the Pages URL →
+   **Connect to board** → pick `BBoink-XXXX`. It loads Config + Captures over BLE.
+4. **Sync** tab → **Check / wake relay** (free tier sleeps; this wakes it, ~40 s cold)
+   → **Sync captures ↔ relay**. Results print **per network** (OHC / PwnCrack /
+   wpa-sec each). Cracked passwords are written back and shown on **Captures**.
+   - Already-synced captures are skipped (`nothing new to upload`); tick **re-sync
+     everything** to force. **Captures** tab also lists cracked passwords, lets you
+     **delete** a capture, and **exclude** a network by SSID.
+
+### 3b · Sync from T-Embed / T-Display (web UI)
+Toggle to **management**, join the board's SoftAP (`BBoink-XXXX`), open the web UI:
+- **Sync** tab → **Sync via Relay** (one clean handshake) or per-service uploads /
+  **Check Cracked**. **Config** tab holds the same relay URL/token + keys.
+- Or tap **Start BLE Bridge** to drop into the BLE console flow (3a) instead.
+
+### Notes
+- Render free tier **sleeps after ~15 min idle** → first request wakes it (~30–50 s);
+  the front-ends use generous timeouts and a wake button.
+- wpa-sec **accepts duplicate** uploads, so the board tracks what's been synced and
+  only sends new captures. OHC/PwnCrack dedup server-side.
+- A network cracked by multiple services shows all of them (`wpa-sec+pwncrack`).
 
 ## Top bar
 Every screen shows: title · **SD** (green = microSD mounted, red `sd` = running on
