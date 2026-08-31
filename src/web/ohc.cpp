@@ -99,7 +99,7 @@ static bool postV2(const String& body, String& resp, char* err, size_t errLen) {
     Serial.printf("[OHC] postV2 body=%u maxAlloc=%u free=%u\n",
                   (unsigned)body.length(), (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
     if (maxblk < 36000) {
-        if (err) snprintf(err, errLen, "LOW HEAP %u", (unsigned)maxblk);
+        if (err) snprintf(err, errLen, "LOW HEAP %u/%u", (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
         return false;
     }
     WiFiClientSecure client;

@@ -364,7 +364,7 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     size_t maxblk = ESP.getMaxAllocHeap();
     Serial.printf("[WPASEC] upload body=%u maxAlloc=%u free=%u\n",
                   (unsigned)bodyLen, (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
-    if (maxblk < 36000) { free(body); snprintf(lastError, sizeof(lastError), "LOW HEAP %u", (unsigned)maxblk); return false; }
+    if (maxblk < 36000) { free(body); snprintf(lastError, sizeof(lastError), "LOW HEAP %u/%u", (unsigned)maxblk, (unsigned)ESP.getFreeHeap()); return false; }
     WiFiClientSecure client;
     client.setInsecure();
 
@@ -406,7 +406,7 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     
     // GET the potfile via HTTPClient (raw GET request write also failed post-handshake on C5).
     size_t maxblk = ESP.getMaxAllocHeap();
-    if (maxblk < 36000) { snprintf(lastError, sizeof(lastError), "LOW HEAP %u", (unsigned)maxblk); return false; }
+    if (maxblk < 36000) { snprintf(lastError, sizeof(lastError), "LOW HEAP %u/%u", (unsigned)maxblk, (unsigned)ESP.getFreeHeap()); return false; }
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;

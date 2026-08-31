@@ -1,5 +1,6 @@
 // tembed-oink — minimal WiFi handshake capture + wpa-sec upload.
 // Target: LilyGo T-Embed CC1101 (ESP32-S3, rotary encoder + side button).
+#include <vector>
 #include <Arduino.h>
 #include <M5Cardputer.h>            // shim -> hal/m5compat.h on this board
 #include <WiFi.h>
@@ -52,21 +53,27 @@ static bool runBootSyncIfQueued() {
     } else {
         int files = 0, hashes = 0;
         char uperr[48] = {0};
-        File d = Storage::fs().open(SDLayout::handshakesDir());
-        if (d && d.isDirectory()) {
-            for (File f = d.openNextFile(); f; f = d.openNextFile()) {
-                if (!f.isDirectory()) {
-                    const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
-                    size_t L = strlen(n);
-                    if (L > 6 && strcmp(n + L - 6, ".22000") == 0) {
-                        PwnCrack::UploadResult r = PwnCrack::uploadFile(n);
-                        if (r.success) { files++; hashes += r.hashes; }
-                        else if (!uperr[0]) strncpy(uperr, r.error, sizeof(uperr) - 1);
+        // Collect the .22000 basenames first and CLOSE the directory, so no FS
+        // handles are held during the (heap-hungry) TLS handshake in uploadFile.
+        std::vector<String> names;
+        {
+            File d = Storage::fs().open(SDLayout::handshakesDir());
+            if (d && d.isDirectory()) {
+                for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+                    if (!f.isDirectory()) {
+                        const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
+                        size_t L = strlen(n);
+                        if (L > 6 && strcmp(n + L - 6, ".22000") == 0) names.push_back(n);
                     }
+                    f.close();
                 }
-                f.close();
+                d.close();
             }
-            d.close();
+        }
+        for (auto& nm : names) {
+            PwnCrack::UploadResult r = PwnCrack::uploadFile(nm.c_str());
+            if (r.success) { files++; hashes += r.hashes; }
+            else if (!uperr[0]) strncpy(uperr, r.error, sizeof(uperr) - 1);
         }
         char err[48] = {0};
         int cracked = PwnCrack::syncPotfile(err, sizeof(err));
