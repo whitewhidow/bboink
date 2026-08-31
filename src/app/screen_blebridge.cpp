@@ -28,8 +28,14 @@ static void draw() {
     M5.Display.drawString(l, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 34);
     // Relay the phone app should target (board doesn't use it in bridge mode — shown for reference).
     const char* ru = Config::wifi().relayUrl;
-    M5.Display.setTextColor(ru[0] ? 0x5AEB : TFT_RED, TFT_BLACK);   // 0x5AEB = light blue-grey
-    M5.Display.drawString(ru[0] ? ru : "(no relay set)", PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 50);
+    if (ru[0]) {
+        char rl[112]; snprintf(rl, sizeof(rl), "relay: %s", ru);
+        M5.Display.setTextColor(0x5AEB, TFT_BLACK);   // light blue-grey
+        M5.Display.drawString(rl, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 50);
+    } else {
+        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
+        M5.Display.drawString("missing relay url", PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 50);
+    }
     App::footer("tap: exit to capture");
 }
 

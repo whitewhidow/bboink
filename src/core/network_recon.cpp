@@ -892,6 +892,12 @@ void start() {
     esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);
     reconApplyPromiscFilter();
     esp_wifi_set_promiscuous(true);
+#if defined(PORK_C5_5GHZ)
+    // Enable 5 GHz regulatory: without a country that permits the UNII channels,
+    // esp_wifi_set_channel(36) faults/reboots. "US" covers UNII-1 (36-48) + UNII-3
+    // (149-165). Must run after the WiFi driver is started (promiscuous does that).
+    esp_wifi_set_country_code("US", true);
+#endif
     reconTune(currentChannel);
     
     running = true;
@@ -960,6 +966,12 @@ void resume() {
     esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);
     reconApplyPromiscFilter();
     esp_wifi_set_promiscuous(true);
+#if defined(PORK_C5_5GHZ)
+    // Enable 5 GHz regulatory: without a country that permits the UNII channels,
+    // esp_wifi_set_channel(36) faults/reboots. "US" covers UNII-1 (36-48) + UNII-3
+    // (149-165). Must run after the WiFi driver is started (promiscuous does that).
+    esp_wifi_set_country_code("US", true);
+#endif
     reconTune(currentChannel);
     
     paused = false;

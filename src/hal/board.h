@@ -217,7 +217,9 @@
 // hop channels) needs regulatory/country config for reception and is currently
 // only enabled on the verified T-Display C5 — the Waveshare stays 2.4 GHz until
 // 5 GHz reception (esp_wifi_set_country) and the 5 GHz-hop reboot are sorted.
-#if defined(PORK_BOARD_TDISPLAY_C5)
+// Both C5 boards now set the regulatory country (esp_wifi_set_country_code) in the
+// capture path, which is what the 5 GHz channels need to not fault at ch36.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
 #define PORK_C5_5GHZ
 #endif
 
