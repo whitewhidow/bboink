@@ -69,7 +69,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <h3>Crack service keys</h3>
 <label>wpa-sec key <small id="p_wpa_key"></small></label><input type="text" id="wpa_key" placeholder="(none)">
 <label>OnlineHashCrack key <small id="p_ohc_key"></small></label><input type="text" id="ohc_key" placeholder="(none)">
-<label>PwnCrack key <small id="p_pwn_key"></small></label><input type="text" id="pwn_key" placeholder="(none)"><label>Relay URL <small>(https://…onrender.com; blank = direct)</small></label><input type="text" id="relay_url" placeholder="(none)"><label>Relay token</label><input type="text" id="relay_token" placeholder="(none)"><label>Relay URL <small>(https://…onrender.com; blank = direct)</small></label><input type="text" id="relay_url" placeholder="(none)"><label>Relay token</label><input type="text" id="relay_token" placeholder="(none)">
+<label>PwnCrack key <small id="p_pwn_key"></small></label><input type="text" id="pwn_key" placeholder="(none)"><label>Relay URL <small>(https://…onrender.com; blank = direct)</small></label><input type="text" id="relay_url" placeholder="(none)"><label>Relay token</label><input type="text" id="relay_token" placeholder="(none)">
 <h3>ntfy</h3>
 <label>Topic</label><input type="text" id="ntfy_topic">
 <div class="chk"><input type="checkbox" id="ntfy_attach"><label style="margin:0">attach capture file</label></div>
@@ -96,9 +96,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div id="sync" hidden><div class="card">
 <h3>Upload captures to crack services</h3>
 <small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
-<div class="srow"><span><b>Relay</b> (one-shot)</span><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><span class="sres" id="r_relay"></span></div><div class="srow"><span><b>Relay</b> (one-shot)</span><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><button class="sbtn" onclick="doSync('relayping',this)">Wake / Check</button><span class="sres" id="r_relay"></span><span class="sres" id="r_relayping"></span></div><div class="srow"><span><b>All services</b></span><button class="sbtn" onclick="doSync('all',this)">Sync All</button><button class="sbtn" onclick="doSync('checkcracked',this)">Check Cracked</button><span class="sres" id="r_all"></span><span class="sres" id="r_checkcracked"></span></div><div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
-<div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
-<div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
+<div class="srow"><span><b>Relay</b></span><button class="sbtn" onclick="doSync('relayping',this)">Check Relay Status</button><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><span class="sres" id="r_relayping"></span><span class="sres" id="r_relay"></span></div>
 </div></div>
 
 <div id="caps" hidden><div class="card">
@@ -133,8 +131,6 @@ async function loadCfg(){try{const c=await (await fetch('/api/config')).json();
  document.getElementById('wifi_ssid').value=c.wifi_ssid||'';
  document.getElementById('ntfy_topic').value=c.ntfy_topic||'';
  document.getElementById('ap_ssid').value=c.ap_ssid||'';
- document.getElementById('relay_url').value=c.relay_url||'';
- document.getElementById('relay_token').value=c.relay_token||'';
  document.getElementById('relay_url').value=c.relay_url||'';
  document.getElementById('relay_token').value=c.relay_token||'';
  document.getElementById('wpa_key').value=c.wpa_key||'';
@@ -241,8 +237,6 @@ static void sendConfig() {
     doc["ap_ssid"]       = w.apSSID;
     doc["relay_url"]     = w.relayUrl;
     doc["relay_token"]   = w.relayToken;
-    doc["relay_url"]     = w.relayUrl;
-    doc["relay_token"]   = w.relayToken;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
 }
@@ -294,8 +288,6 @@ static void saveConfig() {
     if (doc["sound"].is<bool>())           w.soundEnabled     = doc["sound"];
     if (doc["pmkid"].is<bool>())           w.pmkidEnabled     = doc["pmkid"];
     setStr("ap_ssid", w.apSSID, sizeof(w.apSSID));
-    setStr("relay_url",   w.relayUrl,   sizeof(w.relayUrl));
-    setStr("relay_token", w.relayToken, sizeof(w.relayToken));
     setStr("relay_url",   w.relayUrl,   sizeof(w.relayUrl));
     setStr("relay_token", w.relayToken, sizeof(w.relayToken));
 
