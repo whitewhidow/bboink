@@ -220,6 +220,25 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
         These mockups are rebuilt from the firmware's own drawing code, event colours and all.</p>
     </div>
     <div class="gallery">
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc topbar"><span class="t">CAPTURE</span>
+            <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g">96%</span></span></div>
+          <div class="sc status r" style="top:7cqw">DEAUTHING</div>
+          <div class="sc rows" style="top:14cqw">
+            <div class="gy">ch:06 nets:19 pkts:24102 mgmt:8140</div>
+            <div class="cy">work: 4  cool: 0  idle: 4</div>
+            <div class="dk">cap: 2 ign: 0 pmf: 2 weak: 5 open: 2</div>
+            <div class="g">handshakes: 1&nbsp;&nbsp;&nbsp;pmkid: 0</div>
+            <div class="g">last: NETGEAR-2G</div>
+            <div class="r">deauth: 512&nbsp;&nbsp;&nbsp;tx: 2048 / 2100</div>
+            <div class="am">target: NETGEAR-2G&nbsp;&nbsp;-47dBm</div>
+            <div class="gy">clients: 3</div>
+          </div>
+          <div class="sc footer">back: stop &amp; exit</div>
+        </div></div></div>
+        <div class="devcap"><b>Capture</b></div>
+      </div>
 
       <div class="devwrap reveal">
         <div class="dev"><div class="bezel"><div class="screen">
@@ -240,35 +259,33 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
 
       <div class="devwrap reveal">
         <div class="dev"><div class="bezel"><div class="screen">
-          <div class="sc topbar"><span class="t">OPTIONS</span>
+          <div class="sc topbar"><span class="t">CAPTURES</span>
             <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g">82%</span></span></div>
-          <div class="sc" style="top:6.4cqw;left:0;right:0">
-            <div class="mrow sel">WiFi</div>
-            <div class="mrow">WPA Key</div>
-            <div class="mrow">Ch Hop ms&nbsp;&nbsp;&nbsp;&nbsp;250</div>
-            <div class="mrow">Atk RSSI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-75</div>
-            <div class="mrow">Deauth&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;on</div>
-            <div class="mrow">Max Tries&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5</div>
+          <div class="sc rows" style="top:8cqw;font-size:2.7cqw;line-height:1.72">
+            <div class="cy">&gt;&gt; ADD IGNORE (scan)</div>
+            <div class="gy">C&nbsp;&nbsp;W&nbsp;&nbsp;&nbsp;HOME-5G_2.4</div>
+            <div class="gy">CM WPK NETGEAR-2G</div>
+            <div class="gy">C&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Ziggo1F4A2</div>
+            <div class="gy">C&nbsp;&nbsp;P&nbsp;K&nbsp;FRITZ!Box7590</div>
+            <div class="gy">M&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Telenet-Guest</div>
           </div>
-          <div class="sc footer">turn: move&nbsp;&nbsp;click: edit</div>
+          <div class="sc footer">C/M cap/man&nbsp;&nbsp;W/O/P up&nbsp;&nbsp;K crk</div>
         </div></div></div>
-        <div class="devcap"><b>Options</b></div>
+        <div class="devcap"><b>Captures list</b></div>
       </div>
 
       <div class="devwrap reveal">
         <div class="dev"><div class="bezel"><div class="screen">
-          <div class="sc" style="top:2cqw;left:0;right:0;text-align:center;font-size:5cqw"><span class="cy">BLE BRIDGE</span></div>
-          <div class="sc" style="top:11cqw;left:0;right:0;text-align:center;font-size:2.5cqw;line-height:1">
-            <div class="g">phone connected</div>
-            <div class="dk" style="margin-top:5.6cqw">files 3&nbsp;&nbsp;&nbsp;cracked 1</div>
-            <div class="dk" style="margin-top:6.2cqw">open on phone:</div>
-            <div class="url" style="margin-top:4.4cqw">https://whitewhidow.github.io/bboink/bridge/</div>
-            <div class="dk" style="margin-top:6.2cqw">relay:</div>
-            <div class="url" style="margin-top:4.4cqw">https://bboink.onrender.com</div>
+          <div class="sc topbar"><span class="t">OHC UPLOAD</span>
+            <span class="rt"><span class="g">SD</span><span class="g">HOME-5G</span><span class="g">88%</span></span></div>
+          <div class="sc" style="top:12cqw;left:2.5cqw;right:2.5cqw;font-size:4.6cqw;line-height:2.1">
+            <div class="gy">hashes 12</div>
+            <div class="gy">new 3&nbsp;&nbsp;skip 9</div>
+            <div class="g" style="font-size:6.2cqw;margin-top:1cqw">OK</div>
           </div>
-          <div class="sc footer">exit to capture</div>
+          <div class="sc footer">back: return</div>
         </div></div></div>
-        <div class="devcap"><b>BLE bridge</b></div>
+        <div class="devcap"><b>Direct sync</b></div>
       </div>
 
       <div class="devwrap reveal">
@@ -298,6 +315,22 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
           <div class="qr" style="top:9.4cqw;left:50%;transform:translateX(-50%);width:44cqw;height:44cqw"><canvas id="qr" width="21" height="21"></canvas></div>
         </div></div></div>
         <div class="devcap"><b>WiFi join QR</b></div>
+      </div>
+
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc" style="top:2cqw;left:0;right:0;text-align:center;font-size:5cqw"><span class="cy">BLE BRIDGE</span></div>
+          <div class="sc" style="top:11cqw;left:0;right:0;text-align:center;font-size:2.5cqw;line-height:1">
+            <div class="g">phone connected</div>
+            <div class="dk" style="margin-top:5.6cqw">files 3&nbsp;&nbsp;&nbsp;cracked 1</div>
+            <div class="dk" style="margin-top:6.2cqw">open on phone:</div>
+            <div class="url" style="margin-top:4.4cqw">https://whitewhidow.github.io/bboink/bridge/</div>
+            <div class="dk" style="margin-top:6.2cqw">relay:</div>
+            <div class="url" style="margin-top:4.4cqw">https://bboink.onrender.com</div>
+          </div>
+          <div class="sc footer">exit to capture</div>
+        </div></div></div>
+        <div class="devcap"><b>BLE bridge</b></div>
       </div>
 
     </div>
