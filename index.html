@@ -1,0 +1,479 @@
+<title>BBoink</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#0a0e12; --panel:#11161c; --panel2:#161d25; --tile:#e9eef1;
+  --ink:#dfe7ec; --muted:#8a97a2; --faint:#5c6772;
+  --cyan:#22d3e0; --cyan-dim:#0f8f99;
+  --red:#ff5555; --mag:#e879f9; --green:#3ddc84; --amber:#ffd166;
+  --line:rgba(140,160,175,.14); --line2:rgba(140,160,175,.28);
+  --disp:"Chakra Petch",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --px:"Silkscreen","IBM Plex Mono",monospace;
+  --wrap:1080px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(1100px 520px at 78% -8%, rgba(34,211,224,.10), transparent 60%),
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size:auto, 46px 46px, 46px 46px;
+}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+a{color:var(--cyan);text-decoration:none}
+h1,h2,h3{font-family:var(--disp);font-weight:600;text-wrap:balance;margin:0;letter-spacing:.2px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--cyan-dim)}
+.muted{color:var(--muted)}
+
+header.nav{position:sticky;top:0;z-index:40;backdrop-filter:blur(9px);
+  background:rgba(10,14,18,.72);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:.5px;display:flex;align-items:center;gap:9px}
+.brand .pig{filter:drop-shadow(0 0 10px rgba(34,211,224,.5))}
+.nav nav{margin-left:auto;display:flex;gap:22px;align-items:center}
+.nav nav a{color:var(--muted);font-size:14px;font-weight:500}
+.nav nav a:hover{color:var(--ink)}
+.btn{font-family:var(--mono);font-weight:600;font-size:13.5px;letter-spacing:.02em;
+  padding:9px 15px;border-radius:8px;border:1px solid var(--line2);color:var(--ink);
+  display:inline-flex;align-items:center;gap:8px;transition:.18s;white-space:nowrap}
+.btn:hover{border-color:var(--cyan);color:var(--cyan);transform:translateY(-1px)}
+.btn.solid{background:var(--cyan);color:#04181b;border-color:var(--cyan);box-shadow:0 6px 22px -8px rgba(34,211,224,.7)}
+.btn.solid:hover{background:#5fe4ee;color:#04181b}
+
+.hero{padding:74px 0 40px}
+.hero .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center}
+.hero h1{font-size:clamp(44px,6.4vw,76px);line-height:.98;font-weight:700;letter-spacing:-.5px}
+.hero h1 .oink{color:var(--cyan)}
+.lead{font-size:19px;color:var(--muted);margin:20px 0 4px;max-width:46ch}
+.lead b{color:var(--ink);font-weight:600}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chip{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--muted);
+  border:1px solid var(--line);border-radius:999px;padding:4px 11px}
+.warn{margin-top:26px;font-size:13px;color:var(--faint);border-left:2px solid var(--amber);
+  padding:2px 0 2px 12px;max-width:52ch}
+
+/* ---- device screen: pixel font, sized to the real display metrics ----
+   1 device pixel = 0.3125cqw (aspect-locked), so 8px text = 2.5cqw, an 18px bar = 5.6cqw. */
+.dev{background:#05070a;border:1px solid var(--line2);border-radius:14px;padding:12px;
+  box-shadow:0 30px 70px -30px #000, inset 0 0 0 1px rgba(255,255,255,.02)}
+.dev .bezel{border-radius:7px;overflow:hidden;position:relative;background:#000}
+.screen{position:relative;width:100%;aspect-ratio:320/170;background:#000;
+  font-family:var(--mono);color:#fff;overflow:hidden;container-type:inline-size;
+  text-rendering:geometricPrecision;letter-spacing:0}
+.screen .scan{position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px);opacity:.6}
+.screen .glow{position:absolute;inset:0;pointer-events:none;z-index:6;box-shadow:inset 0 0 55px rgba(0,0,0,.65)}
+.sc{position:absolute;left:0;right:0}
+.topbar{top:0;height:5.6cqw;display:flex;align-items:center;padding:0 1.9cqw;
+  border-bottom:.6cqw solid var(--cyan);font-size:2.5cqw;line-height:1}
+.topbar .t{color:var(--cyan);letter-spacing:.02em}
+.topbar .rt{margin-left:auto;display:flex;gap:2.2cqw;align-items:center}
+.g{color:var(--green)} .gy{color:#c9d3da} .r{color:var(--red)} .m{color:var(--mag)}
+.am{color:var(--amber)} .cy{color:var(--cyan)} .dk{color:#6a7681} .bl{color:#5aa9ff}
+.status{font-size:5cqw;left:1.9cqw;letter-spacing:.02em}
+.rows{left:1.9cqw;right:1.9cqw;font-size:2.5cqw;line-height:1.62}
+.rows div{white-space:nowrap;overflow:hidden}
+.body{left:1.9cqw;right:1.9cqw;font-size:2.7cqw;line-height:2.1}
+.footer{bottom:0;height:5.6cqw;display:flex;align-items:center;padding:0 1.9cqw;
+  color:#6a7681;font-size:2.4cqw;border-top:.4cqw solid rgba(140,160,175,.16)}
+.cur{display:inline-block;width:2cqw;height:2.6cqw;background:var(--cyan);
+  transform:translateY(.3cqw);margin-left:.4cqw;animation:blink 1.05s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.mrow{padding:.85cqw 1.9cqw;font-size:2.9cqw;color:#dfe7ec;line-height:1}
+.mrow.sel{background:var(--cyan);color:#04181b}
+.mrow.dim{color:#6a7681}
+.qr{position:absolute;background:#fff;padding:1.2cqw;border-radius:.6cqw}
+.qr canvas{display:block;image-rendering:pixelated;width:100%;height:100%}
+.url{color:#7e887e}
+.qsel{background:var(--cyan);color:#04181b}
+
+.devwrap{display:flex;flex-direction:column;gap:10px}
+.devcap{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.04em;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.devcap b{color:var(--ink);font-weight:600}
+
+section{padding:64px 0;border-top:1px solid var(--line)}
+.sec-head{display:flex;flex-direction:column;gap:10px;margin-bottom:34px;max-width:60ch}
+.sec-head h2{font-size:clamp(26px,3.4vw,36px)}
+.sec-head p{color:var(--muted);margin:0}
+
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:34px}
+.boards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.board{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:.2s}
+.board:hover{border-color:var(--line2);transform:translateY(-3px)}
+.board .ph{background:var(--tile);aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;padding:14px}
+.board .ph img{max-width:100%;max-height:100%;object-fit:contain}
+.board .bd{padding:16px 17px 18px}
+.board h3{font-size:17px;font-weight:600}
+.board .spec{font-family:var(--mono);font-size:12px;color:var(--muted);margin:7px 0 12px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1px solid var(--line2);color:var(--cyan);margin-bottom:10px}
+
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;transition:.2s}
+.card:hover{border-color:var(--line2);background:var(--panel2)}
+.card .ic{font-family:var(--mono);font-size:12px;color:var(--cyan-dim);letter-spacing:.16em}
+.card h3{font-size:18px;margin:12px 0 8px;font-weight:600}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.card p .mono{font-family:var(--mono);color:var(--ink)}
+
+.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:16px;align-items:center;margin-top:8px}
+.node{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;text-align:center}
+.node .k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--cyan-dim);text-transform:uppercase}
+.node h3{font-size:16px;margin:8px 0 4px}
+.node p{margin:0;color:var(--muted);font-size:13px}
+.arrow{font-family:var(--mono);color:var(--faint);text-align:center;font-size:20px}
+.flow-note{color:var(--muted);font-size:14px;margin-top:20px;max-width:64ch}
+
+.band{border:1px solid var(--line2);border-radius:18px;background:linear-gradient(180deg, rgba(34,211,224,.08), rgba(34,211,224,.02));padding:44px;text-align:center;margin-top:8px}
+.band h2{font-size:clamp(26px,3.6vw,38px)}
+.band p{color:var(--muted);max-width:52ch;margin:12px auto 24px}
+
+footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);font-size:13.5px}
+.foot .wrap{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.foot a{color:var(--muted)} .foot a:hover{color:var(--cyan)}
+
+.reveal{opacity:0;transform:translateY(16px);transition:opacity .6s ease, transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.cur{animation:none}html{scroll-behavior:auto}}
+@media(max-width:900px){
+  .hero .grid{grid-template-columns:1fr;gap:38px}
+  .gallery{grid-template-columns:1fr}
+  .boards{grid-template-columns:1fr}
+  .feat{grid-template-columns:1fr}
+  .flow{grid-template-columns:1fr;gap:10px}
+  .arrow{transform:rotate(90deg)}
+  .nav nav a:not(.btn){display:none}
+}
+</style>
+
+<header class="nav"><div class="wrap">
+  <div class="brand"><span class="pig">🐷</span>BBoink</div>
+  <nav>
+    <a href="#screens">Screens</a>
+    <a href="#boards">Boards</a>
+    <a href="#how">How it works</a>
+    <a class="btn" href="https://github.com/whitewhidow/bboink">GitHub</a>
+    <a class="btn solid" href="https://whitewhidow.github.io/bboink/flasher/">Flash it →</a>
+  </nav>
+</div></header>
+
+<main>
+<section class="hero" style="border-top:none">
+  <div class="wrap grid">
+    <div>
+      <div class="eyebrow">ESP32 · WiFi handshake &amp; PMKID capture</div>
+      <h1>The pocket<br><span class="oink">handshake</span> hunter.</h1>
+      <p class="lead">BBoink channel-hops, deauths eligible APs, and captures WPA
+        <b>4-way handshakes</b> and <b>PMKIDs</b> — then gets them cracked in the cloud and
+        shows you the <b>password + a join QR</b>. One firmware, three boards.</p>
+      <div class="cta-row">
+        <a class="btn solid" href="https://whitewhidow.github.io/bboink/flasher/">⚡ Flash from your browser</a>
+        <a class="btn" href="https://whitewhidow.github.io/bboink/bridge/">Open the BLE console</a>
+        <a class="btn" href="https://github.com/whitewhidow/bboink/releases">Releases</a>
+      </div>
+      <div class="chips">
+        <span class="chip">wpa-sec</span><span class="chip">OnlineHashCrack</span>
+        <span class="chip">PwnCrack</span><span class="chip">no access point</span>
+        <span class="chip">BLE phone console</span><span class="chip">2.4 + 5 GHz</span>
+      </div>
+      <p class="warn">Transmits deauth frames to force handshakes. Use only on networks you
+        own or are explicitly authorized to test.</p>
+    </div>
+    <div class="devwrap">
+      <div class="dev"><div class="bezel"><div class="screen" id="heroScreen">
+        <div class="sc topbar"><span class="t">CAPTURE</span>
+          <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g" id="bat">100%</span></span></div>
+        <div class="sc status cy" id="stat" style="top:7cqw">SCANNING</div>
+        <div class="sc rows" style="top:14cqw">
+          <div class="gy" id="rline">ch:01 nets:0 pkts:213 mgmt:18</div>
+          <div class="cy">work: 4  cool: 0  idle: 4</div>
+          <div class="dk">cap: 2 ign: 0 pmf: 2 weak: 5 open: 2</div>
+          <div class="g" id="hline">handshakes: 0&nbsp;&nbsp;&nbsp;pmkid: 0</div>
+          <div class="dk" id="lline">last: -</div>
+          <div class="dk" id="dline">deauth: 0&nbsp;&nbsp;&nbsp;tx: 0 / 0</div>
+          <div class="dk" id="tline">target: -</div>
+          <div class="gy" id="cline">clients: 0<span class="cur"></span></div>
+        </div>
+        <div class="sc footer">back: stop &amp; exit</div>
+        <div class="scan"></div><div class="glow"></div>
+      </div></div></div>
+      <div class="devcap"><b>Live capture</b> <span>· channel-hopping, color-coded by event</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">On the device</div>
+      <h2>It shows exactly what it's doing.</h2>
+      <p>No app to install for day-to-day use — the board's colour screen is the interface.
+        These mockups are rebuilt from the firmware's own drawing code, event colours and all.</p>
+    </div>
+    <div class="gallery">
+
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc topbar"><span class="t">BBoink</span>
+            <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g">82%</span></span></div>
+          <div class="sc" style="top:6.4cqw;left:0;right:0">
+            <div class="mrow">CAPTURE</div>
+            <div class="mrow">CAPTURE TARGETED</div>
+            <div class="mrow sel">BLE BRIDGE</div>
+            <div class="mrow">WPASEC SYNC</div>
+            <div class="mrow">OHC SYNC</div>
+            <div class="mrow">PWNCRACK SYNC</div>
+          </div>
+          <div class="sc footer">turn: move&nbsp;&nbsp;&nbsp;click: open</div>
+        </div></div></div>
+        <div class="devcap"><b>Menu</b> <span>· "back" from capture; buttons drive it on T-Embed / T-Display</span></div>
+      </div>
+
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc topbar"><span class="t">OPTIONS</span>
+            <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g">82%</span></span></div>
+          <div class="sc" style="top:6.4cqw;left:0;right:0">
+            <div class="mrow sel">WiFi</div>
+            <div class="mrow">WPA Key</div>
+            <div class="mrow">Ch Hop ms&nbsp;&nbsp;&nbsp;&nbsp;250</div>
+            <div class="mrow">Atk RSSI&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-75</div>
+            <div class="mrow">Deauth&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;on</div>
+            <div class="mrow">Max Tries&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5</div>
+          </div>
+          <div class="sc footer">turn: move&nbsp;&nbsp;click: edit</div>
+        </div></div></div>
+        <div class="devcap"><b>Options</b> <span>· WiFi · keys · Ch Hop · Atk RSSI · Deauth · Max Tries — on the buttons or in the console</span></div>
+      </div>
+
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc" style="top:2cqw;left:0;right:0;text-align:center;font-size:5cqw"><span class="cy">BLE BRIDGE</span></div>
+          <div class="sc" style="top:11cqw;left:0;right:0;text-align:center;font-size:2.5cqw;line-height:1">
+            <div class="g">phone connected</div>
+            <div class="dk" style="margin-top:5.6cqw">files 3&nbsp;&nbsp;&nbsp;cracked 1</div>
+            <div class="dk" style="margin-top:6.2cqw">open on phone:</div>
+            <div class="url" style="margin-top:4.4cqw">https://whitewhidow.github.io/bboink/bridge/</div>
+            <div class="dk" style="margin-top:6.2cqw">relay:</div>
+            <div class="url" style="margin-top:4.4cqw">https://bboink.onrender.com</div>
+          </div>
+          <div class="sc footer">exit to capture</div>
+        </div></div></div>
+        <div class="devcap"><b>BLE bridge</b> <span>· centred title, no status bar — sync over Bluetooth, no board WiFi</span></div>
+      </div>
+
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc topbar"><span class="t">NETWORK</span>
+            <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g">80%</span></span></div>
+          <div class="sc rows" style="top:9.4cqw">
+            <div class="gy">HOME-5G_2.4</div>
+            <div class="gy">a4:2b:8c:11:9f:03</div>
+            <div class="g">captured</div>
+            <div class="gy">seen: 2026-08-31 14:22</div>
+            <div class="gy">up wpa:y ohc:n pwn:y</div>
+            <div class="am">PW: hunter2isweak</div>
+            <div style="height:1.6cqw"></div>
+            <div><span class="qsel">&gt; SHOW WIFI QR&nbsp;</span></div>
+            <div class="gy">&nbsp;&nbsp;DELETE (forget)</div>
+          </div>
+          <div class="sc footer">turn: pick&nbsp;&nbsp;click: do&nbsp;&nbsp;back: return</div>
+        </div></div></div>
+        <div class="devcap"><b>Cracked network</b> <span>· password in yellow + a SHOW WIFI QR action</span></div>
+      </div>
+
+      <div class="devwrap reveal">
+        <div class="dev"><div class="bezel"><div class="screen">
+          <div class="sc topbar"><span class="t">WIFI QR</span>
+            <span class="rt"><span class="r">sd</span><span class="dk">----</span><span class="g">80%</span></span></div>
+          <div class="qr" style="top:9.4cqw;left:50%;transform:translateX(-50%);width:44cqw;height:44cqw"><canvas id="qr" width="21" height="21"></canvas></div>
+        </div></div></div>
+        <div class="devcap"><b>WiFi join QR</b> <span>· its own screen — scan with a phone to join the cracked network</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="boards">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">One firmware · three boards</div>
+      <h2>Runs on hardware you can buy today.</h2>
+      <p>Off-the-shelf ESP32 dev boards with a screen. Pick your control style: buttons +
+        on-device menu, or Bluetooth-only from your phone.</p>
+    </div>
+    <div class="boards">
+      <div class="board reveal">
+        <div class="ph"><img src="assets/tembed.jpg" alt="LilyGo T-Embed CC1101"></div>
+        <div class="bd"><span class="tag">buttons + BLE</span>
+          <h3>LilyGo T-Embed CC1101</h3>
+          <div class="spec">ESP32-S3 · 16 MB · encoder + button</div>
+          <a class="btn" href="https://lilygo.cc/products/t-embed-cc1101-plus">Buy →</a></div>
+      </div>
+      <div class="board reveal">
+        <div class="ph"><img src="assets/tdisplay.jpg" alt="LilyGo T-Display C5"></div>
+        <div class="bd"><span class="tag">buttons + BLE</span>
+          <h3>LilyGo T-Display C5</h3>
+          <div class="spec">ESP32-C5 · dual-band 2.4/5 GHz · 2 buttons</div>
+          <a class="btn" href="https://lilygo.cc/en-us/products/t-display-c5">Buy →</a></div>
+      </div>
+      <div class="board reveal">
+        <div class="ph"><img src="assets/waveshare.webp" alt="Waveshare ESP32-C5-LCD-1.47"></div>
+        <div class="bd"><span class="tag">BLE only</span>
+          <h3>Waveshare ESP32-C5-LCD</h3>
+          <div class="spec">ESP32-C5 · dual-band · 1 button</div>
+          <a class="btn" href="https://www.waveshare.com/esp32-c5-lcd-1.47.htm">Buy →</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">What it does</div>
+      <h2>A capture rig, not a toy.</h2>
+    </div>
+    <div class="feat">
+      <div class="card reveal"><div class="ic">01 · CAPTURE</div><h3>Channel-hopping engine</h3>
+        <p>Sweeps 2.4 and 5 GHz, deauths eligible APs to force reconnects, and grabs EAPOL
+          4-way handshakes and PMKIDs — with live per-event stats.</p></div>
+      <div class="card reveal"><div class="ic">02 · CRACK</div><h3>Cloud cracking</h3>
+        <p>Captures reach wpa-sec, OnlineHashCrack and PwnCrack — directly over the board's own
+          WiFi, or through one small relay you host that fans them out and merges the results.</p></div>
+      <div class="card reveal"><div class="ic">03 · CONTROL</div><h3>BLE phone console</h3>
+        <p>A web page over Bluetooth configures and syncs the board — no access point, no
+          board WiFi uplink. It's the entire UI on the single-button Waveshare.</p></div>
+      <div class="card reveal"><div class="ic">04 · FLASH</div><h3>Browser USB flasher</h3>
+        <p>Install or update from Chrome/Edge over USB — pick a board and version, click
+          Install. No esptool, no drivers.</p></div>
+      <div class="card reveal"><div class="ic">05 · RESULT</div><h3>Password + join QR</h3>
+        <p>Cracked passwords are written back to the device and shown on the capture, with a
+          scannable <span class="mono">WIFI:</span> join QR.</p></div>
+      <div class="card reveal"><div class="ic">06 · KEEP</div><h3>Registry &amp; excludes</h3>
+        <p>Every network is remembered by SSID even after you delete the capture — so it stays
+          listed, and never-attack excludes stick across radios and reboots.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">How it works</div>
+      <h2>Capture → crack → password back.</h2>
+      <p>Grab handshakes on the device, get them to the crackers, and the recovered passwords
+        land right back on the board. There are two ways to reach the crackers.</p>
+    </div>
+    <div class="flow reveal">
+      <div class="node"><div class="k">Device</div><h3>Capture</h3><p>handshakes + PMKIDs</p></div>
+      <div class="arrow">──▶</div>
+      <div class="node"><div class="k">Upload</div><h3>Direct · or relay</h3><p>board WiFi, or your phone via a relay</p></div>
+      <div class="arrow">──▶</div>
+      <div class="node"><div class="k">Cloud</div><h3>Crackers</h3><p>wpa-sec · OHC · PwnCrack</p></div>
+    </div>
+    <p class="flow-note muted"><b style="color:var(--ink)">Direct</b> — a button board uploads
+      straight over its own WiFi; nothing else to set up. <b style="color:var(--ink)">Relay (optional)</b>
+      — a small host you deploy once lets the board hit a single endpoint that fans out to all three
+      services and merges results, and lets your phone sync the board over Bluetooth (the only way on
+      the button-less Waveshare). Cracked passwords flow back either way.</p>
+  </div>
+</section>
+
+<section style="border-top:none">
+  <div class="wrap">
+    <div class="band reveal">
+      <h2>Flash a board in two minutes.</h2>
+      <p>Plug in over USB, open the flasher in Chrome or Edge, pick your board, click Install.</p>
+      <div class="cta-row" style="justify-content:center">
+        <a class="btn solid" href="https://whitewhidow.github.io/bboink/flasher/">⚡ Open the web flasher</a>
+        <a class="btn" href="https://github.com/whitewhidow/bboink#readme">Read the docs</a>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <div class="brand" style="font-size:16px"><span class="pig">🐷</span>BBoink</div>
+  <div style="display:flex;gap:18px;flex-wrap:wrap">
+    <a href="https://github.com/whitewhidow/bboink">GitHub</a>
+    <a href="https://whitewhidow.github.io/bboink/flasher/">Web flasher</a>
+    <a href="https://whitewhidow.github.io/bboink/bridge/">BLE console</a>
+    <a href="https://github.com/whitewhidow/bboink/releases">Releases</a>
+  </div>
+  <div>Authorized testing only.</div>
+</div></footer>
+
+<script>
+(function(){
+  var c=document.getElementById('qr'); if(!c)return; var x=c.getContext('2d'); var N=21;
+  x.fillStyle='#fff';x.fillRect(0,0,N,N); x.fillStyle='#000';
+  function finder(ox,oy){ for(var i=0;i<7;i++)for(var j=0;j<7;j++){
+    var edge=i===0||i===6||j===0||j===6, core=i>=2&&i<=4&&j>=2&&j<=4;
+    if(edge||core)x.fillRect(ox+i,oy+j,1,1);} }
+  var seed=12345; function rnd(){seed=(1103515245*seed+12345)&0x7fffffff;return seed/0x7fffffff;}
+  for(var i=0;i<N;i++)for(var j=0;j<N;j++){
+    if((i<8&&j<8)||(i<8&&j>N-9)||(i>N-9&&j<8))continue;
+    if(rnd()>0.52)x.fillRect(i,j,1,1);
+  }
+  finder(0,0);finder(N-7,0);finder(0,N-7);
+})();
+// Hero capture screen: walk the engine's real AutoState machine
+// (SCANNING -> LOCK: find clients -> DEAUTHING -> WAITING -> capture -> NEXT TARGET).
+(function(){
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  var $=function(i){return document.getElementById(i);};
+  var hops=[1,6,11,36,40,44,149,157], hi=0;
+  var s={ch:1,nets:0,pkts:213,mgmt:18,dea:0,tx:0,hs:0,pm:0,cl:0,tgt:'-',rssi:57,last:'-'};
+  var TG=['NETGEAR-2G','HOME-5G_2.4','Ziggo1F4A2','FRITZ!Box7590','Telenet-8842'];
+  function pad(n){return (n<10?'0':'')+n;}
+  function txt(i,t,c){var e=$(i);if(!e)return;e.textContent=t;if(c)e.className=c;}
+  function draw(){
+    txt('rline','ch:'+pad(s.ch)+' nets:'+s.nets+' pkts:'+s.pkts+' mgmt:'+s.mgmt,'gy');
+    txt('hline','handshakes: '+s.hs+'   pmkid: '+s.pm,'g');
+    txt('lline','last: '+s.last, s.last==='-'?'dk':'g');
+    txt('dline','deauth: '+s.dea+'   tx: '+s.tx+' / '+s.tx, s.dea?'r':'dk');
+    txt('tline', s.tgt==='-'?'target: -':'target: '+s.tgt+'  -'+s.rssi+'dBm', s.tgt==='-'?'dk':'am');
+    txt('cline','clients: '+s.cl,'gy');
+  }
+  // [key, statusText, statusClass, ticks]
+  var P=[['scan','SCANNING','cy',13],['lock','LOCK: find clients','am',9],
+         ['deauth','DEAUTHING','r',9],['wait','WAITING','dk',8],['next','NEXT TARGET','gy',5]];
+  var ph=0,t=0;
+  function enter(p){
+    var e=$('stat'); if(e){e.textContent=P[p][1]; e.className='sc status '+P[p][2];}
+    var k=P[p][0];
+    if(k==='scan'){s.tgt='-';s.cl=0;s.dea=0;s.tx=0;}
+    if(k==='lock'){s.tgt=TG[Math.floor(Math.random()*TG.length)];s.rssi=40+Math.floor(Math.random()*32);s.ch=hops[Math.floor(Math.random()*hops.length)];s.cl=1+Math.floor(Math.random()*4);}
+    if(k==='next'){s.tgt='-';}
+  }
+  enter(0); draw();
+  setInterval(function(){
+    s.pkts+=Math.floor(Math.random()*40+10); s.mgmt+=Math.floor(Math.random()*5);
+    var k=P[ph][0];
+    if(k==='scan'){ if(t%2===0){ s.ch=hops[(hi++)%hops.length]; if(s.nets<23)s.nets+=Math.floor(Math.random()*3); } }
+    else if(k==='deauth'){ s.dea+=Math.floor(Math.random()*8+4); s.tx+=Math.floor(Math.random()*10+5); }
+    if(++t>=P[ph][3]){
+      if(k==='wait'){ s.hs+=1; if(s.tgt!=='-')s.last=s.tgt; if(Math.random()>0.6)s.pm+=1; }
+      t=0; ph=(ph+1)%P.length; enter(ph);
+    }
+    draw();
+  },320);
+})();
+(function(){
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(!('IntersectionObserver'in window)){els.forEach(function(e){e.classList.add('in')});return;}
+  var io=new IntersectionObserver(function(es){es.forEach(function(en){
+    if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}})},{threshold:.12});
+  els.forEach(function(e){io.observe(e)});
+})();
+</script>
