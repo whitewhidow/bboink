@@ -27,6 +27,18 @@ const {
 } = process.env;
 
 const app = express();
+
+// CORS — the BLE-bridge web app (GitHub Pages) calls these routes from a browser.
+// The RELAY_TOKEN is still required, so Allow-Origin * is fine.
+app.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'authorization,content-type');
+  res.set('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // Raw bodies: the board POSTs plain bytes (no multipart on the device side).
 app.use('/v1/hashes', express.text({ type: '*/*', limit: '5mb' }));
 app.use('/v1/pcap', express.raw({ type: '*/*', limit: '10mb' }));
