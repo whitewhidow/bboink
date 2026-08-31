@@ -1,4 +1,5 @@
 #pragma once
+#include "../hal/board.h"   // PORK_CHIP_ESP32C5
 
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +12,11 @@ namespace HeapPolicy {
 
     // General allocation safety thresholds
     static constexpr size_t kMinHeapForOinkNetworkAdd = 30000;
+#if defined(PORK_CHIP_ESP32C5)
+    static constexpr size_t kMinHeapForHandshakeAdd = 25000;  // C5: less free heap; reserve() covers early creates
+#else
     static constexpr size_t kMinHeapForHandshakeAdd = 60000;
+#endif
     static constexpr size_t kMinHeapForReconGrowth = 20000;
     static constexpr size_t kMinHeapForSpectrumGrowth = 20000;
 

@@ -14,11 +14,23 @@
 // Text entry of arbitrary characters can't be faked from an encoder; those
 // call sites get a dedicated on-screen char-picker in a later step.
 #pragma once
-#if defined(PORK_BOARD_TEMBED_CC1101)
+#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
 
 #include <Arduino.h>
 #include <vector>
+
+// The concrete LovyanGFX device differs per board; alias it to LGFX_Board so
+// the rest of this facade (and M5.Display) is board-agnostic.
+#if defined(PORK_BOARD_TEMBED_CC1101)
 #include "tembed_lgfx.h"
+using LGFX_Board = LGFX_TEmbed;
+#elif defined(PORK_BOARD_TDISPLAY_C5)
+#include "tdisplay_c5_lgfx.h"
+using LGFX_Board = LGFX_C5;
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#include "waveshare_c5_lcd_lgfx.h"
+using LGFX_Board = LGFX_WaveshareC5;
+#endif
 
 // Bring in only the LovyanGFX colour constants (TFT_BLACK, TFT_RED, ...) and
 // text datums (top_left, middle_center, ...) that the UI code uses unqualified.
@@ -46,7 +58,9 @@ namespace porkhal {
         bool down    = false;   // '.'  (encoder CW)
         bool enter    = false;  // encoder push (short)
         bool back    = false;   // side button  -> BACKSPACE
+        bool toggle  = false;   // single-button CAPTURE<->MANAGEMENT swap
         bool backLongPress = false;  // side button held ~3s (power-off gesture)
+        bool bridge  = false;   // single-button medium hold (1.5-3s) -> BLE bridge
         bool changed = false;   // any transition this frame
     };
     extern VKey vkey;
@@ -151,7 +165,7 @@ struct M5Config {};   // opaque result of M5.config()
 
 class M5Facade {
 public:
-    LGFX_TEmbed   Display;
+    LGFX_Board    Display;
     SpeakerFacade Speaker;
     PowerFacade   Power;
     RtcFacade     Rtc;
@@ -170,11 +184,11 @@ public:
     Keyboard_Class Keyboard;
     // Same physical panel as M5.Display; bound at construction (M5 is defined
     // before M5Cardputer in m5compat.cpp, so its Display already exists).
-    LGFX_TEmbed& Display;
+    LGFX_Board& Display;
     M5CardputerFacade();
     void begin(M5Config&, bool /*enableKeyboard*/ = true);
     void update();
 };
 extern M5CardputerFacade M5Cardputer;
 
-#endif // PORK_BOARD_TEMBED_CC1101
+#endif // PORK_BOARD_TEMBED_CC1101 || PORK_BOARD_TDISPLAY_C5 || PORK_BOARD_WAVESHARE_C5_LCD

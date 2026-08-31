@@ -45,7 +45,7 @@ static bool littlefsAvailable = false;
 
 // ---- Binary config blob (zero heap allocation) ----
 static constexpr uint32_t CONFIG_MAGIC   = 0x504F524B;  // 'PORK'
-static constexpr uint16_t CONFIG_VERSION = 2;   // v2: ntfy topic + attach toggle
+static constexpr uint16_t CONFIG_VERSION = 4;   // v4: pmkidEnabled + apSSID
 #define CONFIG_BIN_FILE "/porkchop.dat"
 
 static const char* configBinPathSD() {
@@ -118,6 +118,16 @@ struct __attribute__((packed)) ConfigBlob {
     uint16_t idleRetryMins;       // 0 (old blob) -> off
     uint8_t  crackedFallback;     // 0 (old blob) -> false
     char     pwncrackKey[40];     // empty (old blob) -> unset
+    // v3 fields (appended; old/shorter blobs read these as 0 -> sane defaults).
+    uint8_t  bootModePolicy;      // 0 (old blob) -> auto
+    uint8_t  captureReady;        // 0 (old blob) -> false
+    uint8_t  pmkidCapture;        // 0(old)/1 -> on, 2 -> off
+    char     apSSID[24];          // empty -> MAC-derived default
+    // v4 fields (appended; old/shorter blobs read these as empty).
+    char     relayUrl[96];        // empty (old blob) -> relay off
+    char     relayToken[64];
+    // v5 field (appended; old blobs read empty).
+    char     appUrl[96];
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -152,6 +162,13 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.idleRetryMins        = wifi.idleRetryMins;
     b.crackedFallback      = wifi.crackedFallback ? 1 : 0;
     strncpy(b.pwncrackKey, wifi.pwncrackKey, sizeof(b.pwncrackKey) - 1);
+    b.bootModePolicy       = wifi.bootModePolicy;
+    b.captureReady         = wifi.captureReady ? 1 : 0;
+    strncpy(b.relayUrl,   wifi.relayUrl,   sizeof(b.relayUrl) - 1);
+    strncpy(b.relayToken, wifi.relayToken, sizeof(b.relayToken) - 1);
+    strncpy(b.appUrl,     wifi.appUrl,     sizeof(b.appUrl) - 1);
+    b.pmkidCapture         = wifi.pmkidEnabled ? 1 : 2;
+    strncpy(b.apSSID, wifi.apSSID, sizeof(b.apSSID) - 1);
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
     strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
@@ -245,6 +262,13 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.idleRetryMins        = b.idleRetryMins;
     wifi.crackedFallback      = b.crackedFallback != 0;
     strncpy(wifi.pwncrackKey, b.pwncrackKey, sizeof(wifi.pwncrackKey) - 1); wifi.pwncrackKey[sizeof(wifi.pwncrackKey) - 1] = '\0';
+    wifi.bootModePolicy       = b.bootModePolicy;          // 0 = auto
+    wifi.captureReady         = b.captureReady != 0;       // 0 = old blob -> false
+    strncpy(wifi.relayUrl,   b.relayUrl,   sizeof(wifi.relayUrl) - 1);   wifi.relayUrl[sizeof(wifi.relayUrl) - 1] = 0;
+    strncpy(wifi.relayToken, b.relayToken, sizeof(wifi.relayToken) - 1); wifi.relayToken[sizeof(wifi.relayToken) - 1] = 0;
+    strncpy(wifi.appUrl,     b.appUrl,     sizeof(wifi.appUrl) - 1);     wifi.appUrl[sizeof(wifi.appUrl) - 1] = 0;
+    wifi.pmkidEnabled         = (b.pmkidCapture != 2);     // 0(old)/1 -> on, 2 -> off
+    strncpy(wifi.apSSID, b.apSSID, sizeof(wifi.apSSID) - 1); wifi.apSSID[sizeof(wifi.apSSID) - 1] = '\0';
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;
@@ -339,6 +363,11 @@ static void ensureSdSpiReady() {
     pinMode(PORK_CC1101_CS, OUTPUT); digitalWrite(PORK_CC1101_CS, HIGH);  // radio
     pinMode(PORK_TFT_CS,    OUTPUT); digitalWrite(PORK_TFT_CS,    HIGH);  // display
 #endif
+#ifdef PORK_BOARD_WAVESHARE_C5_LCD
+    // Waveshare C5-LCD: the SD shares the display SPI bus (SCLK 7 / MOSI 6). Park
+    // the ST7789 CS HIGH so it releases the shared MISO/bus during SD access.
+    pinMode(PORK_TFT_CS, OUTPUT); digitalWrite(PORK_TFT_CS, HIGH);
+#endif
 
     // SCK, MISO, MOSI, SS/CS
     sdSPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
@@ -360,6 +389,14 @@ bool Config::init() {
     // Allow buses to stabilize after M5.begin()
     delay(50);
 
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    // T-Display C5: no microSD. Waveshare C5-LCD: has an SD slot but it shares the
+    // display SPI bus; that shared-bus access is not yet verified, so DEFER it for
+    // bring-up and use internal LittleFS (avoids an ~8s boot of failed SD retries).
+    // TODO(waveshare): enable SD via the shared bus (park TFT CS, hold RST) — see
+    // ensureSdSpiReady()/mountSdAfterDisplay() and docs/DESIGN-mode-webui.md §8.4.
+    sdAvailable = false;
+#else
 #ifdef PORK_BOARD_TEMBED_CC1101
     // The ST7789 hasn't been initialised yet (display comes up after Config::init)
     // and in its power-on state it loads the shared SPI bus, corrupting SD I/O.
@@ -402,6 +439,7 @@ bool Config::init() {
             sdAvailable = true;
         }
     }
+#endif // !PORK_BOARD_TDISPLAY_C5
 
     // Pick the capture-storage backend: SD card if present, else internal
     // LittleFS (format-on-mount). This is what makes the firmware work without
@@ -590,6 +628,9 @@ bool Config::reinitSD() {
 }
 
 bool Config::mountSdAfterDisplay() {
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    return false;   // C5 boards: SD deferred (see Config::init) — stay on LittleFS
+#else
     // On the T-Embed CC1101 the SD, ST7789 display and CC1101 share one SPI bus.
     // The SD frequently won't mount until the display driver has initialised the
     // ST7789 (which leaves the panel in a known state that releases the shared
@@ -604,6 +645,7 @@ bool Config::mountSdAfterDisplay() {
     if (!SD.exists(configBinPathSD())) save();
     Serial.println("[CONFIG] SD mounted after display init; storage -> SD");
     return true;
+#endif
 }
 
 bool Config::loadFrom(fs::FS& fs, const char* path) {

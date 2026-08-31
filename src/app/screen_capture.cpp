@@ -8,6 +8,7 @@
 #include "../core/config.h"
 #include "../web/ntfy.h"
 #include "../core/net_link.h"
+#include "../core/mode_manager.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -20,13 +21,15 @@ static uint16_t sessionStartCaps = 0; // baseline at screen entry (for the exit 
 
 // Flash the onboard WS2812 green + chirp the speaker to signal a fresh capture.
 static void captureNotify() {
-    M5.Speaker.tone(2200, 120);                  // beep
+    M5.Speaker.tone(2200, 120);                  // beep (no-op on boards w/o speaker)
+#if PORK_LED_COUNT > 0
     for (int i = 0; i < 3; i++) {
         neopixelWrite(PORK_LED_PIN, 0, 60, 0);   // green
         delay(70);
         neopixelWrite(PORK_LED_PIN, 0, 0, 0);    // off
         delay(70);
     }
+#endif
 }
 
 static void drawFrame() {
@@ -69,9 +72,10 @@ static void drawStats() {
         y += lh;
     };
 
-    snprintf(line, sizeof(line), "ch: %02u   networks: %u   pkts: %lu",
+    snprintf(line, sizeof(line), "ch:%02u nets:%u pkts:%lu mgmt:%lu",
              OinkMode::getChannel(), OinkMode::getNetworkCount(),
-             (unsigned long)OinkMode::getPacketCount());
+             (unsigned long)OinkMode::getPacketCount(),
+             (unsigned long)NetworkRecon::getMgmtCount());
     row(line, TFT_WHITE);
 
     // Always-on pool breakdown across two rows: the attack pipeline, then why the
@@ -133,46 +137,9 @@ void enter() {
 
 void tick(const App::Input& in) {
     if (in.back) {
-        // The per-network session list (OinkMode::getSessionCapture*) survives stop()
-        // — only start() clears it — so it's safe to read after stop() below.
-        bool wantNtfy = (OinkMode::getSessionCaptureCount() > 0) && Ntfy::enabled();
-
-        OinkMode::stop();
-        // Capture left WiFi in promiscuous/disconnected. Restore the STA uplink on
-        // the still-initialised driver (a fresh init post-display would fail) — it's
-        // needed both for sync and for the ntfy push below.
-        esp_wifi_set_promiscuous(false);
-        WiFi.setAutoReconnect(true);
-
-        const char* ssid = Config::wifi().otaSSID;
-        bool linked = false;
-        if (ssid && ssid[0]) {
-            App::clear();
-            App::centerMsg("reconnecting wifi", TFT_CYAN);
-            linked = NetLink::connectConfigured();   // robust ~15s reconnect
-        }
-
-        // One ntfy alert PER captured network (with both its .pcap + .22000 attached
-        // when Ntfy File is on). Can't send mid-capture (promiscuous drops STA), so
-        // do it here. Always report the outcome.
-        if (wantNtfy) {
-            if (linked) {
-                int nsc = OinkMode::getSessionCaptureCount();
-                int sent = 0;
-                for (int i = 0; i < nsc; i++) {
-                    char l[40]; snprintf(l, sizeof(l), "notifying %d/%d...", i + 1, nsc);
-                    App::clear(); App::centerMsg(l, TFT_CYAN);
-                    if (Ntfy::sendCaptureFor(OinkMode::getSessionCaptureSSID(i),
-                                             OinkMode::getSessionCaptureBssid(i))) sent++;
-                }
-                char l[40]; snprintf(l, sizeof(l), "ntfy sent %d/%d", sent, nsc);
-                App::clear(); App::centerMsg(l, sent ? TFT_GREEN : TFT_RED);
-            } else {
-                App::clear(); App::centerMsg("ntfy: no wifi", TFT_YELLOW);
-            }
-            delay(1200);
-        }
-        App::go(App::Screen::MENU);
+        // Leaving capture: ModeManager stops the engine, restores the STA
+        // uplink and fires the per-network ntfy alerts, then shows management.
+        ModeManager::enterManagement();
         return;
     }
     // Pump the capture engine every frame.

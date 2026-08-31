@@ -2,6 +2,7 @@
 // Provides shared network scanning for OINK, DONOHAM, and SPECTRUM modes
 
 #include "network_recon.h"
+#include "../hal/board.h"   // PORK_CHIP_ESP32C5 gate (else the C5 capture path silently compiles out)
 #include "../modes/oink.h"  // For DetectedNetwork, DetectedClient types
 #include "config.h"
 #include "wsl_bypasser.h"
@@ -32,16 +33,64 @@ static uint32_t lastHopTime = 0;
 static uint32_t lastCleanupTime = 0;
 static uint32_t startTime = 0;
 static std::atomic<uint32_t> packetCount{0};
+static std::atomic<uint32_t> mgmtCount{0};  // diagnostic: management (beacon/probe) frames
 static std::atomic<bool> busy{false};  // [BUG3 FIX] Atomic for cross-core visibility
+
+// Band tracking for the dual-band ESP32-C5. esp_wifi_set_band() is needed when
+// crossing between 2.4 GHz and 5 GHz, but must NOT run on every hop — doing so
+// thrashes the radio (symptom: capture finds only ~1 network). So reconTune()
+// switches band only when the target channel's band differs from the current one.
+// set_band does NOT need promiscuous re-enabled afterwards (verified on-device).
+// The S3 has no band concept and skips all of this.
+static uint8_t reconBand = 0;  // 0=unset, 2=2.4GHz, 5=5GHz
+
+static inline void reconTune(uint8_t ch) {
+#if defined(PORK_CHIP_ESP32C5)
+    uint8_t wantBand = (ch >= 36) ? 5 : 2;
+    if (wantBand != reconBand) {
+        esp_wifi_set_band(wantBand == 5 ? WIFI_BAND_5G : WIFI_BAND_2G);
+        reconBand = wantBand;
+    }
+#endif
+    esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+}
+
+// Apply the promiscuous RX filter. The C5's newer WiFi stack does NOT deliver
+// management frames (beacons) with a null filter — so networks are never
+// discovered even though data packets flow. Request ALL frame types explicitly
+// (this matches the on-device WiFi-capability spike that saw mgmt+data).
+static inline void reconApplyPromiscFilter() {
+#if defined(PORK_CHIP_ESP32C5)
+    wifi_promiscuous_filter_t f;
+    f.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL;
+    esp_wifi_set_promiscuous_filter(&f);
+#else
+    esp_wifi_set_promiscuous_filter(nullptr);  // Receive all packet types
+#endif
+}
 static std::atomic<uint32_t> hopIntervalOverrideMs{0};
 static size_t heapLargestAtStart = 0;
 static bool heapStabilized = false;
 // shrinkDeferCount removed — shrink_to_fit no longer runs during operation
 
-// Channel hop order (most common channels first for faster discovery)
+// Channel hop order (most common channels first for faster discovery).
+#if defined(PORK_CHIP_ESP32C5)
+// Dual-band: all 2.4 GHz first, then common 5 GHz UNII channels — grouped so we
+// only cross the 2.4<->5 band boundary twice per full sweep (each crossing does
+// one esp_wifi_set_band). Channels >=36 are auto-tuned to 5 GHz by reconTune().
+static const uint8_t CHANNEL_HOP_ORDER[] = {
+    1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13,          // 2.4 GHz
+#if defined(PORK_C5_5GHZ)
+    36, 40, 44, 48, 149, 153, 157, 161,                  // 5 GHz (UNII-1 + UNII-3)
+#endif
+};
+#else
 static const uint8_t CHANNEL_HOP_ORDER[RECON_CHANNEL_COUNT] = {
     1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13
 };
+#endif
+static const uint8_t RECON_CHAN_N =
+    sizeof(CHANNEL_HOP_ORDER) / sizeof(CHANNEL_HOP_ORDER[0]);
 
 // Stale network timeout (remove if not seen for this long)
 static const uint32_t STALE_TIMEOUT_MS = 60000;
@@ -55,7 +104,15 @@ static const uint32_t CLIENT_BITMAP_RESET_MS = 30000;
 static uint32_t getHopIntervalMsInternal() {
     uint32_t overrideMs = hopIntervalOverrideMs.load();
     uint32_t interval = overrideMs > 0 ? overrideMs : Config::wifi().channelHopInterval;
+#if defined(PORK_CHIP_ESP32C5)
+    // C5: give the radio a little more settle time per channel than the S3, but
+    // keep it responsive. (The "found only 2 networks" issue turned out to be
+    // reception/antenna, not dwell — this floor is just a sane minimum; raise the
+    // "Ch Hop ms" option if a weak antenna needs longer dwell.)
+    if (interval < 250) interval = 250;
+#else
     if (interval < 50) interval = 50;
+#endif
     if (interval > 2000) interval = 2000;
     return interval;
 }
@@ -108,9 +165,9 @@ static NewNetworkCallback newNetworkCallback = nullptr;
 static void hopChannel() {
     if (channelLocked.load(std::memory_order_acquire)) return;
     
-    currentChannelIndex = (currentChannelIndex + 1) % RECON_CHANNEL_COUNT;
+    currentChannelIndex = (currentChannelIndex + 1) % RECON_CHAN_N;
     currentChannel = CHANNEL_HOP_ORDER[currentChannelIndex];
-    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+    reconTune(currentChannel);
 }
 
 static int findNetworkInternal(const uint8_t* bssid) {
@@ -605,6 +662,7 @@ static void promiscuousCallback(void* buf, wifi_promiscuous_pkt_type_t type) {
     // Basic network tracking (always happens)
     switch (type) {
         case WIFI_PKT_MGMT:
+            mgmtCount.fetch_add(1, std::memory_order_relaxed);
             if (frameSubtype == 0x08) {  // Beacon
                 processBeacon(payload, len, rssi);
             } else if (frameSubtype == 0x05) {  // Probe Response
@@ -741,6 +799,7 @@ void init() {
     networks.reserve(MAX_RECON_NETWORKS);  // Full upfront reserve — eliminates growth reallocations
     
     packetCount.store(0, std::memory_order_relaxed);
+    mgmtCount.store(0, std::memory_order_relaxed);
     currentChannel = 1;
     currentChannelIndex = 0;
     lastHopTime = 0;
@@ -831,9 +890,15 @@ void start() {
     
     // Set up promiscuous mode
     esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);
-    esp_wifi_set_promiscuous_filter(nullptr);  // Receive all packet types
+    reconApplyPromiscFilter();
     esp_wifi_set_promiscuous(true);
-    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#if defined(PORK_C5_5GHZ)
+    // Enable 5 GHz regulatory: without a country that permits the UNII channels,
+    // esp_wifi_set_channel(36) faults/reboots. "US" covers UNII-1 (36-48) + UNII-3
+    // (149-165). Must run after the WiFi driver is started (promiscuous does that).
+    esp_wifi_set_country_code("US", true);
+#endif
+    reconTune(currentChannel);
     
     running = true;
     paused = false;
@@ -899,9 +964,15 @@ void resume() {
     
     // Re-enable promiscuous
     esp_wifi_set_promiscuous_rx_cb(promiscuousCallback);
-    esp_wifi_set_promiscuous_filter(nullptr);
+    reconApplyPromiscFilter();
     esp_wifi_set_promiscuous(true);
-    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+#if defined(PORK_C5_5GHZ)
+    // Enable 5 GHz regulatory: without a country that permits the UNII channels,
+    // esp_wifi_set_channel(36) faults/reboots. "US" covers UNII-1 (36-48) + UNII-3
+    // (149-165). Must run after the WiFi driver is started (promiscuous does that).
+    esp_wifi_set_country_code("US", true);
+#endif
+    reconTune(currentChannel);
     
     paused = false;
     lastHopTime = millis();
@@ -943,6 +1014,15 @@ void update() {
         // Capacity is only released in freeNetworks() on mode exit.
     }
     
+    // C5 bring-up diagnostic: RX packet count + channel every 3s.
+    static uint32_t lastDiag = 0;
+    if (now - lastDiag > 3000) {
+        lastDiag = now;
+        Serial.printf("[RECON] ch=%u pkts=%u nets=%u\n",
+                      (unsigned)currentChannel, (unsigned)packetCount.load(),
+                      (unsigned)networks.size());
+    }
+
     // Check heap stabilization
     if (!heapStabilized) {
         size_t currentLargest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
@@ -990,6 +1070,10 @@ void clearHopIntervalOverride() {
 
 uint32_t getPacketCount() {
     return packetCount.load(std::memory_order_relaxed);
+}
+
+uint32_t getMgmtCount() {
+    return mgmtCount.load(std::memory_order_relaxed);
 }
 
 uint8_t estimateClientCount(const DetectedNetwork& net) {
@@ -1074,7 +1158,7 @@ void lockChannel(uint8_t channel) {
     lockedChannel = channel;
     currentChannel = channel;
     channelLocked.store(true, std::memory_order_release);
-    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    reconTune(channel);
     
     Serial.printf("[RECON] Channel locked to %d\n", channel);
 }
@@ -1091,7 +1175,7 @@ bool isChannelLocked() {
 void setChannel(uint8_t channel) {
     if (channel < 1 || channel > 14) return;
     currentChannel = channel;
-    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    reconTune(channel);
 }
 
 void setPacketCallback(PacketCallback callback) {

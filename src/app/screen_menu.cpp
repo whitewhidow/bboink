@@ -4,6 +4,7 @@
 #include "../core/sd_layout.h"
 #include "../core/storage.h"
 #include "../modes/oink.h"
+#include "../core/mode_manager.h"
 #include "../web/wpasec.h"
 #include "../web/ohc.h"
 #include "../web/pwncrack.h"
@@ -16,8 +17,9 @@
 
 namespace ScreenMenu {
 
-static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
-                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS", "REBOOT", "POWER OFF" };
+static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "BLE BRIDGE", "WPASEC SYNC", "OHC SYNC",
+                                "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS",
+                                "REBOOT", "POWER OFF" };
 static constexpr int kCount = sizeof(kItems) / sizeof(kItems[0]);
 static constexpr int VISIBLE = 5;   // rows that fit on the 170px panel at size 2
 static int sel = 0;
@@ -330,7 +332,7 @@ static void captureTargetedFlow() {
         if (porkhal::vkey.enter) {
             OinkMode::setTargetLock(bss[s], WiFi.SSID(s).c_str());
             WiFi.scanDelete();
-            App::go(App::Screen::CAPTURE);   // capture, locked to this AP
+            ModeManager::enterCapture(false);   // capture, keep the lock
             return;
         }
         if (redraw) {
@@ -351,16 +353,17 @@ void tick(const App::Input& in) {
     if (sel >= firstVisible + VISIBLE) firstVisible = sel - VISIBLE + 1;
     if (in.enter) {
         switch (sel) {
-            case 0: OinkMode::clearTargetLock(); App::go(App::Screen::CAPTURE); return;
+            case 0: ModeManager::enterCapture(); return;   // clears lock, marks ready
             case 1: captureTargetedFlow();          return;
-            case 2: App::go(App::Screen::MANAGE);   return;
-            case 3: App::go(App::Screen::OHC);      return;
-            case 4: App::go(App::Screen::PWNCRACK); return;
-            case 5: capturesFlow();                 return;
-            case 6: statsFlow();                    return;
-            case 7: App::go(App::Screen::OPTIONS);  return;
-            case 8: reboot();                       return;
-            case 9: powerOff();                     return;
+            case 2: ModeManager::enterBleBridge();  return;   // BLE console (phone) — tears down AP
+            case 3: App::go(App::Screen::MANAGE);   return;
+            case 4: App::go(App::Screen::OHC);      return;
+            case 5: App::go(App::Screen::PWNCRACK); return;
+            case 6: capturesFlow();                 return;
+            case 7: statsFlow();                    return;
+            case 8: App::go(App::Screen::OPTIONS);  return;
+            case 9: reboot();                       return;
+            case 10: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

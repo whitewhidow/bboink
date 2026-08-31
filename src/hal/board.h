@@ -3,13 +3,15 @@
 // Selected at compile time by a PlatformIO build flag:
 //   -DPORK_BOARD_CARDPUTER        (M5Cardputer, the original target)
 //   -DPORK_BOARD_TEMBED_CC1101    (LilyGo T-Embed CC1101 / CC1101 Plus)
+//   -DPORK_BOARD_TDISPLAY_C5      (LilyGO T-Display C5 / ESP32-C5)
 //
 // This is the single source of truth for board-specific pin numbers and the
 // display layout grid. Everything else should derive its geometry from the
 // PORK_* macros below rather than hardcoding 240/135.
 #pragma once
 
-#if !defined(PORK_BOARD_CARDPUTER) && !defined(PORK_BOARD_TEMBED_CC1101)
+#if !defined(PORK_BOARD_CARDPUTER) && !defined(PORK_BOARD_TEMBED_CC1101) && \
+    !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD)
 // Default to the original board so legacy builds are unaffected.
 #define PORK_BOARD_CARDPUTER
 #endif
@@ -103,8 +105,123 @@
 #define PORK_I2C_SCL        18
 #define PORK_BQ27220_ADDR   0x55
 
+// ---------------------------------------------------------------------------
+#elif defined(PORK_BOARD_TDISPLAY_C5)
+// ---------------------------------------------------------------------------
+// LilyGO T-Display C5 (ESP32-C5, 16MB flash, 8MB PSRAM). Dual-band WiFi.
+// Display: ST7789 170x320 native IPS, driven in landscape (320x170, same
+// geometry as the T-Embed). AXP2602 PMU + CST816S capacitive touch on a shared
+// I2C bus, plus two buttons. NO microSD, NO WS2812 LED, NO I2S speaker, NO
+// CC1101. Pin numbers are from the LilyGO Xinyuan-LilyGO/T-Display-C5 example.
+//
+// UNVERIFIED (no hardware): the AXP2602 may gate display power — see
+// bringUpHardware() in hal/m5compat.cpp. At minimum GPIO25 is driven HIGH.
+
+#define PORK_DISPLAY_W      320
+#define PORK_DISPLAY_H      170
+#define PORK_TOP_BAR_H      18
+#define PORK_BOTTOM_BAR_H   18
+
+// Display (ST7789) on SPI2_HOST. This board has NO MISO wired to the panel.
+#define PORK_TFT_SCLK       7
+#define PORK_TFT_MOSI       9
+#define PORK_TFT_MISO       -1
+#define PORK_TFT_CS         26
+#define PORK_TFT_DC         8
+#define PORK_TFT_RST        23
+#define PORK_TFT_BL         25   // LCD_BLK_POWER — backlight/power enable, drive HIGH
+
+// No addressable RGB LED on this board.
+#define PORK_LED_COUNT      0
+
+// microSD: NONE on this board. Defined as -1 so the shared SD code in
+// core/config.cpp still compiles; the SD probe is skipped for this board and
+// captures fall back to internal LittleFS (see Config::init()).
+#define PORK_SD_SCK         -1
+#define PORK_SD_MISO        -1
+#define PORK_SD_MOSI        -1
+#define PORK_SD_CS          -1
+
+// Buttons (keyboard replacement): GPIO0 (BOOT strap) + GPIO28 (BOOT2).
+// GPIO0  -> short click = ENTER, long press = power-off gesture.
+// GPIO28 -> BACK.
+#define PORK_ENC_KEY        0    // primary button (also BOOT strap pin)
+#define PORK_BTN_BACK       28   // secondary button
+
+// I2C bus shared by the AXP2602 PMU and the CST816S touch controller.
+#define PORK_I2C_SDA        2
+#define PORK_I2C_SCL        3
+#define PORK_AXP_INT        10
+// TODO(hardware): confirm AXP2602 I2C address + LDO map before enabling PMU
+// reads. Not currently used (PowerFacade stubs 100% / 4.0V on this board).
+#define PORK_AXP_ADDR       0x34
+
+// CST816S capacitive touch (primary input).
+#define PORK_TP_INT         27
+#define PORK_TP_RST         24
+#define PORK_TP_ADDR        0x15
+
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
+// ---------------------------------------------------------------------------
+// Waveshare ESP32-C5-LCD-1.47 (ESP32-C5, 4MB flash). Dual-band WiFi 6.
+// Display: ST7789 172x320 native IPS, driven landscape as 320x172. ONE usable
+// button (BOOT = GPIO28; the second physical button is RESET = chip-enable, not
+// a readable GPIO). Onboard WS2812 (GPIO8) + microSD (shares the LCD SPI bus).
+// NO speaker, NO touch, NO PMU/battery. Pins verified from the Waveshare BSP
+// (waveshareteam/esp32-c5-lcd-1.47) + board schematic. See
+// docs/DESIGN-mode-webui.md (single-button = mode toggle; management via web UI).
+
+#define PORK_DISPLAY_W      320
+#define PORK_DISPLAY_H      172
+#define PORK_TOP_BAR_H      18
+#define PORK_BOTTOM_BAR_H   18
+
+// Display (ST7789) on SPI2_HOST. No MISO wired to the panel; the SD's MISO
+// (GPIO5) lives on the same bus with its own CS.
+#define PORK_TFT_SCLK       7
+#define PORK_TFT_MOSI       6
+#define PORK_TFT_MISO       -1
+#define PORK_TFT_CS         23
+#define PORK_TFT_DC         24
+#define PORK_TFT_RST        26
+#define PORK_TFT_BL         10   // backlight (PWM), driven by LovyanGFX Light_PWM
+
+// Onboard WS2812 status LED (single).
+#define PORK_LED_PIN        8
+#define PORK_LED_COUNT      1
+
+// microSD shares the display SPI bus (SCLK 7 / MOSI 6) with its own MISO + CS.
+// bus_shared=true in the LGFX profile so LovyanGFX releases the bus for SD I/O.
+#define PORK_SD_SCK         7
+#define PORK_SD_MISO        5
+#define PORK_SD_MOSI        6
+#define PORK_SD_CS          4
+
+// Single usable button: BOOT on GPIO28. Tap = CAPTURE<->MANAGEMENT toggle,
+// long-press = power off (see hal/m5compat.cpp Waveshare input backend).
+#define PORK_ENC_KEY        28   // the one button (also the C5 boot strap pin)
+#define PORK_BTN_BACK       28   // same physical button (no second input)
+
 #endif
 // ---------------------------------------------------------------------------
+
+// Both C5 boards (T-Display C5 + Waveshare C5-LCD) are the dual-band ESP32-C5 and
+// share the same capture path (band-switching, promiscuous filter mask, dual-band
+// channel hop list, dwell floor). Chip-level code gates on this, NOT on a single
+// board macro — otherwise a new C5 board silently runs the S3 capture path and
+// never captures DATA/EAPOL frames.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#define PORK_CHIP_ESP32C5
+#endif
+// C5 capture path is 2.4 GHz for all C5 boards. 5 GHz (set_band to 5G + the UNII
+// hop channels) needs regulatory/country config for reception and is currently
+// only enabled on the verified T-Display C5 — the Waveshare stays 2.4 GHz until
+// 5 GHz reception (esp_wifi_set_country) and the 5 GHz-hop reboot are sorted.
+// Both C5 boards now set the regulatory country (esp_wifi_set_country_code) in the
+// capture path, which is what the 5 GHz channels need to not fault at ch36.
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#define PORK_C5_5GHZ
+#endif
 
 // Derived main content height — common to all boards.
 #define PORK_MAIN_H (PORK_DISPLAY_H - PORK_TOP_BAR_H - PORK_BOTTOM_BAR_H)

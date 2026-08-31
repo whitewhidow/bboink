@@ -1,0 +1,12 @@
+# Waveshare ESP32-C5-LCD-1.47 — 4MB flash, single-app bring-up layout.
+# app0 enlarged to 0x260000 (2.5MB) to fit the firmware once NimBLE (BLE bridge) is
+# linked in; LittleFS fallback shrunk (captures are KB and normally live on SD).
+# (Dual A/B OTA per docs/DESIGN-mode-webui.md §8.2 won't fit two 2.5MB slots in 4MB —
+# that milestone must trim the app or use external flash.)
+# Name,     Type, SubType,  Offset,   Size,     Flags
+nvs,        data, nvs,      0x9000,   0x5000,
+otadata,    data, ota,      0xe000,   0x2000,
+app0,       app,  ota_0,    0x10000,  0x260000,
+spiffs,     data, spiffs,   0x270000, 0x10000,
+littlefs,   data, spiffs,   0x280000, 0x170000,
+coredump,   data, coredump, 0x3F0000, 0x10000,

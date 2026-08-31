@@ -1,22 +1,156 @@
 # BBoink
 
-Minimal WiFi **handshake / PMKID capture** firmware for the **LilyGo T-Embed
-CC1101** and **CC1101 PLUS** (ESP32-S3, rotary encoder + side button, ST7789
-320×170). It captures EAPOL handshakes and PMKIDs over the air and uploads them
-for cloud cracking:
+Minimal WiFi **handshake / PMKID capture** firmware. It channel-hops, deauths eligible
+APs, captures EAPOL 4-way handshakes + PMKIDs, and gets them cracked in the cloud
+(wpa-sec / OnlineHashCrack / PwnCrack) — then shows the recovered password + a join QR.
 
-- **`.pcap`** → [wpa-sec.stanev.org](https://wpa-sec.stanev.org/)
-- **`.22000`** → [OnlineHashCrack](https://www.onlinehashcrack.com/) (hashcat mode 22000)
-- **`.22000`** → [PwnCrack.org](https://pwncrack.org/) (hc22000; distributed GPU donors)
+Supported boards (one codebase, one build env each):
 
-Cracked status is **unified**: a network shows as cracked (and its password/QR is
-available) if *any* service recovered it (wpa-sec or PwnCrack — OHC masks hashes).
+| Board | Chip | Buttons | How you manage it |
+|---|---|---|---|
+| **LilyGo T-Embed CC1101 / PLUS** | ESP32-S3 | encoder + side | **on-device MENU** (buttons) — *or* the BLE console |
+| **LilyGo T-Display C5** | ESP32-C5 (dual-band) | 2 | **on-device MENU** (buttons) — *or* the BLE console |
+| **Waveshare ESP32-C5-LCD-1.47** | ESP32-C5 (dual-band) | **1** | **BLE console only** (no menu, no AP) |
 
-It does only the "oink" (capture) part of M5PORKCHOP. The on-board CC1101 sub-GHz
-radio is **not** used (but its chip-select is managed — see *SD card* below).
+> **No board runs a WiFi access point or web server** — that whole stack is compiled
+> out. You manage the device one of two ways: with its **buttons + on-screen menu**
+> (T-Embed / T-Display), or entirely over **Bluetooth from your phone** (all boards; the
+> *only* way on the single-button Waveshare). See `docs/DESIGN-ble-bridge.md`.
 
-> ⚠️ Deauthentication frames are transmitted to force handshakes. Use only on
-> networks you own or are explicitly authorized to test.
+> ⚠️ Deauth frames are transmitted to force handshakes. Use only on networks you own or
+> are explicitly authorized to test.
+
+> 🚀 **New here? Start with the [Getting-started guide](docs/GETTING-STARTED.md)** — a
+> step-by-step setup walkthrough split by device type (buttons+BLE vs BLE-only).
+
+## Supported hardware
+
+Three boards, one firmware. Buy links below are the official vendor stores; the wiki/docs
+links are the manufacturer's own hardware documentation.
+
+<table>
+<tr>
+<td width="33%" valign="top" align="center">
+
+<img src="https://lilygo.cc/cdn/shop/files/T-EMBED-CC1101-PLUS_6_4bda35c0-79ad-41ba-9aa7-52792d723ab1.jpg?v=1755075224" width="240" alt="LilyGo T-Embed CC1101"><br>
+
+**LilyGo T-Embed CC1101 / PLUS**<br>
+ESP32-S3 · 16 MB · encoder + button<br>
+_buttons + on-device menu (or BLE)_
+
+[Buy](https://lilygo.cc/products/t-embed-cc1101-plus) ·
+[Wiki](https://wiki.lilygo.cc/products/t-embed-series/t-embed-cc1101/) ·
+[GitHub](https://github.com/Xinyuan-LilyGO/T-Embed-CC1101)
+
+</td>
+<td width="33%" valign="top" align="center">
+
+<img src="https://lilygo.cc/cdn/shop/files/LILYGO-T-DISPLAY-C5_10.jpg?v=1783057404" width="240" alt="LilyGo T-Display C5"><br>
+
+**LilyGo T-Display C5**<br>
+ESP32-C5 (dual-band) · 2 buttons<br>
+_buttons + on-device menu (or BLE)_
+
+[Buy](https://lilygo.cc/en-us/products/t-display-c5) ·
+[Wiki](https://wiki.lilygo.cc/products/t-display-series/t-display-c5/quick-start.html)
+
+</td>
+<td width="33%" valign="top" align="center">
+
+<img src="https://raw.githubusercontent.com/waveshareteam/esp32-c5-lcd-1.47/main/assets/Product-1.webp" width="240" alt="Waveshare ESP32-C5-LCD-1.47"><br>
+
+**Waveshare ESP32-C5-LCD-1.47**<br>
+ESP32-C5 (dual-band) · **1 button**<br>
+_BLE console only (no menu, no AP)_
+
+[Buy](https://www.waveshare.com/esp32-c5-lcd-1.47.htm) ·
+[Docs](https://docs.waveshare.com/ESP32-C5-LCD-1.47) ·
+[GitHub](https://github.com/waveshareteam/esp32-c5-lcd-1.47)
+
+</td>
+</tr>
+</table>
+
+## Driving each board
+
+**Button boards (T-Embed / T-Display).** From the capture screen, **back** opens the
+**MENU**:
+`CAPTURE` · `CAPTURE TARGETED` · `BLE BRIDGE` · `WPASEC / OHC / PWNCRACK SYNC` (direct
+upload over the *board's own* WiFi) · `CAPTURES` · `STATS` · `OPTIONS` (edit all config
+with the buttons) · `REBOOT` / `POWER OFF`. Choose **BLE BRIDGE** to hand off to the
+phone console instead of using WiFi.
+
+**BLE-only board (Waveshare).** One button: **tap** = CAPTURE ⇄ **BLE BRIDGE** (it
+reboots into bridge, ~15 s), **hold ~3 s** = power off. All config + sync are done in the
+phone console.
+
+**The BLE console** — the web app that is the *entire* UI on the Waveshare and an
+option on the others. Needs a **Web Bluetooth** browser — Chrome/Chromium/Edge on **Android or desktop** (Linux confirmed; Windows/macOS should work). **Not** iOS/Safari. Open
+**https://whitewhidow.github.io/bboink/bridge/**, tap **Connect to board**, pick
+`BBoink-XXXX`. Three tabs:
+- **Config** — all device settings (below).
+- **Captures** — the registry: view captures, see **cracked passwords**, **delete** a
+  capture, and **exclude** a network by SSID (never-attack).
+- **Sync** — **Check / wake relay**, then **Sync captures ↔ relay** (per-network results).
+
+## Configuration — what you must set
+
+Set these **once**. They live on the **device** (the single source of truth) and are read
+back by whichever UI you use — buttons **Options** *or* the BLE console **Config** tab.
+
+| Setting | Value | Needed for |
+|---|---|---|
+| **Relay URL** | your Render URL, e.g. `https://bboink.onrender.com` | relay sync |
+| **Relay token** | the `RELAY_TOKEN` you chose on Render | relay sync |
+| **wpa-sec key** | wpa-sec.stanev.org user key (32 hex) | cracking |
+| **OHC key** | OnlineHashCrack API key (`sk_…`) | cracking |
+| **PwnCrack key** | PwnCrack.org key (UUID) | cracking |
+| **WiFi SSID / pass** | a network the *board itself* can join | **only** for the direct menu sync |
+| capture tuning | Ch Hop, Deauth, PMKID, Atk RSSI, Max Tries, … | capture behaviour |
+
+The three **service keys are stored only on the device**; the BLE console passes them to
+the relay per-sync (an `X-Keys` header), so the relay's own env-var keys are just an
+optional fallback. **WiFi creds are needed only for a button board's *direct* sync** — the
+relay path uses your *phone's* connection, so the board needs no WiFi for it.
+
+## Cracking sync — the relay
+
+Captures reach the three services through a tiny **relay** you host once, so the board (or
+phone) only ever talks to **one host**.
+
+```
+ phone/board ──►  relay (Render)  ──►  wpa-sec / OnlineHashCrack / PwnCrack
+      ▲                            │
+      └────  cracked passwords  ◄──┘
+```
+
+### 1 · Deploy the relay (once)
+[`relay/`](relay/) is a ~60-line Node/Express service. Deploy to **Render** (free tier):
+New → **Blueprint** → pick this repo → it reads `relay/render.yaml`. Set env var
+**`RELAY_TOKEN`** (a long random string you invent). The service keys can live on the
+device instead of Render, so `WPASEC_KEY` / `OHC_KEY` / `PWNCRACK_KEY` are **optional**
+env fallbacks. You get a URL like `https://bboink.onrender.com`. Endpoint reference:
+[`relay/README.md`](relay/README.md).
+
+### 2 · Configure the device
+Set **Relay URL**, **Relay token**, and the **three service keys** (table above).
+
+### 3 · Sync
+- **BLE console (any board):** enter **BLE BRIDGE** (Waveshare: tap; T-Embed/T-Display:
+  menu → *BLE BRIDGE*) → on the phone open the console URL → **Connect** → **Sync** tab →
+  **Check / wake relay** → **Sync captures ↔ relay**. Results print **per network**
+  (OHC / PwnCrack / wpa-sec). Cracked passwords are written back to the board and shown
+  on **Captures**. Already-synced captures are skipped (`nothing new to upload`); tick
+  **re-sync everything** to force.
+- **Direct (button boards only):** menu → **WPASEC / OHC / PWNCRACK SYNC** uploads over
+  the board's own WiFi (needs WiFi creds set). No phone/relay involved.
+
+### Notes
+- Render free tier **sleeps after ~15 min idle** → the first request wakes it (~30–50 s);
+  the console's **Check / wake relay** button pre-warms it.
+- wpa-sec **accepts duplicate** uploads, so the board tracks what it has synced and sends
+  only new captures. OHC / PwnCrack dedup server-side.
+- A network cracked by multiple services shows all of them (`wpa-sec+pwncrack`).
 
 ## Top bar
 Every screen shows: title · **SD** (green = microSD mounted, red `sd` = running on
@@ -32,16 +166,14 @@ internal storage) · connected WiFi SSID (green) · battery %. The version
   (waiting out an attack cooldown) · `pmf` (protected) · `done` (captured/ignored)
   · `weak` (below Atk RSSI) · `open` · `idle` (gave up after Max Tries). Each new
   capture **beeps** (I2S amp) and flashes the onboard LED green. Excluded networks
-  (see CAPTURES) are neither attacked **nor** passively saved. Side button stops,
-  restores WiFi and exits — and on exit, if an **ntfy** topic is set, it pushes **one
-  alert per network captured this session**, each with **both** that network's `.pcap`
-  and `.22000` attached (when `Ntfy File` is on; ntfy allows one file per message, so
-  that's two messages). The push happens on exit, not mid-capture, because capture
-  runs promiscuous (no STA uplink).
+  (see CAPTURES) are neither attacked **nor** passively saved. Side button (back)
+  stops capture and opens the **MENU**.
 - **CAPTURE TARGETED** — scan, pick one AP, and capture **only that BSSID** (the
   engine locks to it and ignores everything else, even already-captured/excluded
   ones, and ignores the Max-Tries give-up); the Capture header shows `TGT <ssid>`.
   Back to exit; the normal CAPTURE item clears the lock.
+- **BLE BRIDGE** — hand off to the phone: the board becomes a BLE peripheral (WiFi off)
+  and the **BLE console** does all config + relay sync. Back / tap returns to capture.
 - **WPASEC SYNC** — lists `.pcap` captures with status tags (`CRK`/`UP`/`-`),
   counts, and free storage. **SYNC** connects WiFi STA, **bulk-uploads** pending
   captures, and downloads the cracked potfile (with optional *Purge Crk*, below).
@@ -82,8 +214,6 @@ is present; `.pcap` is validated server-side on upload.
 ## Options
 - **WiFi** — guided flow: scan → pick an SSID → enter password → save + connect.
 - **WPA Key** (wpa-sec, 32 hex) · **OHC Key** (`sk_…`) · **PWN Key** (PwnCrack UUID).
-- **Ntfy Topic** (ntfy.sh push topic; empty = off, default `capture_alert`) ·
-  **Ntfy File** (attach the capture file to the push).
 - Oink tuning: **Ch Hop ms**, **Lock ms**, **Atk RSSI**, **Deauth** on/off,
   **Rnd MAC** on/off, **Burst**, **Jitter ms**, **Max Tries** (attempts per
   network before giving up, 1–15), **Idle Retry** (re-arm a given-up network
@@ -172,10 +302,14 @@ This mirrors LilyGo's factory `board_spi_deselect_all()` + shared-bus approach.
 ## Build / flash
 PlatformIO (here installed via pipx, not on `PATH`):
 ```bash
+# build envs: t-embed-cc1101 (S3) · tdisplay-c5 · waveshare-c5-lcd
 ~/.local/bin/pio run -e t-embed-cc1101                          # build
-~/.local/bin/pio run -e t-embed-cc1101 -t upload                # flash
-~/.local/bin/pio device monitor -e t-embed-cc1101 -b 115200     # serial (needs a TTY)
+~/.local/bin/pio run -e t-embed-cc1101 -t upload                # flash (S3 / T-Display)
 ```
+The **Waveshare C5** is flashed with esptool (bootloader @ `0x2000`); the **T-Display
+C5** needs `--no-stub`/115200 (its env sets this) and a **clean power-cycle** to run the
+app after flashing. All three envs build from the same source; the AP/web + menu screens
+are excluded per-board via `build_src_filter`.
 Selected by `-DPORK_BOARD_TEMBED_CC1101`; 16 MB flash, partition table in
 `partitions.csv` (two 3 MB `ota_0`/`ota_1` app slots for flash OTA; the `littlefs`
 partition fills the top of flash). Serial is the ESP32-S3 native USB-Serial-JTAG,

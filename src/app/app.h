@@ -7,7 +7,7 @@
 
 namespace App {
 
-enum class Screen { MENU, CAPTURE, MANAGE, OHC, PWNCRACK, OPTIONS };
+enum class Screen { MENU, CAPTURE, MANAGE, OHC, PWNCRACK, OPTIONS, CONFIGAP, CONNECT, BLEBRIDGE };
 
 // One frame's worth of debounced encoder/button edges (true for one tick).
 struct Input {
@@ -15,7 +15,8 @@ struct Input {
     bool down  = false;   // encoder CW
     bool enter = false;   // encoder click
     bool back  = false;   // side button
-    bool any() const { return up || down || enter || back; }
+    bool toggle= false;   // single-button mode swap (Waveshare-class boards)
+    bool any() const { return up || down || enter || back || toggle; }
 };
 
 extern Screen screen;
@@ -47,3 +48,6 @@ namespace ScreenManage  { void enter(); void tick(const App::Input&); }
 namespace ScreenOHC     { void enter(); void tick(const App::Input&); }
 namespace ScreenPwnCrack{ void enter(); void tick(const App::Input&); }
 namespace ScreenOptions { void enter(); void tick(const App::Input&); }
+namespace ScreenConfigAP{ void enter(); void tick(const App::Input&); }
+namespace ScreenConnect { void enter(); void tick(const App::Input&); }
+namespace ScreenBleBridge { void enter(); void tick(const App::Input&); }

@@ -1859,7 +1859,7 @@ void OinkMode::processEAPOL(const uint8_t* payload, uint16_t len,
     // Key Data contains RSN IE with PMKID: dd 14 00 0f ac 04 [16-byte PMKID]
     // Only RSN (descriptor type 0x02) has PMKID - WPA1 (0xFE) does not
     uint8_t descriptorType = payload[4];
-    if (messageNum == 1 && descriptorType == 0x02 && len >= 121) {  // RSN + 99 + 22 bytes minimum
+    if (messageNum == 1 && descriptorType == 0x02 && len >= 121 && Config::wifi().pmkidEnabled) {  // RSN + 99 + 22 bytes minimum
         uint16_t keyDataLen = (payload[97] << 8) | payload[98];
         
         // PMKID Key Data is exactly 22 bytes: dd(1) + len(1) + OUI(3) + type(1) + PMKID(16)
@@ -1868,7 +1868,7 @@ void OinkMode::processEAPOL(const uint8_t* payload, uint16_t len,
             
             // Look for PMKID KDE: dd 14 00 0f ac 04 (vendor IE, IEEE OUI, PMKID type)
             // Can appear at start or within Key Data
-            for (uint16_t i = 0; i + 22 < keyDataLen; i++) {  // Strict < ensures 22 bytes remain
+            for (uint16_t i = 0; i + 22 <= keyDataLen; i++) {  // <= so an exactly-22-byte PMKID KDE (i=0) is checked
                 if (keyData[i] == 0xdd && keyData[i+1] == 0x14 &&
                     keyData[i+2] == 0x00 && keyData[i+3] == 0x0f &&
                     keyData[i+4] == 0xac && keyData[i+5] == 0x04) {
@@ -2722,14 +2722,12 @@ bool OinkMode::saveHandshake22000(const CapturedHandshake& hs, const char* path)
     const EAPOLFrame* nonceFrame = nullptr;  // M1 or M3 (contains ANonce)
     const EAPOLFrame* eapolFrame = nullptr;  // M2 (contains MIC + full EAPOL)
     
-    if (msgPair == 0x00) {
-        // M1+M2: ANonce from M1, EAPOL from M2
-        nonceFrame = &hs.frames[0];  // M1
-        eapolFrame = &hs.frames[1];  // M2
-    } else {
-        // M2+M3: ANonce from M3, EAPOL from M2
-        nonceFrame = &hs.frames[2];  // M3
-        eapolFrame = &hs.frames[1];  // M2
+    switch (msgPair) {
+        case 0x00: nonceFrame = &hs.frames[0]; eapolFrame = &hs.frames[1]; break; // M1+M2
+        case 0x02: nonceFrame = &hs.frames[2]; eapolFrame = &hs.frames[1]; break; // M2+M3
+        case 0x05: nonceFrame = &hs.frames[2]; eapolFrame = &hs.frames[3]; break; // M3+M4 (MIC from M4)
+        case 0x01: nonceFrame = &hs.frames[0]; eapolFrame = &hs.frames[3]; break; // M1+M4 (MIC from M4)
+        default: return false;
     }
     
     // MIC field is at offset 81-96 (16 bytes), so we need len >= 97 to read it safely

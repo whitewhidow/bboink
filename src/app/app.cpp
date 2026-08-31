@@ -1,13 +1,21 @@
 // app.cpp — state machine + plain drawing helpers.
 #include "app.h"
 #include "../core/config.h"
+#include "../core/mode_manager.h"
+#include "../core/boot_sync.h"
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <driver/rtc_io.h>
+#include <driver/gpio.h>
+#include <esp_wifi.h>
 
 namespace App {
 
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+Screen screen = Screen::CAPTURE;
+#else
 Screen screen = Screen::MENU;
+#endif
 
 // Auto-dim the backlight after this long with no input (battery saver).
 static constexpr uint32_t kIdleDimMs = 30000;
@@ -29,6 +37,7 @@ Input readInput() {
     in.down  = porkhal::vkey.down;
     in.enter = porkhal::vkey.enter;
     in.back  = porkhal::vkey.back;
+    in.toggle= porkhal::vkey.toggle;
     return in;
 }
 
@@ -131,36 +140,80 @@ const char* fmtBytes(uint64_t b) {
 void go(Screen s) {
     screen = s;
     switch (s) {
-        case Screen::MENU:    ScreenMenu::enter();    break;
         case Screen::CAPTURE: ScreenCapture::enter(); break;
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+        case Screen::MENU:    ScreenMenu::enter();    break;
         case Screen::MANAGE:  ScreenManage::enter();  break;
         case Screen::OHC:     ScreenOHC::enter();     break;
         case Screen::PWNCRACK:ScreenPwnCrack::enter();break;
         case Screen::OPTIONS: ScreenOptions::enter(); break;
+#endif
+        case Screen::BLEBRIDGE: ScreenBleBridge::enter(); break;
     }
 }
 
 void powerOff() {
     clear();
-    centerMsg("POWERING OFF", TFT_RED);
-    footer("press any button to wake");
+    centerMsg("SLEEPING", TFT_RED);
+    footer("press the button to wake");
     delay(1000);
     M5.Display.setBrightness(0);
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    // The one button (BOOT = GPIO28) is a high-power GPIO, NOT an LP/RTC-IO pin,
+    // so it cannot wake DEEP sleep on the ESP32-C5 (only GPIO0-7 can). Use LIGHT
+    // sleep + GPIO wakeup instead: the same button turns the screen back on, and
+    // light sleep keeps RAM so we resume right here and redraw the live screen.
+    esp_wifi_set_promiscuous(false);            // quiesce RX before halting the CPU
+    M5.Display.sleep();
+    while (digitalRead(PORK_ENC_KEY) == LOW) delay(10);   // wait for the long-press release
+    delay(60);
+    gpio_wakeup_enable((gpio_num_t)PORK_ENC_KEY, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+    esp_light_sleep_start();                     // halts until GPIO28 goes LOW (a tap)
+    // --- woke on a button tap ---
+    while (digitalRead(PORK_ENC_KEY) == LOW) delay(10);   // wait for the wake tap to release
+    delay(60);
+    M5.Display.wakeup();
+    M5.Display.setBrightness(Config::wifi().displayBrightness);
+    go(screen);                                  // re-enter current screen -> redraw (+ re-arm capture)
+    // TODO(waveshare): tap-to-wake from light sleep NOT working on-device yet —
+    // GPIO wakeup on GPIO28 doesn't resume; investigate (pin hold/pullup during
+    // sleep, USB-CDC keeping the CPU up, or display wake). Deferred.
+    return;
+#elif defined(PORK_BOARD_TDISPLAY_C5)
+    // Buttons: GPIO0 (BOOT) + GPIO28. UNVERIFIED: confirm both are RTC/LP-IO wake
+    // capable on the C5; if not, fall back to a timer or the hardware PWR button.
+    rtc_gpio_pullup_en(GPIO_NUM_0);   rtc_gpio_pulldown_dis(GPIO_NUM_0);
+    rtc_gpio_pullup_en(GPIO_NUM_28);  rtc_gpio_pulldown_dis(GPIO_NUM_28);
+    esp_sleep_enable_ext1_wakeup((1ULL << 0) | (1ULL << 28), ESP_EXT1_WAKEUP_ANY_LOW);
+#else
     // Hold pull-ups on the button pins so idle=high, press=low wakes it.
     rtc_gpio_pullup_en(GPIO_NUM_0);  rtc_gpio_pulldown_dis(GPIO_NUM_0);
     rtc_gpio_pullup_en(GPIO_NUM_6);  rtc_gpio_pulldown_dis(GPIO_NUM_6);
     esp_sleep_enable_ext1_wakeup((1ULL << 0) | (1ULL << 6), ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
     esp_deep_sleep_start();   // boots fresh on the next button press
 }
 
 void begin() {
     lastInputMs = millis();
-    go(Screen::MENU);
+    ModeManager::begin();   // provisioning-aware: CAPTURE if ready, else MANAGEMENT
 }
 
 void tick() {
     // Hold the side button ~3s anywhere -> power off.
     if (porkhal::vkey.backLongPress) { powerOff(); return; }
+
+    // Single-button mode swap (inert on multi-button boards, which reach the
+    // same transitions via the menu + capture-screen back).
+    if (porkhal::vkey.toggle) { ModeManager::toggle(); return; }
+
+    // Medium-hold: reboot straight into BLE bridge (phone sync, no AP needed).
+    if (porkhal::vkey.bridge) {
+        clear(); centerMsg("BLE BRIDGE", TFT_CYAN); footer("rebooting...");
+        requestBleBridge();   // sets RTC flag + reboots (does not return)
+        return;
+    }
 
     // Auto-dim backlight after idle; restore on any input.
     if (porkhal::vkey.changed) {
@@ -173,12 +226,15 @@ void tick() {
 
     Input in = readInput();
     switch (screen) {
-        case Screen::MENU:    ScreenMenu::tick(in);    break;
         case Screen::CAPTURE: ScreenCapture::tick(in); break;
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+        case Screen::MENU:    ScreenMenu::tick(in);    break;
         case Screen::MANAGE:  ScreenManage::tick(in);  break;
         case Screen::OHC:     ScreenOHC::tick(in);     break;
         case Screen::PWNCRACK:ScreenPwnCrack::tick(in);break;
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
+#endif
+        case Screen::BLEBRIDGE: ScreenBleBridge::tick(in); break;
     }
 }
 

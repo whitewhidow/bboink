@@ -12,12 +12,13 @@
 #include "../core/storage.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <ctype.h>
 #include <esp_heap_caps.h>
 
 // WPA-SEC API
 static const char* WPASEC_HOST = "wpa-sec.stanev.org";
-static const uint16_t WPASEC_PORT = 443;
+static const uint16_t WPASEC_PORT = 443;   // HTTPS (wpa-sec redirects HTTP->HTTPS); synced via reboot-to-sync (clean heap)
 static const char* WPASEC_UPLOAD_PATH = "/";
 static const char* WPASEC_POTFILE_PATH = "/?api&dl=1";
 static const size_t WPASEC_MAX_CACHE_ENTRIES = 500;
@@ -306,25 +307,15 @@ bool WPASec::hasApiKey() {
 }
 
 bool WPASec::canSync() {
-    // Free caches to maximize available heap
     freeCacheMemory();
-
     HeapGates::TlsGateStatus tls = HeapGates::checkTlsGates();
-
-    Serial.printf("[WPASEC] canSync: %u free, %u contiguous (need %u/%u)\n",
-                  (unsigned int)tls.freeHeap, (unsigned int)tls.largestBlock,
-                  (unsigned int)HeapPolicy::kMinHeapForTls,
-                  (unsigned int)HeapPolicy::kMinContigForTls);
-
     return HeapGates::canTls(tls, lastError, sizeof(lastError));
 }
-
 bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     if (!filepath || !bssid) return false;
-    
+
     Serial.printf("[WPASEC] Uploading: %s\n", filepath);
-    
-    // Check file exists and get size
+
     File capFile = Storage::fs().open(filepath, FILE_READ);
     if (!capFile) {
         Serial.printf("[WPASEC] Cannot open file: %s\n", filepath);
@@ -336,112 +327,76 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
         Serial.printf("[WPASEC] Invalid file size: %u\n", (unsigned int)fileSize);
         return false;
     }
-    
-    // Extract filename from path
+
     const char* filename = strrchr(filepath, '/');
     filename = filename ? filename + 1 : filepath;
-    
-    // Create WiFiClientSecure with minimal buffers
-    WiFiClientSecure client;
-    client.setInsecure();  // Skip cert validation - saves ~10KB heap
-    
-    // Connect with timeout
-    Serial.printf("[WPASEC] Connecting to %s:%d\n", WPASEC_HOST, WPASEC_PORT);
-    if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
-        capFile.close();
-        char tlsErr[64] = {0};
-        int errCode = client.lastError(tlsErr, sizeof(tlsErr) - 1);
-        snprintf(lastError, sizeof(lastError), "TLS CONNECT: %d", errCode);
-        Serial.printf("[WPASEC] TLS connect failed: err=%d (%s)\n", errCode, tlsErr);
-        return false;
-    }
-    
-    // Build multipart boundary
+
+    // Build the whole multipart body in one heap buffer, then POST it via
+    // HTTPClient. HTTPClient drives WiFiClientSecure's TLS write/read loop
+    // correctly on the ESP32-C5, where the hand-rolled client.write() path
+    // silently failed right after the TLS handshake (body sent 0/N).
     char boundary[32];
     snprintf(boundary, sizeof(boundary), "----WPASec%08lX", millis());
-    
-    // Calculate content length
-    // Multipart format:
-    // --boundary\r\n
-    // Content-Disposition: form-data; name="file"; filename="xxx"\r\n
-    // Content-Type: application/octet-stream\r\n\r\n
-    // <file data>
-    // \r\n--boundary--\r\n
-    char disposition[128];
-    snprintf(disposition, sizeof(disposition),
-             "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"",
-             filename);
-    
-    size_t contentLength = 2 + strlen(boundary) + 2 +           // --boundary\r\n
-                           strlen(disposition) + 2 +             // disposition\r\n
-                           36 + 4 +                              // Content-Type + \r\n\r\n
-                           fileSize +                            // file data
-                           2 + 2 + strlen(boundary) + 4;         // \r\n--boundary--\r\n
-    
-    // Send HTTP headers
-    client.printf("POST %s HTTP/1.1\r\n", WPASEC_UPLOAD_PATH);
-    client.printf("Host: %s\r\n", WPASEC_HOST);
-    client.printf("Cookie: key=%s\r\n", Config::wifi().wpaSecKey);
-    client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary);
-    client.printf("Content-Length: %u\r\n", (unsigned int)contentLength);
-    client.print("Connection: close\r\n\r\n");
-    
-    // Send multipart body
-    client.printf("--%s\r\n", boundary);
-    client.printf("%s\r\n", disposition);
-    client.print("Content-Type: application/octet-stream\r\n\r\n");
-    
-    // Stream file in chunks (heap-safe)
-    char chunk[256];
-    size_t sent = 0;
-    while (capFile.available() && sent < fileSize) {
-        size_t toRead = min((size_t)sizeof(chunk), fileSize - sent);
-        size_t bytesRead = capFile.read((uint8_t*)chunk, toRead);
-        if (bytesRead > 0) {
-            client.write((uint8_t*)chunk, bytesRead);
-            sent += bytesRead;
-        }
-        yield();  // Let WiFi stack breathe
+
+    String pre = String("--") + boundary + "\r\n"
+               + "Content-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\n"
+               + "Content-Type: application/octet-stream\r\n\r\n";
+    String post = String("\r\n--") + boundary + "--\r\n";
+
+    size_t bodyLen = pre.length() + fileSize + post.length();
+    uint8_t* body = (uint8_t*)malloc(bodyLen);
+    if (!body) {
+        capFile.close();
+        snprintf(lastError, sizeof(lastError), "OOM %u", (unsigned int)bodyLen);
+        Serial.printf("[WPASEC] malloc(%u) failed\n", (unsigned int)bodyLen);
+        return false;
     }
+    memcpy(body, pre.c_str(), pre.length());
+    size_t rd = capFile.read(body + pre.length(), fileSize);
     capFile.close();
-    
-    // End multipart
-    client.printf("\r\n--%s--\r\n", boundary);
-    
-    // Read response (just check status code)
-    unsigned long timeout = millis() + 10000;
-    while (client.connected() && !client.available() && millis() < timeout) {
-        delay(10);
-        yield();  // Prevent WDT during response wait
+    if (rd != fileSize) {
+        free(body);
+        snprintf(lastError, sizeof(lastError), "READ %u/%u", (unsigned int)rd, (unsigned int)fileSize);
+        return false;
     }
-    
-    bool success = false;
-    if (client.available()) {
-        char response[64];
-        size_t len = client.readBytesUntil('\n', response, sizeof(response) - 1);
-        response[len] = '\0';
-        Serial.printf("[WPASEC] Response: %s\n", response);
-        
-        // HTTP/1.1 200 OK or similar success
-        if (strstr(response, "200") || strstr(response, "201")) {
-            success = true;
-        } else if (strstr(response, "409")) {
-            // Already uploaded - treat as success
-            success = true;
-            Serial.println("[WPASEC] Already uploaded (409)");
-        }
+    memcpy(body + pre.length() + fileSize, post.c_str(), post.length());
+
+    size_t maxblk = ESP.getMaxAllocHeap();
+    Serial.printf("[WPASEC] upload body=%u maxAlloc=%u free=%u\n",
+                  (unsigned)bodyLen, (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
+    if (maxblk < 36000) { free(body); snprintf(lastError, sizeof(lastError), "LOW HEAP %u/%u", (unsigned)maxblk, (unsigned)ESP.getFreeHeap()); return false; }
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient https;
+    https.setTimeout(25000);
+    https.setReuse(false);
+    String url = String("https://") + WPASEC_HOST + WPASEC_UPLOAD_PATH;
+    if (!https.begin(client, url)) {
+        free(body);
+        snprintf(lastError, sizeof(lastError), "BEGIN FAILED");
+        Serial.println("[WPASEC] https.begin failed");
+        return false;
     }
-    
-    client.stop();
-    
+    https.addHeader("Cookie", String("key=") + Config::wifi().wpaSecKey);
+    https.addHeader("Content-Type", String("multipart/form-data; boundary=") + boundary);
+
+    Serial.printf("[WPASEC] POST %s (%u bytes body)\n", url.c_str(), (unsigned int)bodyLen);
+    int code = https.POST(body, bodyLen);
+    free(body);
+
+    String resp = (code > 0) ? https.getString() : String();
+    https.end();
+    Serial.printf("[WPASEC] HTTP %d resp: %s\n", code, resp.c_str());
+
+    bool success = (code == 200 || code == 201 || code == 409);
     if (success) {
-        // NOTE: Don't mark uploaded here - caller handles marking after all TLS operations
-        // This avoids reloading cache during TLS when heap is tight
         Serial.printf("[WPASEC] Upload success: %s\n", bssid);
+    } else if (code > 0) {
+        snprintf(lastError, sizeof(lastError), "HTTP %d", code);
     } else {
-        strncpy(lastError, "UPLOAD REJECTED", sizeof(lastError) - 1);
+        snprintf(lastError, sizeof(lastError), "TLS ERR %d", code);
     }
-    
     return success;
 }
 
@@ -450,57 +405,29 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     
     Serial.println("[WPASEC] Downloading potfile...");
     
-    // Create WiFiClientSecure with minimal buffers
+    // GET the potfile via HTTPClient (raw GET request write also failed post-handshake on C5).
+    size_t maxblk = ESP.getMaxAllocHeap();
+    if (maxblk < 36000) { snprintf(lastError, sizeof(lastError), "LOW HEAP %u/%u", (unsigned)maxblk, (unsigned)ESP.getFreeHeap()); return false; }
     WiFiClientSecure client;
     client.setInsecure();
-    
-    if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
-        char tlsErr[64] = {0};
-        int errCode = client.lastError(tlsErr, sizeof(tlsErr) - 1);
-        snprintf(lastError, sizeof(lastError), "POTFILE TLS: %d", errCode);
-        Serial.printf("[WPASEC] Potfile TLS failed: err=%d (%s)\n", errCode, tlsErr);
+    HTTPClient https;
+    https.setTimeout(25000);
+    https.setReuse(false);
+    String url = String("https://") + WPASEC_HOST + WPASEC_POTFILE_PATH;
+    if (!https.begin(client, url)) {
+        snprintf(lastError, sizeof(lastError), "POTFILE BEGIN FAILED");
         return false;
     }
-    
-    // Send GET request
-    client.printf("GET %s HTTP/1.1\r\n", WPASEC_POTFILE_PATH);
-    client.printf("Host: %s\r\n", WPASEC_HOST);
-    client.printf("Cookie: key=%s\r\n", Config::wifi().wpaSecKey);
-    client.print("Connection: close\r\n\r\n");
-    
-    // Wait for response
-    unsigned long timeout = millis() + 15000;
-    while (client.connected() && !client.available() && millis() < timeout) {
-        delay(10);
-        yield();  // Prevent WDT during response wait
-    }
-    
-    if (!client.available()) {
-        client.stop();
-        strncpy(lastError, "POTFILE TIMEOUT", sizeof(lastError) - 1);
+    https.addHeader("Cookie", String("key=") + Config::wifi().wpaSecKey);
+    https.addHeader("Connection", "close");
+    int status = https.GET();
+    if (status != 200) {
+        https.end();
+        snprintf(lastError, sizeof(lastError), status > 0 ? "POTFILE HTTP %d" : "POTFILE TLS %d", status);
         return false;
     }
-    
-    // Skip HTTP headers
-    bool headersEnded = false;
-    char headerLine[128];
-    while (client.connected() && client.available() && !headersEnded) {
-        size_t len = client.readBytesUntil('\n', headerLine, sizeof(headerLine) - 1);
-        headerLine[len] = '\0';
-        // Empty line marks end of headers
-        if (len <= 1 || (len == 1 && headerLine[0] == '\r')) {
-            headersEnded = true;
-        }
-    }
-    
-    if (!headersEnded) {
-        client.stop();
-        strncpy(lastError, "POTFILE BAD RESPONSE", sizeof(lastError) - 1);
-        return false;
-    }
-    
-    // Count entries already in the cache so we can report only genuinely-new
-    // cracks this sync (instead of the whole potfile every time).
+
+    // Count entries already cached so we report only genuinely-new cracks this sync.
     const char* cachePath = SDLayout::wpasecResultsPath();
     uint16_t oldCount = 0;
     {
@@ -515,64 +442,39 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
         }
     }
 
-    // Open cache file for writing (overwrite)
     File cacheFile = Storage::fs().open(cachePath, FILE_WRITE);
     if (!cacheFile) {
-        client.stop();
+        https.end();
         strncpy(lastError, "CANNOT WRITE CACHE", sizeof(lastError) - 1);
         return false;
     }
-    
-    // Stream potfile line-by-line directly to SD
-    // Format: BSSID:SSID:password (hashcat potfile format)
-    char lineBuf[160];  // Should be enough for BSSID:SSID:password
+
+    // Stream potfile line-by-line (BSSID:SSID:password) straight to SD.
+    WiFiClient* stream = https.getStreamPtr();
+    char lineBuf[160];
     uint16_t lineCount = 0;
-    
-    while (client.connected() || client.available()) {
-        if (client.available()) {
-            size_t len = client.readBytesUntil('\n', lineBuf, sizeof(lineBuf) - 1);
-            if (len > 0) {
-                lineBuf[len] = '\0';
-                // Trim \r if present
-                if (len > 0 && lineBuf[len - 1] == '\r') {
-                    lineBuf[len - 1] = '\0';
-                }
-                
-                // Validate line has at least 2 colons (BSSID:SSID:password)
-                int colonCount = 0;
-                for (size_t i = 0; lineBuf[i]; i++) {
-                    if (lineBuf[i] == ':') colonCount++;
-                }
-                
-                if (colonCount >= 2 && strlen(lineBuf) > 10) {
-                    cacheFile.println(lineBuf);
-                    lineCount++;
-                }
-            }
-        } else {
-            delay(10);
-        }
-        
-        // Safety timeout
-        if (millis() > timeout + 30000) {
-            Serial.println("[WPASEC] Potfile download timeout");
-            break;
-        }
-        
+    uint32_t to = millis() + 45000;
+    while (https.connected() && millis() < to) {
+        if (!stream->available()) { delay(10); if (!https.connected() && !stream->available()) break; continue; }
+        size_t len = stream->readBytesUntil('\n', lineBuf, sizeof(lineBuf) - 1);
+        if (len == 0) continue;
+        lineBuf[len] = '\0';
+        if (lineBuf[len - 1] == '\r') lineBuf[len - 1] = '\0';
+        int colonCount = 0;
+        for (size_t i = 0; lineBuf[i]; i++) if (lineBuf[i] == ':') colonCount++;
+        if (colonCount >= 2 && strlen(lineBuf) > 10) { cacheFile.println(lineBuf); lineCount++; }
         yield();
     }
-    
     cacheFile.close();
-    client.stop();
-    
+    https.end();
+
     Serial.printf("[WPASEC] Potfile downloaded: %u entries (%u previously)\n",
                   (unsigned int)lineCount, (unsigned int)oldCount);
     newCracks = (lineCount > oldCount) ? (lineCount - oldCount) : 0;
-    
     return true;
 }
 
-WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
+WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb, bool doDownload) {
     WPASecSyncResult result = {};
     result.success = false;
     result.error[0] = '\0';
@@ -606,45 +508,16 @@ WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
         cb("prepping heap", 0, 0);
     }
     
-    // Proactive heap conditioning - condition early when heap is marginal
-    // This prevents fragmentation from getting critical before TLS attempts
-    HeapGates::TlsGateStatus tls = HeapGates::checkTlsGates();
-    if (HeapGates::shouldProactivelyCondition(tls)) {
-        if (cb) {
-            cb("OPTIMIZING HEAP", 0, 0);
-        }
-        Serial.printf("[WPASEC] Proactive conditioning: %u < %u threshold\n",
-                      (unsigned int)tls.largestBlock,
-                      (unsigned int)HeapPolicy::kProactiveTlsConditioning);
-        WiFiUtils::conditionHeapForTLS();
-    }
-    
-    // Check if heap is sufficient for TLS operations
+    // wpa-sec uploads over plain HTTP now — do NOT run any TLS heap conditioning.
+    // WiFiUtils::conditionHeapForTLS() reworks the WiFi/promiscuous state and was
+    // dropping the STA uplink ("uplink gone"). Just a modest free-heap check.
     if (!canSync()) {
-        // Heap insufficient - try "OINK bounce" conditioning
-        // This reclaims BLE memory and coalesces fragmented heap blocks
-        if (cb) {
-            cb("CONDITIONING HEAP", 0, 0);
-        }
-        Serial.println("[WPASEC] Heap insufficient, attempting conditioning...");
-        
-        size_t largestAfter = WiFiUtils::conditionHeapForTLS();
-        
-        // Check again after conditioning
-        if (!canSync()) {
-            // Still insufficient - notify user via speech balloon
-            Mood::setStatusMessage("HEAP TIGHT - TRY OINK");
-            snprintf(result.error, sizeof(result.error), 
-                     "%s (TRY OINK)", lastError);
-            if (wasReconRunning) NetworkRecon::resume();
-            busy = false;
-            return result;
-        }
-        
-        Serial.printf("[WPASEC] Conditioning successful: largest=%u\n", 
-                      (unsigned int)largestAfter);
+        strncpy(result.error, lastError, sizeof(result.error) - 1);
+        if (wasReconRunning) NetworkRecon::resume();
+        busy = false;
+        return result;
     }
-    
+
     // Collect files to upload from handshakes directory
     if (cb) {
         cb("scanning caps", 0, 0);
@@ -808,21 +681,19 @@ WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
     uint16_t newCracks = 0;
     bool potfileOk = false;
     
-    // Attempt potfile if heap is sufficient - no reconditioning, graceful skip if low
-    HeapGates::GateStatus potGate = HeapGates::checkGate(0, HeapPolicy::kMinContigForTls);
-    if (potGate.failure == HeapGates::TlsGateFailure::None) {
-        potfileOk = downloadPotfile(newCracks);
-        if (potfileOk) {
-            result.newCracked = newCracks;
-            // Reload cache to get cracked count
-            loadCache();
-            result.cracked = crackedCache.size();
-        }
-    } else {
-        Serial.printf("[WPASEC] Skipping potfile: insufficient heap (%u < %u)\n",
-                      (unsigned int)potGate.largestBlock,
-                      (unsigned int)HeapPolicy::kMinContigForTls);
-        snprintf(lastError, sizeof(lastError), "POTFILE SKIP: LOW HEAP");
+    // The potfile download is a SECOND TLS handshake; on the C5 that must run in its
+    // own boot (SYNC_WPA_CHK), so upload-only callers pass doDownload=false.
+    potfileOk = doDownload ? downloadPotfile(newCracks) : false;
+    if (!doDownload) {
+        result.success = (result.failed == 0);
+        if (wasReconRunning) NetworkRecon::resume();
+        busy = false;
+        return result;
+    }
+    if (potfileOk) {
+        result.newCracked = newCracks;
+        loadCache();
+        result.cracked = crackedCache.size();
     }
     
     // Graceful degradation: partial success if uploads worked but potfile failed

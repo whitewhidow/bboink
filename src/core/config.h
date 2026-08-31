@@ -108,6 +108,9 @@ struct WiFiConfig {
     char wpaSecKey[33];                 // WPA-SEC.stanev.org user key (32 hex chars)
     char ohcKey[72];                    // OnlineHashCrack API key (sk_...)
     char pwncrackKey[40];               // PwnCrack.org key (UUID)
+    char relayUrl[96] = "";             // bboink relay base URL (https://...); "" = off, use direct per-service sync
+    char relayToken[64] = "";           // Bearer token the relay expects
+    char appUrl[96] = "";               // BLE console web-app URL (shown on the bridge screen)
     char wigleApiName[65];              // WiGLE API Name (from wigle.net/account)
     char wigleApiToken[65];             // WiGLE API Token (from wigle.net/account)
     char ntfyTopic[64] = "capture_alert"; // ntfy.sh topic for capture alerts ("" = off)
@@ -116,6 +119,22 @@ struct WiFiConfig {
     // SD path the launcher loads / self-update writes. Defaults to the CI asset
     // name so you can copy the downloaded .bin verbatim to the SD root.
     char otaBinPath[48] = "/bboink-app-t-embed-cc1101.bin";
+
+    // --- Mode / provisioning (ModeManager, see docs/DESIGN-mode-webui.md) ---
+    // Capture a PMKID from M1 when the AP offers one (clientless). Disable to keep
+    // attacking a network for a full 4-way handshake instead of excluding it on the
+    // first PMKID.
+    bool    pmkidEnabled   = true;
+    // SoftAP SSID override for MANAGEMENT mode (empty = MAC-derived BBoink-XXXX).
+    char    apSSID[24]     = "";
+
+    // bootModePolicy: 0=auto (capture if captureReady, else management),
+    //                 1=always capture, 2=always management.
+    uint8_t bootModePolicy = 0;
+    // Set true once the device has been taken into CAPTURE at least once
+    // (proxy for "provisioned" until the first-run wizard lands). Gates the
+    // auto boot decision: ready -> boot straight into CAPTURE, run standalone.
+    bool    captureReady   = false;
 };
 
 // BLE settings for PIGGY BLUES mode
