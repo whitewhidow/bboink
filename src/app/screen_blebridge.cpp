@@ -6,6 +6,7 @@
 // CAPTURE; the phone can also send {"c":"done"}. See docs/DESIGN-ble-bridge.md.
 #include "app.h"
 #include "../core/mode_manager.h"
+#include "../core/config.h"
 #include "../ble/bridge.h"
 
 namespace ScreenBleBridge {
@@ -25,6 +26,10 @@ static void draw() {
     char l[40]; snprintf(l, sizeof(l), "sent %u   cracked %u", BleBridge::filesSent(), BleBridge::crackedIn());
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.drawString(l, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 34);
+    // Relay the phone app should target (board doesn't use it in bridge mode — shown for reference).
+    const char* ru = Config::wifi().relayUrl;
+    M5.Display.setTextColor(ru[0] ? 0x5AEB : TFT_RED, TFT_BLACK);   // 0x5AEB = light blue-grey
+    M5.Display.drawString(ru[0] ? ru : "(no relay set)", PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 50);
     App::footer("tap: exit to capture");
 }
 
