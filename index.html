@@ -161,6 +161,7 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
     <a href="#screens">Screens</a>
     <a href="#boards">Boards</a>
     <a href="#how">How it works</a>
+    <a href="#services">Services</a>
     <a class="btn" href="https://github.com/whitewhidow/bboink">GitHub</a>
     <a class="btn solid" href="https://whitewhidow.github.io/bboink/flasher/">Flash it →</a>
   </nav>
@@ -412,6 +413,31 @@ footer.foot{border-top:1px solid var(--line);padding:34px 0;color:var(--faint);f
       — a small host you deploy once lets the board hit a single endpoint that fans out to all three
       services and merges results, and lets your phone sync the board over Bluetooth (the only way on
       the button-less Waveshare). Cracked passwords flow back either way.</p>
+  </div>
+</section>
+
+<section id="services">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">Supported cloud services</div>
+      <h2>Bring your own cracking accounts.</h2>
+      <p>Captures are handed to one or more of these — a free key from <b>any one</b> is enough to
+        start, and a network cracked by several shows all of them.</p>
+    </div>
+    <div class="feat">
+      <a class="card reveal" href="https://wpa-sec.stanev.org" style="text-decoration:none;color:inherit">
+        <div class="ic">WPA-SEC</div><h3>wpa-sec →</h3>
+        <p>Stanev's community <b>distributed</b> WPA cracker. Free; BBoink uploads the raw
+          <span class="mono">.pcap</span>, and it accepts duplicates.</p></a>
+      <a class="card reveal" href="https://onlinehashcrack.com" style="text-decoration:none;color:inherit">
+        <div class="ic">OHC</div><h3>OnlineHashCrack →</h3>
+        <p>GPU cracking service with a free tier and an API — BBoink submits WPA
+          <span class="mono">22000</span> hashes.</p></a>
+      <a class="card reveal" href="https://pwncrack.org" style="text-decoration:none;color:inherit">
+        <div class="ic">PWNCRACK</div><h3>PwnCrack →</h3>
+        <p>Handshake cracking service — BBoink uploads <span class="mono">hc22000</span> and reads
+          back the cracked potfile.</p></a>
+    </div>
   </div>
 </section>
 
