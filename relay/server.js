@@ -136,8 +136,10 @@ app.get('/v1/cracked', async (req, res) => {
       const t = await r.text();
       for (const line of t.split(/\r?\n/)) {
         const p = line.split(':');
-        // best-effort: last field = password, first = bssid/hash, middle (if any) = ssid
-        if (p.length >= 3) pushCracked(map, p[0], p[1], p.slice(2).join(':'), 'pwncrack');
+        // pwncrack potfile: hash : APMAC : CLIENTMAC : ESSID : PASSWORD (5+ fields)
+        // -> bssid = APMAC (field 1), ssid = 2nd-to-last, password = last.
+        if (p.length >= 5)      pushCracked(map, p[1], p[p.length - 2], p[p.length - 1], 'pwncrack');
+        else if (p.length >= 3) pushCracked(map, p[0], p[p.length - 2], p[p.length - 1], 'pwncrack');
         else if (p.length === 2) pushCracked(map, p[0], '', p[1], 'pwncrack');
       }
     } else if (r.status !== 404) errors.pwncrack = r.status;
