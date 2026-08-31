@@ -11,7 +11,11 @@
 
 namespace App {
 
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+Screen screen = Screen::CAPTURE;
+#else
 Screen screen = Screen::MENU;
+#endif
 
 // Auto-dim the backlight after this long with no input (battery saver).
 static constexpr uint32_t kIdleDimMs = 30000;
@@ -136,6 +140,7 @@ const char* fmtBytes(uint64_t b) {
 void go(Screen s) {
     screen = s;
     switch (s) {
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
         case Screen::MENU:    ScreenMenu::enter();    break;
         case Screen::CAPTURE: ScreenCapture::enter(); break;
         case Screen::MANAGE:  ScreenManage::enter();  break;
@@ -144,6 +149,7 @@ void go(Screen s) {
         case Screen::OPTIONS: ScreenOptions::enter(); break;
         case Screen::CONFIGAP:ScreenConfigAP::enter();break;
         case Screen::CONNECT: ScreenConnect::enter(); break;
+#endif
         case Screen::BLEBRIDGE: ScreenBleBridge::enter(); break;
     }
 }
@@ -222,6 +228,7 @@ void tick() {
 
     Input in = readInput();
     switch (screen) {
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
         case Screen::MENU:    ScreenMenu::tick(in);    break;
         case Screen::CAPTURE: ScreenCapture::tick(in); break;
         case Screen::MANAGE:  ScreenManage::tick(in);  break;
@@ -230,6 +237,7 @@ void tick() {
         case Screen::OPTIONS: ScreenOptions::tick(in); break;
         case Screen::CONFIGAP:ScreenConfigAP::tick(in);break;
         case Screen::CONNECT: ScreenConnect::tick(in); break;
+#endif
         case Screen::BLEBRIDGE: ScreenBleBridge::tick(in); break;
     }
 }

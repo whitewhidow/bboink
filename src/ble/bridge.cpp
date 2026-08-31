@@ -50,6 +50,7 @@ static void notifyText(const String& json) {
 
 // Build + send the capture manifest ({"t":"list","files":[{name,size,kind}]}).
 static void sendList() {
+    s_filesSent = 0;   // new sync sequence -> fresh file count
     JsonDocument doc;
     doc["t"] = "list";
     JsonArray arr = doc["files"].to<JsonArray>();

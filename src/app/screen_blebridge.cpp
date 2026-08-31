@@ -23,7 +23,7 @@ static void draw() {
     M5.Display.setTextColor(conn ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
     M5.Display.drawString(conn ? "phone connected" : "open app + connect",
                           PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 18);
-    char l[40]; snprintf(l, sizeof(l), "sent %u   cracked %u", BleBridge::filesSent(), BleBridge::crackedIn());
+    char l[40]; snprintf(l, sizeof(l), "files %u   cracked %u", BleBridge::filesSent(), BleBridge::crackedIn());
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.drawString(l, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 34);
     // Relay the phone app should target (board doesn't use it in bridge mode — shown for reference).

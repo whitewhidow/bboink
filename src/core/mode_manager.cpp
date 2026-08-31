@@ -1,46 +1,52 @@
-// mode_manager.cpp — CAPTURE / MANAGEMENT coordinator (see mode_manager.h).
+// mode_manager.cpp — CAPTURE / MANAGEMENT / BLE_BRIDGE coordinator (see mode_manager.h).
+//
+// On the single-button Waveshare (PORK_BOARD_WAVESHARE_C5_LCD) there is NO SoftAP /
+// web UI: all management is over BLE (see docs/DESIGN-ble-bridge.md), so the whole
+// web/AP stack is compiled out. Modes are CAPTURE and BLE_BRIDGE; a tap toggles them
+// (capture -> bridge reboots, since the bridge needs the BT-controller RAM that a
+// normal boot releases). Multi-button boards keep the AP+web MANAGEMENT mode.
 #include "mode_manager.h"
 #include "config.h"
 #include "net_link.h"
 #include "../modes/oink.h"
-#include "../web/ntfy.h"
-#include "../web/webui.h"
 #include "../app/app.h"
-#include <WiFi.h>
 #include "../ble/bridge.h"
+#include "boot_sync.h"
+#include <WiFi.h>
 #include <esp_wifi.h>
 #include <esp_mac.h>
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#include "../web/ntfy.h"
+#include "../web/webui.h"
+#endif
 
 namespace ModeManager {
 
-// Start in MANAGEMENT so enterManagement()'s "leaving capture" work is skipped
-// on a cold boot (the engine has never run yet).
-static Mode mode_ = Mode::MANAGEMENT;
+static Mode mode_ = Mode::CAPTURE;
+static bool s_forceBridge = false;
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
 static bool s_forceManagement = false;
+#endif
 
 Mode        current()     { return mode_; }
 bool        inCapture()   { return mode_ == Mode::CAPTURE; }
 const char* currentName() { return mode_ == Mode::CAPTURE ? "CAPTURE" : mode_ == Mode::BLE_BRIDGE ? "BLE_BRIDGE" : "MANAGEMENT"; }
 bool        captureReady(){ return Config::wifi().captureReady; }
 
-// Persist the "provisioned for capture" flag the first time we enter capture.
-// Proxy for §7.1's provisioning wizard until that lands: once you've captured,
-// the device knows what to do and boots straight into CAPTURE thereafter.
 static void markCaptureReady() {
     if (Config::wifi().captureReady) return;
     Config::wifi().captureReady = true;
     Config::save();
 }
 
-// SoftAP identity, derived once from the STA MAC so it's stable per device.
-// WPA2 requires >= 8 chars; the password below is 10. (Per-device, shown on the
-// connect screen; a user-set override can come later.)
+// Identity derived once from the burned-in MAC, stable per device. Used for the
+// SoftAP (multi-button boards) AND the BLE advertised name (all boards).
 const char* apSSID() {
     if (Config::wifi().apSSID[0]) return Config::wifi().apSSID;   // user override
     static char s[24] = {0};
     if (!s[0]) {
         uint8_t m[6];
-        esp_efuse_mac_get_default(m);   // burned-in MAC — stable across boots + Rnd MAC
+        esp_efuse_mac_get_default(m);
         snprintf(s, sizeof(s), "BBoink-%02X%02X", m[4], m[5]);
     }
     return s;
@@ -49,69 +55,55 @@ const char* apPassword() {
     static char p[24] = {0};
     if (!p[0]) {
         uint8_t m[6];
-        esp_efuse_mac_get_default(m);   // stable across boots + Rnd MAC (was WiFi.macAddress)
+        esp_efuse_mac_get_default(m);
         snprintf(p, sizeof(p), "oink%02X%02X%02X", m[3], m[4], m[5]);
     }
     return p;
 }
 
-// Raise the management SoftAP (WPA2). AP IP defaults to 192.168.4.1.
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
 static bool apUp = false;
-static bool s_forceBridge = false;
-static void startSoftAP() {
-    WiFi.softAP(apSSID(), apPassword());
-    apUp = true;
-}
+static void startSoftAP() { WiFi.softAP(apSSID(), apPassword()); apUp = true; }
+#endif
 
 void enterCapture(bool clearLock) {
     if (BleBridge::running()) BleBridge::stop();
     if (clearLock) OinkMode::clearTargetLock();
     markCaptureReady();
-    // Drop the web server + management SoftAP; capture needs the radio to itself.
-    // Only touch the AP interface if we actually started one — calling
-    // softAPdisconnect() at boot (no AP netif) faults in hostap_attach on the C5.
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
     if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
+#endif
     WiFi.mode(WIFI_STA);
     mode_ = Mode::CAPTURE;
-    // ScreenCapture::enter() releases the boot STA link, disables auto-reconnect
-    // and calls OinkMode::start() (promiscuous). Kept there so a direct
-    // App::go(CAPTURE) still fully arms the engine.
     App::go(App::Screen::CAPTURE);
 }
 
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+// No AP/web on this board — "management" is the BLE bridge (reached by a tap or the
+// medium-hold; both reboot in so NimBLE gets the BT-controller RAM).
+void enterManagement() { requestBleBridge(); }
+#else
 void enterManagement() {
     const bool leavingCapture = (mode_ == Mode::CAPTURE);
-    // The per-network session list (OinkMode::getSessionCapture*) survives stop()
-    // — only start() clears it — so it's safe to read after stop() below.
     const bool wantNtfy = leavingCapture &&
                           (OinkMode::getSessionCaptureCount() > 0) && Ntfy::enabled();
-
     if (leavingCapture) {
         OinkMode::stop();
-        esp_wifi_set_promiscuous(false);   // capture left the radio in promiscuous
+        esp_wifi_set_promiscuous(false);
     }
     WiFi.setAutoReconnect(true);
-
-    // MANAGEMENT is AP+STA: the SoftAP hosts the connect screen / web UI, while the
-    // STA joins the configured network for cracking sync (topology #1, docs §7.4).
-    // Bring the AP up robustly: the AP_STA netif must be fully created before
-    // softAP() or the C5 faults in hostap_attach (a boot-time race). Give the
-    // stack a solid settle window after the mode switch.
     WiFi.mode(WIFI_AP_STA);
     delay(250);
     startSoftAP();
-    WebUI::begin();          // serve the management page off the SoftAP
+    WebUI::begin();
 
     const char* ssid = Config::wifi().otaSSID;
     bool linked = false;
     if (ssid && ssid[0]) {
         App::clear();
         App::centerMsg("connecting wifi", TFT_CYAN);
-        linked = NetLink::connectConfigured();   // reconnect on the running driver
+        linked = NetLink::connectConfigured();
     }
-
-    // One ntfy alert PER captured network on the way out of capture (both .pcap +
-    // .22000 when Ntfy File is on) — can't send mid-capture (promiscuous drops STA).
     if (wantNtfy) {
         if (linked) {
             int nsc = OinkMode::getSessionCaptureCount();
@@ -129,15 +121,17 @@ void enterManagement() {
         }
         delay(1200);
     }
-
     mode_ = Mode::MANAGEMENT;
-    App::go(App::Screen::CONNECT);   // SSID/IP/QR + STA status (web UI serves off this AP later)
+    App::go(App::Screen::CONNECT);
 }
+#endif
 
 void enterBleBridge() {
-    // Bridge is BLE-only: tear down any AP/web and turn WiFi fully off so NimBLE
-    // has the radio + plenty of heap.
+    // Bridge is BLE-only: WiFi fully off so NimBLE has the radio + heap. Called at
+    // boot (forceBleBridge) where the BT-controller RAM is retained.
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
     if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
+#endif
     WiFi.disconnect(true, true);
     WiFi.mode(WIFI_OFF);
     delay(150);
@@ -147,31 +141,30 @@ void enterBleBridge() {
 }
 
 void toggle() {
-    if (mode_ == Mode::BLE_BRIDGE) enterCapture();       // button exits the bridge
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    if (mode_ == Mode::BLE_BRIDGE) enterCapture();      // bridge -> capture (live)
+    else                           requestBleBridge();  // capture -> reboot into bridge
+#else
+    if (mode_ == Mode::BLE_BRIDGE) enterCapture();
     else if (mode_ == Mode::CAPTURE) enterManagement();
     else                             enterCapture();
+#endif
 }
 
-// Resolve the boot mode from the persisted policy, then enter it.
-void forceManagementBoot() { s_forceManagement = true; }
 void forceBleBridgeBoot() { s_forceBridge = true; }
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+void forceManagementBoot() { s_forceManagement = true; }
+#else
+void forceManagementBoot() {}   // no management mode on this board
+#endif
 
 void begin() {
-    if (s_forceBridge)     { s_forceBridge = false; enterBleBridge(); return; }
+    if (s_forceBridge) { s_forceBridge = false; enterBleBridge(); return; }
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
     if (s_forceManagement) { s_forceManagement = false; enterManagement(); return; }
-    uint8_t policy = Config::wifi().bootModePolicy;   // 0=auto, 1=capture, 2=management
-    bool goCapture;
-    switch (policy) {
-        case 1:  goCapture = true;  break;                 // always capture
-        case 2:  goCapture = false; break;                 // always management
-        default: goCapture = true;   // auto: boot into CAPTURE (safe; no boot-time SoftAP)
-    }
-    if (goCapture) { enterCapture(); }
-    else {
-        // mode_ starts MANAGEMENT, so enterManagement() skips the capture-teardown
-        // path and just raises AP+STA and shows the connect screen.
-        enterManagement();
-    }
+    if (Config::wifi().bootModePolicy == 2) { enterManagement(); return; }   // policy: always management
+#endif
+    enterCapture();
 }
 
 } // namespace ModeManager
