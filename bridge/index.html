@@ -4,31 +4,46 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BBoink Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="../assets/theme.css">
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:#0d1117; color:#e6edf3; padding:14px 14px 40px; }
-  h1 { font-size:19px; margin:0 0 2px; } .sub { color:#8b949e; font-size:12px; margin-bottom:12px; }
-  label { display:block; font-size:12px; color:#8b949e; margin:9px 0 3px; }
-  input,select { width:100%; box-sizing:border-box; padding:9px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; font-size:14px; }
+  body{ max-width:640px; margin:0 auto; padding:16px 16px 48px; }
+  h1{ font-size:22px; font-weight:700; display:flex; align-items:center; gap:8px; margin:0 0 2px; }
+  .sub{ color:var(--muted); font-size:12.5px; font-family:var(--mono); margin:2px 0 12px; }
+  label{ font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--cyan-dim); margin:11px 0 4px; display:block; }
+  input,select{ background:var(--panel); border:1px solid var(--line2); color:var(--ink); border-radius:9px; padding:10px; font-size:14px; }
   input[type=checkbox]{ width:auto; }
-  button { padding:11px 14px; border:0; border-radius:9px; font-size:15px; font-weight:600; color:#fff; background:#238636; cursor:pointer; }
-  button.sec{ background:#1f6feb; } button.wide{ width:100%; margin-top:10px; } button:disabled{ opacity:.5; }
-  .tabs{ display:flex; gap:6px; margin:12px 0; } .tabs button{ flex:1; background:#161b22; color:#8b949e; font-weight:500; padding:9px; }
-  .tabs button.on{ background:#1f6feb; color:#fff; }
+  input:focus,select:focus{ outline:none; border-color:var(--cyan); }
+  button{ background:var(--cyan); color:#04181b; border:1px solid var(--cyan); font-family:var(--mono); font-weight:600; font-size:14px; border-radius:9px; padding:11px 14px; cursor:pointer; transition:.16s; }
+  button:hover{ background:#5fe4ee; }
+  button.sec{ background:transparent; color:var(--ink); border:1px solid var(--line2); }
+  button.sec:hover{ border-color:var(--cyan); color:var(--cyan); }
+  button.wide{ width:100%; margin-top:10px; } button:disabled{ opacity:.45; }
+  .tabs{ display:flex; gap:6px; margin:14px 0; } .tabs button{ flex:1; background:var(--panel); color:var(--muted); border:1px solid var(--line); font-weight:500; padding:9px; }
+  .tabs button.on{ background:var(--cyan); color:#04181b; border-color:var(--cyan); }
   .pane{ display:none; } .pane.on{ display:block; }
-  #log{ margin-top:12px; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; max-height:40vh; overflow:auto; }
-  .cap{ background:#161b22; border:1px solid #21262d; border-radius:9px; padding:9px 11px; margin:8px 0; position:relative; }
-  .cn{ font-weight:600; } .cb{ color:#8b949e; font-size:12px; font-family:ui-monospace,monospace; }
-  .pw{ color:#3fb950; font-family:ui-monospace,monospace; margin-top:3px; }
-  .tag{ display:inline-block; background:#30363d; color:#adbac7; border-radius:9px; padding:0 7px; font-size:11px; margin:3px 4px 0 0; }
-  .tag.k{ background:#1f6feb; color:#fff; }
-  .del{ position:absolute; top:8px; right:8px; background:#b62324; padding:5px 9px; font-size:12px; }
+  #log{ margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:10px; font:12px/1.45 var(--mono); white-space:pre-wrap; max-height:40vh; overflow:auto; }
+  .cap{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:9px 11px; margin:8px 0; position:relative; }
+  .cn{ font-weight:600; } .cb{ color:var(--muted); font-size:12px; font-family:var(--mono); }
+  .pw{ color:var(--green); font-family:var(--mono); margin-top:3px; }
+  .tag{ display:inline-block; background:var(--panel2); color:var(--muted); border:1px solid var(--line); border-radius:9px; padding:0 7px; font-size:11px; margin:3px 4px 0 0; }
+  .tag.k{ background:var(--cyan); color:#04181b; border-color:var(--cyan); }
+  .del{ position:absolute; top:8px; right:8px; background:transparent; border:1px solid var(--red); color:var(--red); padding:5px 9px; font-size:12px; border-radius:8px; }
+  .del:hover{ background:var(--red); color:#fff; }
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
   .row{ display:flex; align-items:center; gap:8px; margin-top:9px; }
+  .topbar{ display:flex; align-items:center; margin:-16px -16px 14px; padding:13px 16px; border-bottom:1px solid var(--line); background:rgba(10,14,18,.6); }
+  .topbar .brand{ font-family:var(--disp); font-weight:700; font-size:18px; display:flex; gap:8px; align-items:center; }
+  .topbar nav{ margin-left:auto; display:flex; gap:15px; font-family:var(--mono); font-size:13px; }
+  .topbar nav a{ color:var(--muted); } .topbar nav a:hover{ color:var(--cyan); }
 </style>
 </head>
 <body>
-<h1>BBoink Console</h1>
+<div class="topbar"><span class="brand"><span class="pig">🐷</span> BBoink</span>
+  <nav><a href="../">Home</a><a href="../flasher/">Flasher</a><a href="https://github.com/whitewhidow/bboink">GitHub</a></nav></div>
+<h1>Console</h1>
 <div class="sub">Chrome/Edge (Android or desktop) · manage everything over Bluetooth — the board needs no WiFi.</div>
 <button id="connect" class="sec wide">Connect to board</button>
 <div id="cstat" class="sub" style="margin-top:8px"></div>

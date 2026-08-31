@@ -1,0 +1,50 @@
+/* BBoink shared theme — dark field-instrument look, matches the landing page.
+   Linked by flasher/ and bridge/ (as ../assets/theme.css). */
+:root{
+  --bg:#0a0e12; --panel:#11161c; --panel2:#161d25;
+  --ink:#dfe7ec; --muted:#8a97a2; --faint:#5c6772;
+  --cyan:#22d3e0; --cyan-dim:#0f8f99;
+  --green:#3ddc84; --red:#ff5555; --amber:#ffd166;
+  --line:rgba(140,160,175,.14); --line2:rgba(140,160,175,.28);
+  --disp:"Chakra Petch",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(1000px 480px at 82% -10%,rgba(34,211,224,.09),transparent 60%);
+}
+a{color:var(--cyan);text-decoration:none}
+h1,h2,h3{font-family:var(--disp);margin:0;letter-spacing:.3px}
+.pig{filter:drop-shadow(0 0 10px rgba(34,211,224,.5))}
+.site-head{
+  display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--line);
+  background:rgba(10,14,18,.72);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20;
+}
+.site-head .brand{font-family:var(--disp);font-weight:700;font-size:19px;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.site-head nav{margin-left:auto;display:flex;gap:16px;font-family:var(--mono);font-size:13px}
+.site-head nav a{color:var(--muted)} .site-head nav a:hover{color:var(--cyan)}
+.wrap{max-width:660px;margin:0 auto;padding:22px 18px 56px}
+label,.lbl{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--cyan-dim);display:block;margin:12px 0 5px}
+input,select,textarea{
+  width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line2);
+  background:var(--panel);color:var(--ink);font:15px var(--body);
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--cyan)}
+button{
+  font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.02em;
+  padding:11px 15px;border-radius:9px;border:1px solid var(--line2);
+  background:var(--panel);color:var(--ink);cursor:pointer;transition:.16s;
+}
+button:hover{border-color:var(--cyan);color:var(--cyan)}
+button.primary{background:var(--cyan);color:#04181b;border-color:var(--cyan)}
+button.primary:hover{background:#5fe4ee;color:#04181b}
+button.wide{width:100%;margin-top:10px}
+button:disabled{opacity:.45;cursor:default;border-color:var(--line);color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+.note{background:rgba(127,127,127,.08);border-radius:11px;padding:14px 16px;font-size:13.5px;color:var(--muted)}
+.warn{color:var(--amber)}
+.mono{font-family:var(--mono)}
