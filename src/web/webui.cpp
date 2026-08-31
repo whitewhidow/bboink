@@ -104,7 +104,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <h3 style="margin:0">Capture registry</h3><button class="sbtn" style="width:auto;margin:0" onclick="loadCaps()">Refresh</button></div>
 <small>C captured · M manual · W/O/P uploaded (wpa-sec/OHC/PwnCrack) · K cracked</small>
 <div id="capsList"></div>
-<h3>Download capture files</h3>
+<h3>Cracked networks</h3><small>Recovered passwords (from wpa-sec / OHC / PwnCrack via sync or the BLE bridge).</small><div id="crackedList"></div><h3>Download capture files</h3>
 <small>Save a file to this device, then upload it at the service's own site over normal internet.</small>
 <div id="fileList"></div>
 </div></div>
@@ -114,7 +114,7 @@ const NUM=['ch_hop_ms','lock_ms','atk_rssi','max_tries','burst','jitter','idle_r
 const BOOL=['ntfy_attach','deauth','rnd_mac','cracked_fallback','auto_purge','sound','pmkid'];
 const SEC=['wifi_pass','wpa_key','ohc_key','pwn_key'];
 function show(w){for(const x of ['status','config','sync','caps']){document.getElementById(x).hidden=(x!=w);
- document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps'){loadCaps();loadFiles();}}
+ document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps'){loadCaps();loadCracked();loadFiles();}}
 async function st(){try{const d=await (await fetch('/api/status')).json();
  const sta=d.sta.connected?`<span class="on2">${d.sta.ssid} (${d.sta.ip})</span>`:'<span class="off2">not connected</span>';
  document.getElementById('statusCard').innerHTML=
@@ -169,13 +169,21 @@ async function loadFiles(){const el=document.getElementById('fileList');if(!el)r
   if(!fs.length){el.innerHTML='<div class="cb">no capture files</div>';return;}
   el.innerHTML=fs.map(f=>`<div class="srow"><a href="/api/capture_file?name=${encodeURIComponent(f.name)}" download="${f.name}" style="color:#2dd4bf">${f.name}</a> <small>${f.size}B</small></div>`).join('');
  }catch(e){el.innerHTML='<div class="cb">failed to list files</div>';}}
+let crackedMap={};
+async function loadCracked(){const el=document.getElementById('crackedList');if(el)el.innerHTML='<div class="cb">loading…</div>';
+ try{const rows=await (await fetch('/api/cracked')).json();
+  crackedMap={};for(const c of rows)crackedMap[(c.bssid||'').toLowerCase()]=c;
+  if(el){el.innerHTML=rows.length?rows.map(c=>
+    `<div class="cap"><div class="cn">${c.ssid||'(hidden)'}</div><div class="cb">${c.bssid}</div><div class="pw">pass: ${c.pass}</div></div>`).join(''):'<div class="cb">none yet</div>';}
+  loadCaps();
+ }catch(e){if(el)el.innerHTML='<div class="cb">failed to load</div>';}}
 async function loadCaps(){const el=document.getElementById('capsList');el.innerHTML='<div class="cb">loading…</div>';
  try{const rows=await (await fetch('/api/captures')).json();
   if(!rows.length){el.innerHTML='<div class="cb">no captures yet</div>';return;}
-  el.innerHTML=rows.map(r=>{let t='';if(r.captured)t+='<span class="tag">C</span>';if(r.manual)t+='<span class="tag">M</span>';
-   if(r.w)t+='<span class="tag">W</span>';if(r.o)t+='<span class="tag">O</span>';if(r.p)t+='<span class="tag">P</span>';
-   if(r.k)t+='<span class="tag k">K</span>';
-   const pw=r.k&&r.pass?`<div class="pw">pass: ${r.pass}</div>`:'';
+  el.innerHTML=rows.map(r=>{const ck=crackedMap[(r.bssid||'').toLowerCase()];
+   let t='';if(r.captured)t+='<span class="tag">C</span>';if(r.manual)t+='<span class="tag">M</span>';
+   if(ck)t+='<span class="tag k">K</span>';
+   const pw=ck?`<div class="pw">pass: ${ck.pass}</div>`:'';
    return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}',this)">delete</button>`+
     `<div class="cn">${r.ssid||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;}).join('');
  }catch(e){el.innerHTML='<div class="cb">failed to load</div>';}}
@@ -466,6 +474,34 @@ static void deleteCapture() {
     server.send(200, "application/json", "{\"ok\":true}");
 }
 
+static void listCracked() {
+    noKeepAlive();
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+    server.sendContent("[");
+    File f = Storage::fs().open(SDLayout::wpasecResultsPath(), FILE_READ);
+    bool first = true;
+    if (f) {
+        char line[220];
+        while (f.available()) {
+            size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+            if (L && line[L - 1] == '\r') line[--L] = 0;
+            if (L < 5) continue;
+            char* c1 = strchr(line, ':'); if (!c1) continue; *c1 = 0;
+            char* c2 = strchr(c1 + 1, ':'); if (!c2) continue; *c2 = 0;
+            char es[80], ep[96], obj[260];
+            jsonEsc(c1 + 1, es, sizeof(es));   // ssid
+            jsonEsc(c2 + 1, ep, sizeof(ep));   // password (rest of line)
+            snprintf(obj, sizeof(obj), "%s{\"bssid\":\"%s\",\"ssid\":\"%s\",\"pass\":\"%s\"}",
+                     first ? "" : ",", line, es, ep);
+            server.sendContent(obj); first = false;
+        }
+        f.close();
+    }
+    server.sendContent("]");
+    server.sendContent("");
+}
+
 static void serveCaptureFile() {
     noKeepAlive();
     if (!server.hasArg("name")) { server.send(400, "text/plain", "name required"); return; }
@@ -525,6 +561,7 @@ void begin() {
     server.on("/api/capture_file", HTTP_GET, serveCaptureFile);
     server.on("/api/files", HTTP_GET, listFiles);
     server.on("/api/captures", HTTP_GET,     listCaptures);
+    server.on("/api/cracked",  HTTP_GET,     listCracked);
     server.on("/api/del_capture", HTTP_POST, deleteCapture);
     server.on("/", HTTP_GET, sendIndex);
     server.on("/generate_204", HTTP_GET, sendIndex);
