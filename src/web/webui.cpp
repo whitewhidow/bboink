@@ -69,7 +69,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <h3>Crack service keys</h3>
 <label>wpa-sec key <small id="p_wpa_key"></small></label><input type="text" id="wpa_key" placeholder="(none)">
 <label>OnlineHashCrack key <small id="p_ohc_key"></small></label><input type="text" id="ohc_key" placeholder="(none)">
-<label>PwnCrack key <small id="p_pwn_key"></small></label><input type="text" id="pwn_key" placeholder="(none)">
+<label>PwnCrack key <small id="p_pwn_key"></small></label><input type="text" id="pwn_key" placeholder="(none)"><label>Relay URL <small>(https://…onrender.com; blank = direct)</small></label><input type="text" id="relay_url" placeholder="(none)"><label>Relay token</label><input type="text" id="relay_token" placeholder="(none)"><label>Relay URL <small>(https://…onrender.com; blank = direct)</small></label><input type="text" id="relay_url" placeholder="(none)"><label>Relay token</label><input type="text" id="relay_token" placeholder="(none)">
 <h3>ntfy</h3>
 <label>Topic</label><input type="text" id="ntfy_topic">
 <div class="chk"><input type="checkbox" id="ntfy_attach"><label style="margin:0">attach capture file</label></div>
@@ -96,7 +96,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div id="sync" hidden><div class="card">
 <h3>Upload captures to crack services</h3>
 <small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
-<div class="srow"><span><b>All services</b></span><button class="sbtn" onclick="doSync('all',this)">Sync All</button><button class="sbtn" onclick="doSync('checkcracked',this)">Check Cracked</button><span class="sres" id="r_all"></span><span class="sres" id="r_checkcracked"></span></div><div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
+<div class="srow"><span><b>Relay</b> (one-shot)</span><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><span class="sres" id="r_relay"></span></div><div class="srow"><span><b>Relay</b> (one-shot)</span><button class="sbtn" onclick="doSync('relay',this)">Sync via Relay</button><button class="sbtn" onclick="doSync('relayping',this)">Wake / Check</button><span class="sres" id="r_relay"></span><span class="sres" id="r_relayping"></span></div><div class="srow"><span><b>All services</b></span><button class="sbtn" onclick="doSync('all',this)">Sync All</button><button class="sbtn" onclick="doSync('checkcracked',this)">Check Cracked</button><span class="sres" id="r_all"></span><span class="sres" id="r_checkcracked"></span></div><div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
 <div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
 <div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
 </div></div>
@@ -133,6 +133,10 @@ async function loadCfg(){try{const c=await (await fetch('/api/config')).json();
  document.getElementById('wifi_ssid').value=c.wifi_ssid||'';
  document.getElementById('ntfy_topic').value=c.ntfy_topic||'';
  document.getElementById('ap_ssid').value=c.ap_ssid||'';
+ document.getElementById('relay_url').value=c.relay_url||'';
+ document.getElementById('relay_token').value=c.relay_token||'';
+ document.getElementById('relay_url').value=c.relay_url||'';
+ document.getElementById('relay_token').value=c.relay_token||'';
  document.getElementById('wpa_key').value=c.wpa_key||'';
  document.getElementById('ohc_key').value=c.ohc_key||'';
  document.getElementById('pwn_key').value=c.pwn_key||'';
@@ -143,7 +147,9 @@ async function loadCfg(){try{const c=await (await fetch('/api/config')).json();
  }catch(e){}}
 async function save(){const b={wifi_ssid:document.getElementById('wifi_ssid').value,
  ntfy_topic:document.getElementById('ntfy_topic').value,
- ap_ssid:document.getElementById('ap_ssid').value};
+ ap_ssid:document.getElementById('ap_ssid').value,
+ relay_url:document.getElementById('relay_url').value,
+ relay_token:document.getElementById('relay_token').value};
  for(const n of NUM)b[n]=parseInt(document.getElementById(n).value);
  for(const x of BOOL)b[x]=document.getElementById(x).checked;
  for(const s of SEC){const v=document.getElementById(s).value;if(v)b[s]=v;}
@@ -233,6 +239,10 @@ static void sendConfig() {
     doc["sound"]         = w.soundEnabled;
     doc["pmkid"]         = w.pmkidEnabled;
     doc["ap_ssid"]       = w.apSSID;
+    doc["relay_url"]     = w.relayUrl;
+    doc["relay_token"]   = w.relayToken;
+    doc["relay_url"]     = w.relayUrl;
+    doc["relay_token"]   = w.relayToken;
     String out; serializeJson(doc, out);
     server.send(200, "application/json", out);
 }
@@ -284,6 +294,10 @@ static void saveConfig() {
     if (doc["sound"].is<bool>())           w.soundEnabled     = doc["sound"];
     if (doc["pmkid"].is<bool>())           w.pmkidEnabled     = doc["pmkid"];
     setStr("ap_ssid", w.apSSID, sizeof(w.apSSID));
+    setStr("relay_url",   w.relayUrl,   sizeof(w.relayUrl));
+    setStr("relay_token", w.relayToken, sizeof(w.relayToken));
+    setStr("relay_url",   w.relayUrl,   sizeof(w.relayUrl));
+    setStr("relay_token", w.relayToken, sizeof(w.relayToken));
 
     Config::setWiFi(w);   // sanitizes + persists
 
@@ -338,6 +352,22 @@ static void syncAll() {
     if (!q) { server.send(400, "application/json", "{\"error\":\"no keys set\"}"); return; }
     server.send(200, "application/json", "{\"rebooting\":true}");
     requestSyncQueue(q);
+}
+static void syncRelay() {
+    noKeepAlive();
+    if (WiFi.status() != WL_CONNECTED) { server.send(400, "application/json", "{\"error\":\"no uplink\"}"); return; }
+    if (!Config::wifi().relayUrl[0] || !Config::wifi().relayToken[0]) {
+        server.send(400, "application/json", "{\"error\":\"set Relay URL + token in Config\"}"); return;
+    }
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestSyncQueue(SYNC_RELAY);
+}
+static void syncRelayPing() {
+    noKeepAlive();
+    if (WiFi.status() != WL_CONNECTED) { server.send(400, "application/json", "{\"error\":\"no uplink\"}"); return; }
+    if (!Config::wifi().relayUrl[0]) { server.send(400, "application/json", "{\"error\":\"set Relay URL in Config\"}"); return; }
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestSyncQueue(SYNC_RELAY_PING);
 }
 static void syncCheckCracked() {
     noKeepAlive();
@@ -491,6 +521,8 @@ void begin() {
     server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
     server.on("/api/sync/all",      HTTP_POST, syncAll);
     server.on("/api/sync/checkcracked", HTTP_POST, syncCheckCracked);
+    server.on("/api/sync/relay",     HTTP_POST, syncRelay);
+    server.on("/api/sync/relayping", HTTP_POST, syncRelayPing);
     server.on("/api/sync/status",   HTTP_GET,  sendSyncStatus);
     server.on("/api/capture_file", HTTP_GET, serveCaptureFile);
     server.on("/api/files", HTTP_GET, listFiles);

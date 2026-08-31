@@ -17,6 +17,8 @@ enum SyncOp : uint32_t {
     SYNC_PWN_UP  = 1u << 2,   // PwnCrack  : upload handshakes
     SYNC_WPA_CHK = 1u << 3,   // wpa-sec   : download potfile (fetch cracked)
     SYNC_PWN_CHK = 1u << 4,   // PwnCrack  : download potfile (fetch cracked)
+    SYNC_RELAY   = 1u << 5,   // Relay     : upload all + fetch cracked in ONE connection
+    SYNC_RELAY_PING = 1u << 6,// Relay     : GET /healthz (wake + status)
 };
 static const uint32_t SYNC_ALL_UP  = SYNC_WPA_UP | SYNC_OHC_UP | SYNC_PWN_UP;
 static const uint32_t SYNC_ALL_CHK = SYNC_WPA_CHK | SYNC_PWN_CHK;

@@ -11,6 +11,7 @@
 #include "core/sd_layout.h"
 #include "web/wpasec.h"
 #include "web/ohc.h"
+#include "web/relay.h"
 #include "web/pwncrack.h"
 #include <FS.h>
 #if defined(__has_include)
@@ -116,6 +117,13 @@ static bool runBootSyncIfQueued() {
         int c = PwnCrack::syncPotfile(err, sizeof(err));
         if (c >= 0) snprintf(seg, sizeof(seg), "pwnCrk%d", c);
         else        snprintf(seg, sizeof(seg), "pwnCrk ERR:%.38s", err);
+    } else if (op == SYNC_RELAY) {
+        Relay::SyncResult rr = Relay::sync();
+        if (rr.ok) snprintf(seg, sizeof(seg), "relay up%u pc%u crk%u", rr.hashesUp, rr.pcapsUp, rr.cracked);
+        else       snprintf(seg, sizeof(seg), "relay ERR:%.40s", rr.error);
+    } else if (op == SYNC_RELAY_PING) {
+        Relay::PingResult pr = Relay::ping();
+        snprintf(seg, sizeof(seg), "relay %s", pr.status);
     }
     appendSyncSeg(seg);
     Serial.printf("[SYNC] op=0x%x done -> %s | queue left=0x%x\n",
@@ -171,6 +179,13 @@ void setup() {
         strncpy(Config::wifi().ohcKey, DEV_OHC_KEY, sizeof(Config::wifi().ohcKey) - 1);
         Config::wifi().ohcKey[sizeof(Config::wifi().ohcKey) - 1] = '\0';
         Serial.println("[DEV] OHC key overridden from dev_secrets.h");
+    }
+#endif
+#if defined(DEV_RELAY_URL)
+    if (DEV_RELAY_URL[0]) {
+        strncpy(Config::wifi().relayUrl,   DEV_RELAY_URL,   sizeof(Config::wifi().relayUrl) - 1);
+        strncpy(Config::wifi().relayToken, DEV_RELAY_TOKEN, sizeof(Config::wifi().relayToken) - 1);
+        Serial.println("[DEV] relay url/token overridden from dev_secrets.h");
     }
 #endif
     const char* ssid = Config::wifi().otaSSID;
