@@ -2,6 +2,8 @@
 // Target: LilyGo T-Embed CC1101 (ESP32-S3, rotary encoder + side button).
 #include <vector>
 #include <Arduino.h>
+#include <esp_heap_caps.h>
+#include <esp_bt.h>
 #include <M5Cardputer.h>            // shim -> hal/m5compat.h on this board
 #include <WiFi.h>
 #include "core/config.h"
@@ -149,6 +151,12 @@ void setup() {
     Serial.begin(115200);
     delay(100);
     Serial.println("\n[OINK] tembed-oink boot");
+    // Read the BLE-bridge boot flag first: on a NORMAL boot we don't use BLE, so
+    // release the BT controller RAM (~40KB) back to the heap — NimBLE reserves it
+    // at startup and it otherwise starves OinkMode::init(). Bridge boots keep it.
+    bool g_bleBridge = (bootBleBridge == BOOT_SYNC_MAGIC);
+    bootBleBridge = 0;
+    if (!g_bleBridge) esp_bt_controller_mem_release(ESP_BT_MODE_BLE);   // reclaim BT RAM when not bridging
 
     // CRITICAL ORDER: connect WiFi BEFORE initialising the display.
     // LovyanGFX's display SPI init grabs a shared resource (GDMA channel) that a
@@ -160,8 +168,6 @@ void setup() {
     WiFi.setSleep(false);
     Config::init();                       // load creds (SD; fine before display)
     // BLE bridge boot: skip all WiFi (bridge runs radio as BLE only).
-    bool g_bleBridge = (bootBleBridge == BOOT_SYNC_MAGIC);
-    bootBleBridge = 0;
     if (g_bleBridge) { WiFi.mode(WIFI_OFF); ModeManager::forceBleBridgeBoot(); }
 #if defined(DEV_WIFI_SSID)
     // DEV: a git-ignored core/dev_secrets.h can pin the uplink creds so they never
@@ -230,6 +236,14 @@ void setup() {
     Config::mountSdAfterDisplay();
 #endif
 
+    // Reclaim the ~60KB the boot WiFi STA holds before the engine inits. A CAPTURE
+    // boot re-establishes its own promiscuous radio in NetworkRecon::start() (which
+    // needs no association, so no GDMA race), and this headroom matters now that
+    // NimBLE's static RAM is linked in. Skip for a MANAGEMENT boot (needs the STA up).
+    if (!g_bleBridge && Config::wifi().bootModePolicy != 2) {
+        WiFi.disconnect(true, true);
+        WiFi.mode(WIFI_OFF);
+    }
     NetworkRecon::init();
     OinkMode::init();
 
