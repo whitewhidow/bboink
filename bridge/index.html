@@ -99,15 +99,17 @@ $('sync').onclick=async()=>{
       else if(f.kind==='pcap') pcaps.push({name:f.name,bytes});
     }
     if(hashes.trim()){
-      log('→ relay /v1/hashes …');
-      const r=await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:hashes});
-      log('  '+r.status+' '+JSON.stringify(await r.json().catch(()=>({}))));
-    }
+      log('→ posting hashes (OHC + PwnCrack)…');
+      const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:hashes})).json().catch(()=>({}));
+      if(j.hashes!=null) log('  '+j.hashes+' unique hash(es)');
+      if(j.ohc) log('  OHC: '+(j.ohc.error?('✖ '+j.ohc.error):(j.ohc.accepted+' accepted · '+j.ohc.skipped+' skipped(dupe) · '+j.ohc.rejected+' rejected')));
+      if(j.pwncrack) log('  PwnCrack: '+(j.pwncrack.error?('✖ '+j.pwncrack.error):((j.pwncrack.ok?'✔ accepted':'HTTP '+j.pwncrack.http)+(j.pwncrack.note?(' — '+j.pwncrack.note):''))));
+    } else log('  (no hashes on board to post)');
     for(const p of pcaps){
-      log('→ relay /v1/pcap '+p.name+' …');
-      const r=await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes});
-      log('  '+r.status+' '+JSON.stringify(await r.json().catch(()=>({}))));
+      const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(p.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:p.bytes})).json().catch(()=>({}))).wpasec||{};
+      log('  wpa-sec '+p.name+': '+(w.error?('✖ '+w.error):(w.status||('HTTP '+w.http))));
     }
+    if(!pcaps.length) log('  (no pcaps on board for wpa-sec)');
     log('← relay /v1/cracked …');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
     log('  '+cr.count+' cracked');

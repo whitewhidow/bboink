@@ -90,7 +90,8 @@ app.post('/v1/hashes', async (req, res) => {
     fd.append('key', PWNCRACK_KEY);
     fd.append('handshake', new Blob([uniq.join('\n') + '\n']), 'bboink.hc22000');
     const r = await fetch('https://pwncrack.org/upload_handshake', { method: 'POST', body: fd });
-    out.pwncrack = { http: r.status, ok: r.status === 200 || r.status === 201 };
+    const t = (await r.text().catch(() => '')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    out.pwncrack = { http: r.status, ok: r.status === 200 || r.status === 201, note: t };
   } catch (e) { out.pwncrack = { error: String(e.message || e) }; }
 
   res.json(out);
@@ -109,8 +110,9 @@ app.post('/v1/pcap', async (req, res) => {
     const r = await fetch('https://wpa-sec.stanev.org/', {
       method: 'POST', headers: { Cookie: `key=${WPASEC_KEY}` }, body: fd,
     });
-    // 409 = already uploaded -> treat as success
-    res.json({ wpasec: { http: r.status, ok: [200, 201, 409].includes(r.status) } });
+    const status = (r.status === 200 || r.status === 201) ? 'accepted'
+                 : (r.status === 409) ? 'duplicate' : 'rejected';
+    res.json({ wpasec: { http: r.status, ok: [200, 201, 409].includes(r.status), status } });
   } catch (e) { res.status(502).json({ wpasec: { error: String(e.message || e) } }); }
 });
 
