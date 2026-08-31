@@ -29,8 +29,8 @@ RTC_NOINIT_ATTR char     bootSyncResult[96];
 RTC_NOINIT_ATTR uint32_t bootShowMgmt;
 
 // Run a queued sync early in boot (clean heap). STA is already associated above.
-static void runBootSyncIfQueued() {
-    if (bootSyncMagic != BOOT_SYNC_MAGIC || bootSyncReq == 0) return;
+static bool runBootSyncIfQueued() {
+    if (bootSyncMagic != BOOT_SYNC_MAGIC || bootSyncReq == 0) return false;
     int svc = bootSyncReq;
     bootSyncReq = 0;   // consume the request (keep magic until result is written, so a crash still shows a result)
 
@@ -70,6 +70,7 @@ static void runBootSyncIfQueued() {
         int cracked = PwnCrack::syncPotfile(err, sizeof(err));
         snprintf(bootSyncResult, sizeof(bootSyncResult), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
     }
+    return true;
 }
 
 void setup() {
@@ -126,7 +127,7 @@ void setup() {
     if (bootSyncMagic != BOOT_SYNC_MAGIC) strncpy(bootSyncResult, "idle", sizeof(bootSyncResult));
     bootShowMgmt = 0;   // (boot-to-management-after-sync reverted — SoftAP-at-boot was unstable;
                         //  boot into CAPTURE as usual, toggle to management to see the result)
-    runBootSyncIfQueued();
+    bool syncRan = runBootSyncIfQueued();
 
     // Now the display + input + engine (display init no longer disturbs WiFi).
     auto cfg = M5.config();
@@ -150,6 +151,12 @@ void setup() {
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.drawString("v" BBOINK_VERSION, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 20);
     delay(900);
+    if (syncRan) {
+        App::clear();
+        App::centerMsg("SYNC RESULT", TFT_CYAN);
+        App::footer(bootSyncResult);
+        delay(3000);   // show the upload outcome before dropping into capture
+    }
     App::begin();
 }
 
