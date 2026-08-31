@@ -62,6 +62,20 @@ function authed(req, res) {
 
 app.get('/healthz', (_req, res) => res.type('text').send('ok'));
 
+// Friendly landing for anyone who surfs here by hand — this is an API, not a site.
+const README = 'https://github.com/whitewhidow/bboink#readme';
+app.get('/', (_req, res) => {
+  res.status(200).type('html').send(
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+     <title>bboink relay</title>
+     <body style="font:16px/1.6 system-ui,sans-serif;max-width:620px;margin:16vh auto;padding:0 20px;color:#222">
+     <h1 style="margin:0 0 8px">🐷 bboink relay</h1>
+     <p>This is a private <b>API endpoint</b> for the BBoink WiFi-capture firmware — <b>not a website</b>.
+     If you landed here by browsing, you're in the wrong place and nothing here is for you.</p>
+     <p>What it is and how it's meant to be used → <a href="${README}">read the README</a>.</p>
+     </body>`);
+});
+
 // ---- upload: hashcat 22000 hashes -> OHC + PwnCrack -------------------------
 app.post('/v1/hashes', async (req, res) => {
   if (!authed(req, res)) return;
@@ -180,5 +194,8 @@ app.get('/v1/cracked', async (req, res) => {
   }));
   res.json({ count: cracked.length, cracked, errors });
 });
+
+// Anything else: not a real endpoint — point them at the README.
+app.use((_req, res) => res.status(404).json({ error: 'not a valid endpoint — see ' + README }));
 
 app.listen(PORT, () => console.log(`bboink relay listening on :${PORT}`));
