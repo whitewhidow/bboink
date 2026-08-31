@@ -8,8 +8,8 @@ over **BLE** (Web Bluetooth), forwards them to the **Render relay** over the pho
 joins the board's AP — it stays on cellular, and BLE is a separate radio that doesn't
 touch IP routing.
 
-> **Android + Chrome only** (Web Bluetooth doesn't exist on iOS Safari). iPhone users
-> keep using the board's WiFi-uplink → relay path.
+> **Needs a Web Bluetooth browser** — Chrome/Chromium/Edge on Android *or* desktop
+> (Linux/Windows/macOS). Web Bluetooth doesn't exist on **iOS/Safari**.
 
 ## Why this is possible (and BT-tethering isn't)
 - BT internet-sharing (PAN/BNEP) needs **Classic Bluetooth** — the ESP32-C5 is

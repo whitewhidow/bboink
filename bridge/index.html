@@ -29,7 +29,7 @@
 </head>
 <body>
 <h1>BBoink Console</h1>
-<div class="sub">Android + Chrome · manage everything over Bluetooth — the board needs no WiFi.</div>
+<div class="sub">Chrome/Edge (Android or desktop) · manage everything over Bluetooth — the board needs no WiFi.</div>
 <button id="connect" class="sec wide">Connect to board</button>
 <div id="cstat" class="sub" style="margin-top:8px"></div>
 
@@ -234,7 +234,7 @@ $('relaychk').onclick=async()=>{
 window.addExcl=async()=>{ const ssid=$('exclssid').value.trim(); if(!ssid){return;}
   try{ await cmdAck({c:'excl',s:ssid}); $('exclssid').value=''; await loadCaps(); }catch(e){} };
 
-if(!navigator.bluetooth) $('cstat').textContent='✖ Web Bluetooth unavailable — use Chrome on Android.';
+if(!navigator.bluetooth) $('cstat').textContent='✖ Web Bluetooth unavailable — use Chrome/Edge (Android or desktop). Not iOS/Safari.';
 </script>
 </body>
 </html>

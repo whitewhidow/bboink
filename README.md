@@ -33,8 +33,8 @@ phone console instead of using WiFi.
 reboots into bridge, ~15 s), **hold ~3 s** = power off. All config + sync are done in the
 phone console.
 
-**The BLE console** — the phone web app that is the *entire* UI on the Waveshare and an
-option on the others. **Android + Chrome only** (Web Bluetooth). Open
+**The BLE console** — the web app that is the *entire* UI on the Waveshare and an
+option on the others. Needs a **Web Bluetooth** browser — Chrome/Chromium/Edge on **Android or desktop** (Linux confirmed; Windows/macOS should work). **Not** iOS/Safari. Open
 **https://whitewhidow.github.io/bboink/bridge/**, tap **Connect to board**, pick
 `BBoink-XXXX`. Three tabs:
 - **Config** — all device settings (below).
