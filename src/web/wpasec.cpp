@@ -400,54 +400,25 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     
     Serial.println("[WPASEC] Downloading potfile...");
     
+    // GET the potfile via HTTPClient (raw GET request write also failed post-handshake on C5).
     WiFiClientSecure client;
     client.setInsecure();
-    
-    if (!client.connect(WPASEC_HOST, WPASEC_PORT, 10000)) {
-        snprintf(lastError, sizeof(lastError), "POTFILE HTTP FAILED");
-        Serial.println("[WPASEC] Potfile HTTP connect failed");
+    HTTPClient https;
+    https.setTimeout(15000);
+    String url = String("https://") + WPASEC_HOST + WPASEC_POTFILE_PATH;
+    if (!https.begin(client, url)) {
+        snprintf(lastError, sizeof(lastError), "POTFILE BEGIN FAILED");
         return false;
     }
-    
-    // Send GET request
-    client.printf("GET %s HTTP/1.1\r\n", WPASEC_POTFILE_PATH);
-    client.printf("Host: %s\r\n", WPASEC_HOST);
-    client.printf("Cookie: key=%s\r\n", Config::wifi().wpaSecKey);
-    client.print("Connection: close\r\n\r\n");
-    
-    // Wait for response
-    unsigned long timeout = millis() + 15000;
-    while (client.connected() && !client.available() && millis() < timeout) {
-        delay(10);
-        yield();  // Prevent WDT during response wait
-    }
-    
-    if (!client.available()) {
-        client.stop();
-        strncpy(lastError, "POTFILE TIMEOUT", sizeof(lastError) - 1);
+    https.addHeader("Cookie", String("key=") + Config::wifi().wpaSecKey);
+    int status = https.GET();
+    if (status != 200) {
+        https.end();
+        snprintf(lastError, sizeof(lastError), status > 0 ? "POTFILE HTTP %d" : "POTFILE TLS %d", status);
         return false;
     }
-    
-    // Skip HTTP headers
-    bool headersEnded = false;
-    char headerLine[128];
-    while (client.connected() && client.available() && !headersEnded) {
-        size_t len = client.readBytesUntil('\n', headerLine, sizeof(headerLine) - 1);
-        headerLine[len] = '\0';
-        // Empty line marks end of headers
-        if (len <= 1 || (len == 1 && headerLine[0] == '\r')) {
-            headersEnded = true;
-        }
-    }
-    
-    if (!headersEnded) {
-        client.stop();
-        strncpy(lastError, "POTFILE BAD RESPONSE", sizeof(lastError) - 1);
-        return false;
-    }
-    
-    // Count entries already in the cache so we can report only genuinely-new
-    // cracks this sync (instead of the whole potfile every time).
+
+    // Count entries already cached so we report only genuinely-new cracks this sync.
     const char* cachePath = SDLayout::wpasecResultsPath();
     uint16_t oldCount = 0;
     {
@@ -462,60 +433,35 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
         }
     }
 
-    // Open cache file for writing (overwrite)
     File cacheFile = Storage::fs().open(cachePath, FILE_WRITE);
     if (!cacheFile) {
-        client.stop();
+        https.end();
         strncpy(lastError, "CANNOT WRITE CACHE", sizeof(lastError) - 1);
         return false;
     }
-    
-    // Stream potfile line-by-line directly to SD
-    // Format: BSSID:SSID:password (hashcat potfile format)
-    char lineBuf[160];  // Should be enough for BSSID:SSID:password
+
+    // Stream potfile line-by-line (BSSID:SSID:password) straight to SD.
+    WiFiClient* stream = https.getStreamPtr();
+    char lineBuf[160];
     uint16_t lineCount = 0;
-    
-    while (client.connected() || client.available()) {
-        if (client.available()) {
-            size_t len = client.readBytesUntil('\n', lineBuf, sizeof(lineBuf) - 1);
-            if (len > 0) {
-                lineBuf[len] = '\0';
-                // Trim \r if present
-                if (len > 0 && lineBuf[len - 1] == '\r') {
-                    lineBuf[len - 1] = '\0';
-                }
-                
-                // Validate line has at least 2 colons (BSSID:SSID:password)
-                int colonCount = 0;
-                for (size_t i = 0; lineBuf[i]; i++) {
-                    if (lineBuf[i] == ':') colonCount++;
-                }
-                
-                if (colonCount >= 2 && strlen(lineBuf) > 10) {
-                    cacheFile.println(lineBuf);
-                    lineCount++;
-                }
-            }
-        } else {
-            delay(10);
-        }
-        
-        // Safety timeout
-        if (millis() > timeout + 30000) {
-            Serial.println("[WPASEC] Potfile download timeout");
-            break;
-        }
-        
+    uint32_t to = millis() + 45000;
+    while (https.connected() && millis() < to) {
+        if (!stream->available()) { delay(10); if (!https.connected() && !stream->available()) break; continue; }
+        size_t len = stream->readBytesUntil('\n', lineBuf, sizeof(lineBuf) - 1);
+        if (len == 0) continue;
+        lineBuf[len] = '\0';
+        if (lineBuf[len - 1] == '\r') lineBuf[len - 1] = '\0';
+        int colonCount = 0;
+        for (size_t i = 0; lineBuf[i]; i++) if (lineBuf[i] == ':') colonCount++;
+        if (colonCount >= 2 && strlen(lineBuf) > 10) { cacheFile.println(lineBuf); lineCount++; }
         yield();
     }
-    
     cacheFile.close();
-    client.stop();
-    
+    https.end();
+
     Serial.printf("[WPASEC] Potfile downloaded: %u entries (%u previously)\n",
                   (unsigned int)lineCount, (unsigned int)oldCount);
     newCracks = (lineCount > oldCount) ? (lineCount - oldCount) : 0;
-    
     return true;
 }
 

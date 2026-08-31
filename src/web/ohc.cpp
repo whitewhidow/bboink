@@ -5,6 +5,7 @@
 #include "../core/storage.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <vector>
@@ -89,36 +90,22 @@ void markUploaded(const char* bssid) {
 
 // POST a JSON body to /v2; return response body text in `resp`.
 static bool postV2(const String& body, String& resp, char* err, size_t errLen) {
+    // HTTPClient drives WiFiClientSecure's TLS write/read on the ESP32-C5, where
+    // a hand-rolled client.print(body) after the handshake silently sent 0 bytes.
     WiFiClientSecure client;
     client.setInsecure();
-    if (!client.connect(OHC_HOST, OHC_PORT, 12000)) {
-        if (err) snprintf(err, errLen, "TLS CONNECT FAIL");
+    HTTPClient https;
+    https.setTimeout(15000);
+    if (!https.begin(client, String("https://") + OHC_HOST + "/v2")) {
+        if (err) snprintf(err, errLen, "BEGIN FAILED");
         return false;
     }
-    client.printf("POST /v2 HTTP/1.1\r\n");
-    client.printf("Host: %s\r\n", OHC_HOST);
-    client.print("Content-Type: application/json\r\n");
-    client.printf("Content-Length: %u\r\n", (unsigned)body.length());
-    client.print("Connection: close\r\n\r\n");
-    client.print(body);
-
-    uint32_t timeout = millis() + 15000;
-    while (client.connected() && !client.available() && millis() < timeout) { delay(10); yield(); }
-    // skip HTTP headers
-    while (client.connected() || client.available()) {
-        String line = client.readStringUntil('\n');
-        if (line.length() <= 1) break;        // blank line ends headers
-        if (millis() > timeout) break;
-    }
-    // read body (bounded)
-    resp = "";
-    while ((client.connected() || client.available()) && millis() < timeout + 12000) {
-        if (client.available()) { resp += (char)client.read(); if (resp.length() > 6000) break; }
-        else delay(5);
-    }
-    client.stop();
-    // The response uses chunked transfer-encoding, so the raw body has hex chunk
-    // markers around the JSON. Extract the JSON object (first { .. last }).
+    https.addHeader("Content-Type", "application/json");
+    int code = https.POST((uint8_t*)body.c_str(), body.length());
+    resp = (code > 0) ? https.getString() : String();
+    https.end();
+    if (code <= 0) { if (err) snprintf(err, errLen, "TLS ERR %d", code); return false; }
+    // HTTPClient de-chunks the body; still pull the JSON object out defensively.
     int b = resp.indexOf('{');
     int e = resp.lastIndexOf('}');
     if (b >= 0 && e > b) resp = resp.substring(b, e + 1);

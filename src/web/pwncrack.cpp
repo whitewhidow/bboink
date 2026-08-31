@@ -5,6 +5,7 @@
 #include "../core/storage.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <FS.h>
 #include <vector>
 
@@ -159,23 +160,17 @@ UploadResult uploadFile(const char* basename) {
     while (f.available()) { String l = f.readStringUntil('\n'); if (l.startsWith("WPA*")) r.hashes++; }
     f.seek(0);
 
-    WiFiClientSecure client;
-    client.setInsecure();
-    if (!client.connect(PWN_HOST, PWN_PORT, 12000)) { f.close(); strncpy(r.error, "TLS CONNECT FAIL", sizeof(r.error) - 1); return r; }
-
     char boundary[40];
     snprintf(boundary, sizeof(boundary), "----BBoink%08lX", (unsigned long)millis());
     const char* key = Config::wifi().pwncrackKey;
 
-    // PwnCrack only accepts a .hc22000 filename ("Only .hc22000 files are allowed"),
-    // so present our .22000 file under an .hc22000 name (same hashcat content).
+    // PwnCrack only accepts a .hc22000 filename; present our .22000 under that name.
     char upname[88];
     snprintf(upname, sizeof(upname), "%s", basename);
     size_t un = strlen(upname);
     if (un > 6 && strcmp(upname + un - 6, ".22000") == 0) strcpy(upname + un - 6, ".hc22000");
     else strncat(upname, ".hc22000", sizeof(upname) - un - 1);
 
-    // Multipart preamble: the key field, then the handshake file part header.
     char pre[512];
     int pn = snprintf(pre, sizeof(pre),
         "--%s\r\nContent-Disposition: form-data; name=\"key\"\r\n\r\n%s\r\n"
@@ -184,35 +179,33 @@ UploadResult uploadFile(const char* basename) {
         boundary, key, boundary, upname);
     char epi[48];
     int en = snprintf(epi, sizeof(epi), "\r\n--%s--\r\n", boundary);
-    size_t contentLength = (size_t)pn + fileSize + (size_t)en;
 
-    client.printf("POST /upload_handshake HTTP/1.1\r\n");
-    client.printf("Host: %s\r\n", PWN_HOST);
-    client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary);
-    client.printf("Content-Length: %u\r\n", (unsigned)contentLength);
-    client.print("Connection: close\r\n\r\n");
-
-    client.write((const uint8_t*)pre, pn);
-    uint8_t buf[512]; size_t sent = 0;
-    while (f.available() && sent < fileSize) {
-        size_t n = f.read(buf, sizeof(buf));
-        if (n) { client.write(buf, n); sent += n; }
-        yield();
-    }
+    // Assemble the whole multipart body in one heap buffer, then POST via HTTPClient
+    // (the raw client.write() path silently sent 0 bytes after the TLS handshake on the C5).
+    size_t bodyLen = (size_t)pn + fileSize + (size_t)en;
+    uint8_t* body = (uint8_t*)malloc(bodyLen);
+    if (!body) { f.close(); snprintf(r.error, sizeof(r.error), "OOM %u", (unsigned)bodyLen); return r; }
+    memcpy(body, pre, pn);
+    size_t rd = f.read(body + pn, fileSize);
     f.close();
-    client.write((const uint8_t*)epi, en);
+    if (rd != fileSize) { free(body); snprintf(r.error, sizeof(r.error), "READ %u/%u", (unsigned)rd, (unsigned)fileSize); return r; }
+    memcpy(body + pn + fileSize, epi, en);
 
-    uint32_t to = millis() + 12000;
-    while (client.connected() && !client.available() && millis() < to) { delay(10); yield(); }
-    if (client.available()) {
-        char resp[64];
-        size_t l = client.readBytesUntil('\n', resp, sizeof(resp) - 1); resp[l] = '\0';
-        if (strstr(resp, "200") || strstr(resp, "201")) r.success = true;
-        else snprintf(r.error, sizeof(r.error), "%.40s", resp);
-    } else {
-        strncpy(r.error, "NO RESPONSE", sizeof(r.error) - 1);
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient https;
+    https.setTimeout(15000);
+    if (!https.begin(client, String("https://") + PWN_HOST + "/upload_handshake")) {
+        free(body); strncpy(r.error, "BEGIN FAILED", sizeof(r.error) - 1); return r;
     }
-    client.stop();
+    https.addHeader("Content-Type", String("multipart/form-data; boundary=") + boundary);
+    int code = https.POST(body, bodyLen);
+    free(body);
+    String resp = (code > 0) ? https.getString() : String();
+    https.end();
+    if (code == 200 || code == 201) r.success = true;
+    else if (code > 0) snprintf(r.error, sizeof(r.error), "HTTP %d %.28s", code, resp.c_str());
+    else snprintf(r.error, sizeof(r.error), "TLS ERR %d", code);
     return r;
 }
 
@@ -220,47 +213,34 @@ int syncPotfile(char* err, size_t errLen) {
     if (!hasApiKey())                  { if (err) snprintf(err, errLen, "NO PWN KEY"); return -1; }
     if (WiFi.status() != WL_CONNECTED) { if (err) snprintf(err, errLen, "WIFI NOT CONNECTED"); return -1; }
 
+    // GET via HTTPClient (raw client GET request write also failed post-handshake on C5).
     WiFiClientSecure client;
     client.setInsecure();
-    if (!client.connect(PWN_HOST, PWN_PORT, 12000)) { if (err) snprintf(err, errLen, "TLS CONNECT FAIL"); return -1; }
-    client.printf("GET /download_potfile_script?key=%s HTTP/1.1\r\n", Config::wifi().pwncrackKey);
-    client.printf("Host: %s\r\n", PWN_HOST);
-    client.print("Connection: close\r\n\r\n");
+    HTTPClient https;
+    https.setTimeout(15000);
+    String url = String("https://") + PWN_HOST + "/download_potfile_script?key=" + Config::wifi().pwncrackKey;
+    if (!https.begin(client, url)) { if (err) snprintf(err, errLen, "BEGIN FAILED"); return -1; }
+    int status = https.GET();
+    // 404 = no potfile for this key yet (nothing cracked) — not an error.
+    if (status == 404) { https.end(); loadCache(); return (int)g_cracked.size(); }
+    if (status != 200) { https.end(); if (err) snprintf(err, errLen, status > 0 ? "HTTP %d" : "TLS ERR %d", status); return -1; }
 
-    uint32_t to = millis() + 15000;
-    while (client.connected() && !client.available() && millis() < to) { delay(10); yield(); }
-    // Read status code, then skip headers.
-    int status = 0;
-    bool firstLine = true;
-    while (client.connected() || client.available()) {
-        String line = client.readStringUntil('\n');
-        if (firstLine) {
-            int sp = line.indexOf(' ');            // "HTTP/1.1 200 OK"
-            if (sp > 0) status = line.substring(sp + 1, sp + 4).toInt();
-            firstLine = false;
-        }
-        if (line.length() <= 1) break;   // blank line ends headers
-        if (millis() > to) break;
-    }
-    // 404 = PwnCrack has no potfile for this key yet (nothing cracked / uploaded) —
-    // not an error; report the existing cached count (usually 0).
-    if (status == 404) { client.stop(); loadCache(); return (int)g_cracked.size(); }
-    if (status != 200) { client.stop(); if (err) snprintf(err, errLen, "HTTP %d", status); return -1; }
-
-    // Body -> potfile on SD, and (re)build the cache.
+    // Stream the body straight to SD, (re)building the cache line by line.
     if (!Storage::fs().exists(SDLayout::miscDir())) Storage::fs().mkdir(SDLayout::miscDir());
     File out = Storage::fs().open(potfilePath(), FILE_WRITE);
     g_cracked.clear();
-    while ((client.connected() || client.available()) && millis() < to + 15000) {
-        if (!client.available()) { delay(5); continue; }
-        String line = client.readStringUntil('\n'); line.trim();
+    WiFiClient* stream = https.getStreamPtr();
+    uint32_t to = millis() + 20000;
+    while (https.connected() && millis() < to) {
+        if (!stream->available()) { delay(5); if (!https.connected() && !stream->available()) break; continue; }
+        String line = stream->readStringUntil('\n'); line.trim();
         if (!line.length()) continue;
-        if (out) { out.println(line); }
+        if (out) out.println(line);
         parsePotLine(line);
     }
     if (out) out.close();
     g_crackedLoaded = true;
-    client.stop();
+    https.end();
     return (int)g_cracked.size();
 }
 

@@ -104,6 +104,20 @@ void setup() {
         Serial.println("[DEV] uplink creds overridden from dev_secrets.h");
     }
 #endif
+#if defined(DEV_PWNCRACK_KEY)
+    if (DEV_PWNCRACK_KEY[0]) {
+        strncpy(Config::wifi().pwncrackKey, DEV_PWNCRACK_KEY, sizeof(Config::wifi().pwncrackKey) - 1);
+        Config::wifi().pwncrackKey[sizeof(Config::wifi().pwncrackKey) - 1] = '\0';
+        Serial.println("[DEV] PwnCrack key overridden from dev_secrets.h");
+    }
+#endif
+#if defined(DEV_OHC_KEY)
+    if (DEV_OHC_KEY[0]) {
+        strncpy(Config::wifi().ohcKey, DEV_OHC_KEY, sizeof(Config::wifi().ohcKey) - 1);
+        Config::wifi().ohcKey[sizeof(Config::wifi().ohcKey) - 1] = '\0';
+        Serial.println("[DEV] OHC key overridden from dev_secrets.h");
+    }
+#endif
     const char* ssid = Config::wifi().otaSSID;
     if (ssid && ssid[0]) {
 #if PORK_LED_COUNT > 0
