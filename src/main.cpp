@@ -124,10 +124,9 @@ void setup() {
     // Reboot-to-sync: run the queued upload BEFORE the display inits (WiFi/display
     // GDMA + heap). No on-screen feedback here; result shows on the Status page after.
     if (bootSyncMagic != BOOT_SYNC_MAGIC) strncpy(bootSyncResult, "idle", sizeof(bootSyncResult));
+    bootShowMgmt = 0;   // (boot-to-management-after-sync reverted — SoftAP-at-boot was unstable;
+                        //  boot into CAPTURE as usual, toggle to management to see the result)
     runBootSyncIfQueued();
-    // A sync was requested (this boot or a crashed prior boot) -> land in MANAGEMENT
-    // so the result is visible. RTC flag survives a mid-sync crash.
-    if (bootShowMgmt == BOOT_SYNC_MAGIC) { bootShowMgmt = 0; ModeManager::forceManagementBoot(); }
 
     // Now the display + input + engine (display init no longer disturbs WiFi).
     auto cfg = M5.config();
