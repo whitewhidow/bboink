@@ -5,7 +5,7 @@ Pick the path that matches your board:
 - **[Path A — button board, the simple way](#path-a--button-board-the-simple-way)**
   (T-Embed CC1101 / T-Display C5): flash, set one key, capture, sync from the menu.
   **No relay and no phone** — you just need a free key from one cracking service.
-- **[Path B — relay + phone console](#path-b--relay--phone-console)**: needed **only** if
+- **[Path B — relay + phone portal](#path-b--relay--phone-portal)**: needed **only** if
   you have the button-less **Waveshare**, or you *want* to drive a button board from your
   phone (per-network results + cracked write-back). This is the part with the Render relay.
 
@@ -83,13 +83,13 @@ automatic cracked write-back, add **Path B** on top — it doesn't replace anyth
 
 ---
 
-## Path B — relay + phone console
+## Path B — relay + phone portal
 
 *Required for the **Waveshare** (it has no menu). Optional for button boards.*
 
 Here the board talks to **one** small web service you host (the **relay**), which fans your
 captures out to all three cracking services and merges the results. You drive it from a **web
-page you just open in your phone's browser** (the **BLE console** — nothing to install), which
+page you just open in your phone's browser** (the **BLE portal** — nothing to install), which
 talks to the board over Bluetooth — so the board needs **no WiFi of its own**.
 
 ### B1 · Deploy the relay (once)
@@ -102,7 +102,7 @@ talks to the board over Bluetooth — so the board needs **no WiFi of its own**.
 3. You get a URL like `https://bboink.onrender.com`. Keep it + the token handy.
    Reference: [`relay/README.md`](../relay/README.md).
 
-### B2 · Open the console + connect
+### B2 · Open the portal + connect
 
 You need a **Web Bluetooth browser**: Chrome / Chromium / Edge on **Android or desktop**
 (Linux confirmed). ❌ Not iOS / Safari.
@@ -110,7 +110,7 @@ You need a **Web Bluetooth browser**: Chrome / Chromium / Edge on **Android or d
 1. Put the board in **BLE BRIDGE**:
    - **Waveshare:** **tap** the button (it reboots into the bridge, ~15 s).
    - **Button board:** **MENU → BLE BRIDGE**.
-   - The screen shows the board name `BBoink-XXXX`, the console URL to open, and the relay
+   - The screen shows the board name `BBoink-XXXX`, the portal URL to open, and the relay
      URL — on every board (not just the Waveshare).
 2. Open **https://whitewhidow.github.io/bboink/bridge/**, tap **Connect to board**, pick
    `BBoink-XXXX`. You get three tabs: **Config**, **Captures**, **Sync**.
@@ -130,6 +130,10 @@ they're written to the device. (These are the same settings a button board can a
 3. Cracked passwords land on the **Captures** tab and on-device (with a join QR). Already-
    synced captures are skipped — tick **re-sync everything** to force.
 
+> **Prefer to crack it yourself?** Hit **Download hashes (.hc22000)** in the Sync tab — it pulls
+> every hash off the board over Bluetooth into one `bboink.hc22000` file, no relay or account.
+> Then run `hashcat -m 22000 bboink.hc22000 <wordlist>` on your own machine.
+
 The **Captures** tab also lets you view, delete, and **exclude** a network by SSID
 (never-attack).
 
@@ -143,11 +147,11 @@ Whichever path you use, these are the settings and when each is needed:
 |---|---|
 | **wpa-sec / OHC / PwnCrack key** (≥1) | cracking — both paths |
 | **WiFi SSID / pass** | **Path A only** (the board's own upload) |
-| **Relay URL + token** | **Path B only** (relay/console sync) |
+| **Relay URL + token** | **Path B only** (relay/portal sync) |
 | capture tuning (Ch Hop, Deauth, PMKID, Atk RSSI, Max Tries) | capture behaviour |
 
 Settings live **on the device** and are read back by whatever UI you use (button
-**Options** or the console **Config** tab).
+**Options** or the portal **Config** tab).
 
 ---
 
@@ -156,7 +160,7 @@ Settings live **on the device** and are read back by whatever UI you use (button
 | Symptom | Fix |
 |---|---|
 | C5 board won't flash / bad image | Use **esptool 5.x**; run `esptool erase_flash` once before the first flash. |
-| Console won't connect / no chooser | Needs a Web Bluetooth browser (Chrome/Edge, **not** iOS/Safari), and the board must be **in BLE BRIDGE**. |
+| Portal won't connect / no chooser | Needs a Web Bluetooth browser (Chrome/Edge, **not** iOS/Safari), and the board must be **in BLE BRIDGE**. |
 | Board name not in the chooser | Board must be in BLE BRIDGE (Waveshare: tap; button board: menu → BLE BRIDGE). Only one phone can connect at a time. |
 | `relay (not set)` in red | Set **Relay URL** (Path B only). Path A ignores it. |
 | Relay sync says unreachable | Hit **Check / wake relay**, wait ~30–50 s for Render to wake, retry. |

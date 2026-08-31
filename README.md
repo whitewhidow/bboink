@@ -12,9 +12,9 @@ Supported boards (one codebase, one build env each):
 
 | Board | Chip | Buttons | How you manage it |
 |---|---|---|---|
-| **LilyGo T-Embed CC1101 / PLUS** | ESP32-S3 | encoder + side | **on-device MENU** (buttons) — *or* the BLE console |
-| **LilyGo T-Display C5** | ESP32-C5 (dual-band) | 2 | **on-device MENU** (buttons) — *or* the BLE console |
-| **Waveshare ESP32-C5-LCD-1.47** | ESP32-C5 (dual-band) | **1** | **BLE console only** (no menu, no AP) |
+| **LilyGo T-Embed CC1101 / PLUS** | ESP32-S3 | encoder + side | **on-device MENU** (buttons) — *or* the BLE portal |
+| **LilyGo T-Display C5** | ESP32-C5 (dual-band) | 2 | **on-device MENU** (buttons) — *or* the BLE portal |
+| **Waveshare ESP32-C5-LCD-1.47** | ESP32-C5 (dual-band) | **1** | **BLE portal only** (no menu, no AP) |
 
 > **No board runs a WiFi access point or web server** — that whole stack is compiled
 > out. You manage the device one of two ways: with its **buttons + on-screen menu**
@@ -62,7 +62,7 @@ _buttons + on-device menu (or BLE)_
 
 **Waveshare ESP32-C5-LCD-1.47**<br>
 ESP32-C5 (dual-band) · **1 button**<br>
-_BLE console only (no menu, no AP)_
+_BLE portal only (no menu, no AP)_
 
 [Buy](https://www.waveshare.com/esp32-c5-lcd-1.47.htm) ·
 [Docs](https://docs.waveshare.com/ESP32-C5-LCD-1.47) ·
@@ -79,25 +79,27 @@ _BLE console only (no menu, no AP)_
 `CAPTURE` · `CAPTURE TARGETED` · `BLE BRIDGE` · `WPASEC / OHC / PWNCRACK SYNC` (direct
 upload over the *board's own* WiFi) · `CAPTURES` · `STATS` · `OPTIONS` (edit all config
 with the buttons) · `REBOOT` / `POWER OFF`. Choose **BLE BRIDGE** to hand off to the
-phone console instead of using WiFi.
+phone portal instead of using WiFi.
 
 **BLE-only board (Waveshare).** One button: **tap** = CAPTURE ⇄ **BLE BRIDGE** (it
 reboots into bridge, ~15 s), **hold ~3 s** = power off. All config + sync are done in the
-phone console.
+phone portal.
 
-**The BLE console** — the web page (nothing to install) that is the *entire* UI on the Waveshare and an
+**The BLE portal** — the web page (nothing to install) that is the *entire* UI on the Waveshare and an
 option on the others. Needs a **Web Bluetooth** browser — Chrome/Chromium/Edge on **Android or desktop** (Linux confirmed; Windows/macOS should work). **Not** iOS/Safari. Open
 **https://whitewhidow.github.io/bboink/bridge/**, tap **Connect to board**, pick
 `BBoink-XXXX`. Three tabs:
 - **Config** — all device settings (below).
 - **Captures** — the registry: view captures, see **cracked passwords**, **delete** a
   capture, and **exclude** a network by SSID (never-attack).
-- **Sync** — **Check / wake relay**, then **Sync captures ↔ relay** (per-network results).
+- **Sync** — **Check / wake relay**, then **Sync captures ↔ relay** (per-network results). Or
+  **Download hashes (.hc22000)** to crack them yourself offline (`hashcat -m 22000`) — no relay,
+  no account.
 
 ## Configuration — what you must set
 
 Set these **once**. They live on the **device** (the single source of truth) and are read
-back by whichever UI you use — buttons **Options** *or* the BLE console **Config** tab.
+back by whichever UI you use — buttons **Options** *or* the BLE portal **Config** tab.
 
 | Setting | Value | Needed for |
 |---|---|---|
@@ -109,7 +111,7 @@ back by whichever UI you use — buttons **Options** *or* the BLE console **Conf
 | **WiFi SSID / pass** | a network the *board itself* can join | **only** for the direct menu sync |
 | capture tuning | Ch Hop, Deauth, PMKID, Atk RSSI, Max Tries, … | capture behaviour |
 
-The three **service keys are stored only on the device**; the BLE console passes them to
+The three **service keys are stored only on the device**; the BLE portal passes them to
 the relay per-sync (an `X-Keys` header), so the relay's own env-var keys are just an
 optional fallback. **WiFi creds are needed only for a button board's *direct* sync** — the
 relay path uses your *phone's* connection, so the board needs no WiFi for it.
@@ -143,8 +145,8 @@ env fallbacks. You get a URL like `https://bboink.onrender.com`. Endpoint refere
 Set **Relay URL**, **Relay token**, and the **three service keys** (table above).
 
 ### 3 · Sync
-- **BLE console (any board):** enter **BLE BRIDGE** (Waveshare: tap; T-Embed/T-Display:
-  menu → *BLE BRIDGE*) → on the phone open the console URL → **Connect** → **Sync** tab →
+- **BLE portal (any board):** enter **BLE BRIDGE** (Waveshare: tap; T-Embed/T-Display:
+  menu → *BLE BRIDGE*) → on the phone open the portal URL → **Connect** → **Sync** tab →
   **Check / wake relay** → **Sync captures ↔ relay**. Results print **per network**
   (OHC / PwnCrack / wpa-sec). Cracked passwords are written back to the board and shown
   on **Captures**. Already-synced captures are skipped (`nothing new to upload`); tick
@@ -154,7 +156,7 @@ Set **Relay URL**, **Relay token**, and the **three service keys** (table above)
 
 ### Notes
 - Render free tier **sleeps after ~15 min idle** → the first request wakes it (~30–50 s);
-  the console's **Check / wake relay** button pre-warms it.
+  the portal's **Check / wake relay** button pre-warms it.
 - wpa-sec **accepts duplicate** uploads, so the board tracks what it has synced and sends
   only new captures. OHC / PwnCrack dedup server-side.
 - A network cracked by multiple services shows all of them (`wpa-sec+pwncrack`).
@@ -180,7 +182,7 @@ internal storage) · connected WiFi SSID (green) · battery %. The version
   ones, and ignores the Max-Tries give-up); the Capture header shows `TGT <ssid>`.
   Back to exit; the normal CAPTURE item clears the lock.
 - **BLE BRIDGE** — hand off to the phone: the board becomes a BLE peripheral (WiFi off)
-  and the **BLE console** does all config + relay sync. Back / tap returns to capture.
+  and the **BLE portal** does all config + relay sync. Back / tap returns to capture.
 - **WPASEC SYNC** — lists `.pcap` captures with status tags (`CRK`/`UP`/`-`),
   counts, and free storage. **SYNC** connects WiFi STA, **bulk-uploads** pending
   captures, and downloads the cracked potfile (with optional *Purge Crk*, below).
@@ -296,7 +298,7 @@ reflashed over USB.
 
 Text fields (SSID / passwords / keys) use the same on-screen **char-picker**: up/down change the
 character, select confirms it, back deletes. (On the button-less Waveshare there's no on-device
-input — do all config from the [BLE console](https://whitewhidow.github.io/bboink/bridge/).)
+input — do all config from the [BLE portal](https://whitewhidow.github.io/bboink/bridge/).)
 
 ## Capture files
 Each capture's type is in its filename so the two upload paths stay separate and

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>BBoink Console</title>
+<title>BBoink Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -46,7 +46,7 @@
   </nav>
 </div></header>
 <div class="page">
-<h1>Console</h1>
+<h1>Portal</h1>
 <div class="sub">Chrome/Edge (Android or desktop) · manage everything over Bluetooth — the board needs no WiFi.</div>
 <button id="connect" class="sec wide">Connect to board</button>
 <div id="cstat" class="sub" style="margin-top:8px"></div>
@@ -134,7 +134,7 @@ $('connect').onclick=async()=>{
 
 // ---------- Config ----------
 const STR=[['wifi_ssid','WiFi SSID (for board direct sync)'],['wifi_pass','WiFi password'],
- ['relay_url','Relay URL'],['relay_token','Relay token'],['app_url','BLE console URL (this page)'],
+ ['relay_url','Relay URL'],['relay_token','Relay token'],['app_url','BLE portal URL (this page)'],
  ['wpa_key','wpa-sec key'],['ohc_key','OnlineHashCrack key'],['pwn_key','PwnCrack key'],
  ['ap_ssid','BLE name (blank = BBoink-XXXX)']];
 const NUM=[['ch_hop_ms','Channel hop (ms)'],['atk_rssi','Min attack RSSI (dBm)'],['max_tries','Max tries'],['burst','Deauth burst'],['brightness','Brightness (10-255)']];
