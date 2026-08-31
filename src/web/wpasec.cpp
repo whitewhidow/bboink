@@ -471,7 +471,7 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     return true;
 }
 
-WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
+WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb, bool doDownload) {
     WPASecSyncResult result = {};
     result.success = false;
     result.error[0] = '\0';
@@ -678,9 +678,15 @@ WPASecSyncResult WPASec::syncCaptures(WPASecProgressCallback cb) {
     uint16_t newCracks = 0;
     bool potfileOk = false;
     
-    // Attempt potfile if heap is sufficient - no reconditioning, graceful skip if low
-    // wpa-sec potfile is plain HTTP now — always attempt (no TLS contiguous gate).
-    potfileOk = downloadPotfile(newCracks);
+    // The potfile download is a SECOND TLS handshake; on the C5 that must run in its
+    // own boot (SYNC_WPA_CHK), so upload-only callers pass doDownload=false.
+    potfileOk = doDownload ? downloadPotfile(newCracks) : false;
+    if (!doDownload) {
+        result.success = (result.failed == 0);
+        if (wasReconRunning) NetworkRecon::resume();
+        busy = false;
+        return result;
+    }
     if (potfileOk) {
         result.newCracked = newCracks;
         loadCache();

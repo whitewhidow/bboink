@@ -25,66 +25,88 @@
 #include "version.h"
 
 RTC_NOINIT_ATTR uint32_t bootSyncMagic;
-RTC_NOINIT_ATTR int      bootSyncReq;
+RTC_NOINIT_ATTR uint32_t bootSyncQueue;
 RTC_NOINIT_ATTR char     bootSyncResult[96];
 RTC_NOINIT_ATTR uint32_t bootShowMgmt;
 
-// Run a queued sync early in boot (clean heap). STA is already associated above.
+// Append a short segment to the accumulated bootSyncResult (space-separated, bounded).
+static void appendSyncSeg(const char* seg) {
+    size_t len = strlen(bootSyncResult);
+    if (len && len < sizeof(bootSyncResult) - 1) bootSyncResult[len++] = ' ';
+    strncpy(bootSyncResult + len, seg, sizeof(bootSyncResult) - 1 - len);
+    bootSyncResult[sizeof(bootSyncResult) - 1] = 0;
+}
+
+// PwnCrack upload = one handshake per .22000 file. Collect basenames and CLOSE the
+// directory first so no FS handles are held during the heap-hungry TLS handshake.
+static void pwnUploadAll(char* seg, size_t segLen) {
+    int files = 0, hashes = 0; char uperr[48] = {0};
+    std::vector<String> names;
+    {
+        File d = Storage::fs().open(SDLayout::handshakesDir());
+        if (d && d.isDirectory()) {
+            for (File f = d.openNextFile(); f; f = d.openNextFile()) {
+                if (!f.isDirectory()) {
+                    const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
+                    size_t L = strlen(n);
+                    if (L > 6 && strcmp(n + L - 6, ".22000") == 0) names.push_back(n);
+                }
+                f.close();
+            }
+            d.close();
+        }
+    }
+    for (auto& nm : names) {
+        PwnCrack::UploadResult r = PwnCrack::uploadFile(nm.c_str());
+        if (r.success) { files++; hashes += r.hashes; }
+        else if (!uperr[0]) strncpy(uperr, r.error, sizeof(uperr) - 1);
+    }
+    snprintf(seg, segLen, "pwnUp%d %s", files, uperr);
+}
+
+// Run ONE queued sync op early in boot (clean heap, one TLS handshake). If more ops
+// remain in the queue, reboot to run the next at clean heap (chained). Returns true
+// on the final op (so the caller shows the accumulated result on the splash).
 static bool runBootSyncIfQueued() {
-    if (bootSyncMagic != BOOT_SYNC_MAGIC || bootSyncReq == 0) return false;
-    int svc = bootSyncReq;
-    bootSyncReq = 0;   // consume the request (keep magic until result is written, so a crash still shows a result)
+    if (bootSyncMagic != BOOT_SYNC_MAGIC || bootSyncQueue == 0) return false;
 
-    delay(3000);   // DEBUG: let USB CDC re-enumerate so the serial logger catches the heap prints below
-    Serial.printf("[SYNC] start svc=%d maxAlloc=%u free=%u\n",
-                  svc, (unsigned)ESP.getMaxAllocHeap(), (unsigned)ESP.getFreeHeap());
-
+    uint32_t op = bootSyncQueue & (uint32_t)(-(int32_t)bootSyncQueue);  // lowest set bit
+    bootSyncQueue &= ~op;                                               // consume it
 
     if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
+
+    char seg[64] = {0};
     if (WiFi.status() != WL_CONNECTED) {
-        snprintf(bootSyncResult, sizeof(bootSyncResult), "ERR: no uplink at boot");
-        return true;
-    }
-    if (svc == 1) {
-        WPASecSyncResult r = WPASec::syncCaptures();
-        if (r.success) snprintf(bootSyncResult, sizeof(bootSyncResult),
-                                "wpa-sec: up %u skip %u crk %u(+%u)", r.uploaded, r.skipped, r.cracked, r.newCracked);
-        else           snprintf(bootSyncResult, sizeof(bootSyncResult), "wpa-sec ERR: %.55s", WPASec::getLastError());
-    } else if (svc == 2) {
+        strncpy(seg, "uplink?", sizeof(seg) - 1);
+    } else if (op == SYNC_WPA_UP) {
+        WPASecSyncResult r = WPASec::syncCaptures(nullptr, /*doDownload=*/false);
+        if (r.success) snprintf(seg, sizeof(seg), "wpaUp%u sk%u", r.uploaded, r.skipped);
+        else           snprintf(seg, sizeof(seg), "wpaUp ERR:%.40s", WPASec::getLastError());
+    } else if (op == SYNC_OHC_UP) {
         OHC::UploadResult r = OHC::uploadHashes();
-        snprintf(bootSyncResult, sizeof(bootSyncResult), "OHC: acc %u skip %u rej %u %s",
-                 r.accepted, r.skipped, r.rejected, r.success ? "OK" : r.error);
-    } else {
-        int files = 0, hashes = 0;
-        char uperr[48] = {0};
-        // Collect the .22000 basenames first and CLOSE the directory, so no FS
-        // handles are held during the (heap-hungry) TLS handshake in uploadFile.
-        std::vector<String> names;
-        {
-            File d = Storage::fs().open(SDLayout::handshakesDir());
-            if (d && d.isDirectory()) {
-                for (File f = d.openNextFile(); f; f = d.openNextFile()) {
-                    if (!f.isDirectory()) {
-                        const char* n = f.name(); const char* sl = strrchr(n, '/'); if (sl) n = sl + 1;
-                        size_t L = strlen(n);
-                        if (L > 6 && strcmp(n + L - 6, ".22000") == 0) names.push_back(n);
-                    }
-                    f.close();
-                }
-                d.close();
-            }
-        }
-        for (auto& nm : names) {
-            PwnCrack::UploadResult r = PwnCrack::uploadFile(nm.c_str());
-            if (r.success) { files++; hashes += r.hashes; }
-            else if (!uperr[0]) strncpy(uperr, r.error, sizeof(uperr) - 1);
-        }
+        if (r.success) snprintf(seg, sizeof(seg), "ohcUp%u sk%u", r.accepted, r.skipped);
+        else           snprintf(seg, sizeof(seg), "ohcUp ERR:%.40s", r.error);
+    } else if (op == SYNC_PWN_UP) {
+        pwnUploadAll(seg, sizeof(seg));
+    } else if (op == SYNC_WPA_CHK) {
+        uint16_t nc = 0;
+        if (WPASec::downloadPotfile(nc)) snprintf(seg, sizeof(seg), "wpaCrk+%u", nc);
+        else                             snprintf(seg, sizeof(seg), "wpaCrk ERR:%.38s", WPASec::getLastError());
+    } else if (op == SYNC_PWN_CHK) {
         char err[48] = {0};
-        int cracked = PwnCrack::syncPotfile(err, sizeof(err));
-        snprintf(bootSyncResult, sizeof(bootSyncResult), "PWN f%d h%d crk%d %s%s",
-                 files, hashes, cracked, uperr[0] ? uperr : "", (cracked < 0) ? err : "");
+        int c = PwnCrack::syncPotfile(err, sizeof(err));
+        if (c >= 0) snprintf(seg, sizeof(seg), "pwnCrk%d", c);
+        else        snprintf(seg, sizeof(seg), "pwnCrk ERR:%.38s", err);
     }
-    return true;
+    appendSyncSeg(seg);
+    Serial.printf("[SYNC] op=0x%x done -> %s | queue left=0x%x\n",
+                  (unsigned)op, seg, (unsigned)bootSyncQueue);
+
+    if (bootSyncQueue != 0) {
+        delay(200);
+        ESP.restart();   // run the next op at clean heap (does not return)
+    }
+    return true;   // last op — show the accumulated result on the splash
 }
 
 void setup() {

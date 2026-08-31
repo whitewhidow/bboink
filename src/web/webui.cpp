@@ -96,7 +96,7 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div id="sync" hidden><div class="card">
 <h3>Upload captures to crack services</h3>
 <small>Uses the STA uplink. May take a moment while it uploads &amp; fetches results.</small>
-<div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
+<div class="srow"><span><b>All services</b></span><button class="sbtn" onclick="doSync('all',this)">Sync All</button><button class="sbtn" onclick="doSync('checkcracked',this)">Check Cracked</button><span class="sres" id="r_all"></span><span class="sres" id="r_checkcracked"></span></div><div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
 <div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
 <div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
 </div></div>
@@ -327,6 +327,29 @@ static void syncPwncrack() {
     server.send(200, "application/json", "{\"rebooting\":true}");
     requestBootSync(3);
 }
+static void syncAll() {
+    noKeepAlive();
+    if (WiFi.status() != WL_CONNECTED) { server.send(400, "application/json", "{\"error\":\"no uplink\"}"); return; }
+    // Queue an upload for every service that has a key; run one per boot (chained reboots).
+    uint32_t q = 0;
+    if (WPASec::hasApiKey())   q |= SYNC_WPA_UP;
+    if (OHC::hasApiKey())      q |= SYNC_OHC_UP;
+    if (PwnCrack::hasApiKey()) q |= SYNC_PWN_UP;
+    if (!q) { server.send(400, "application/json", "{\"error\":\"no keys set\"}"); return; }
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestSyncQueue(q);
+}
+static void syncCheckCracked() {
+    noKeepAlive();
+    if (WiFi.status() != WL_CONNECTED) { server.send(400, "application/json", "{\"error\":\"no uplink\"}"); return; }
+    // Fetch cracked results (potfiles) for services that expose them; one handshake per boot.
+    uint32_t q = 0;
+    if (WPASec::hasApiKey())   q |= SYNC_WPA_CHK;
+    if (PwnCrack::hasApiKey()) q |= SYNC_PWN_CHK;
+    if (!q) { server.send(400, "application/json", "{\"error\":\"no keys set\"}"); return; }
+    server.send(200, "application/json", "{\"rebooting\":true}");
+    requestSyncQueue(q);
+}
 static void sendSyncStatus() {
     noKeepAlive();
     char b[128];
@@ -466,6 +489,8 @@ void begin() {
     server.on("/api/sync/wpasec",   HTTP_POST, syncWpasec);
     server.on("/api/sync/ohc",      HTTP_POST, syncOhc);
     server.on("/api/sync/pwncrack", HTTP_POST, syncPwncrack);
+    server.on("/api/sync/all",      HTTP_POST, syncAll);
+    server.on("/api/sync/checkcracked", HTTP_POST, syncCheckCracked);
     server.on("/api/sync/status",   HTTP_GET,  sendSyncStatus);
     server.on("/api/capture_file", HTTP_GET, serveCaptureFile);
     server.on("/api/files", HTTP_GET, listFiles);

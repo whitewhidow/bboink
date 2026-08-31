@@ -51,7 +51,8 @@ public:
     // Network operations (require WiFi + sufficient heap)
     static bool hasApiKey();                         // Check if WPA-SEC key configured
     static bool canSync();                           // Check heap requirements (~35KB)
-    static WPASecSyncResult syncCaptures(WPASecProgressCallback cb = nullptr);  // Full sync
+    static WPASecSyncResult syncCaptures(WPASecProgressCallback cb = nullptr, bool doDownload = true);  // upload (+potfile if doDownload)
+    static bool downloadPotfile(uint16_t& newCracks);   // download potfile only (its own TLS handshake / boot)
 
     // Delete local .pcap/.22000 files whose BSSID is already cracked (the password
     // stays available from the potfile cache). Returns the number of files removed.
@@ -98,5 +99,4 @@ public:
 
     // Network helpers (internal)
     static bool uploadSingleCapture(const char* filepath, const char* bssid);
-    static bool downloadPotfile(uint16_t& newCracks);
 };
