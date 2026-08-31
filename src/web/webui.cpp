@@ -99,9 +99,6 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <div class="srow"><span>wpa-sec</span><button class="sbtn" onclick="doSync('wpasec',this)">Upload</button><span class="sres" id="r_wpasec"></span></div>
 <div class="srow"><span>OnlineHashCrack</span><button class="sbtn" onclick="doSync('ohc',this)">Upload</button><span class="sres" id="r_ohc"></span></div>
 <div class="srow"><span>PwnCrack</span><button class="sbtn" onclick="doSync('pwncrack',this)">Upload</button><span class="sres" id="r_pwncrack"></span></div>
-<h3>Or download to upload manually</h3>
-<small>Save a capture to this device, then upload it at the service's own site over a normal connection.</small>
-<div id="fileList"></div>
 </div></div>
 
 <div id="caps" hidden><div class="card">
@@ -109,6 +106,9 @@ h3{margin:14px 0 2px;color:#2dd4bf;font-size:14px}
 <h3 style="margin:0">Capture registry</h3><button class="sbtn" style="width:auto;margin:0" onclick="loadCaps()">Refresh</button></div>
 <small>C captured · M manual · W/O/P uploaded (wpa-sec/OHC/PwnCrack) · K cracked</small>
 <div id="capsList"></div>
+<h3>Download capture files</h3>
+<small>Save a file to this device, then upload it at the service's own site over normal internet.</small>
+<div id="fileList"></div>
 </div></div>
 </div>
 <script>
@@ -116,7 +116,7 @@ const NUM=['ch_hop_ms','lock_ms','atk_rssi','max_tries','burst','jitter','idle_r
 const BOOL=['ntfy_attach','deauth','rnd_mac','cracked_fallback','auto_purge','sound','pmkid'];
 const SEC=['wifi_pass','wpa_key','ohc_key','pwn_key'];
 function show(w){for(const x of ['status','config','sync','caps']){document.getElementById(x).hidden=(x!=w);
- document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps')loadCaps();if(w=='sync')loadFiles();}
+ document.getElementById('t_'+x).classList.toggle('on',x==w);}if(w=='config')loadCfg();if(w=='caps'){loadCaps();loadFiles();}}
 async function st(){try{const d=await (await fetch('/api/status')).json();
  const sta=d.sta.connected?`<span class="on2">${d.sta.ssid} (${d.sta.ip})</span>`:'<span class="off2">not connected</span>';
  document.getElementById('statusCard').innerHTML=
