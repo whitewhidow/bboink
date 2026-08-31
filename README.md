@@ -4,6 +4,10 @@ Minimal WiFi **handshake / PMKID capture** firmware. It channel-hops, deauths el
 APs, captures EAPOL 4-way handshakes + PMKIDs, and gets them cracked in the cloud
 (wpa-sec / OnlineHashCrack / PwnCrack) — then shows the recovered password + a join QR.
 
+### 👉 [**Getting-started guide →**](docs/GETTING-STARTED.md)
+Step-by-step setup. Have a button board and just want it working? It's a 4-step path with
+no relay and no phone.
+
 Supported boards (one codebase, one build env each):
 
 | Board | Chip | Buttons | How you manage it |
@@ -19,9 +23,6 @@ Supported boards (one codebase, one build env each):
 
 > ⚠️ Deauth frames are transmitted to force handshakes. Use only on networks you own or
 > are explicitly authorized to test.
-
-> 🚀 **New here? Start with the [Getting-started guide](docs/GETTING-STARTED.md)** — a
-> step-by-step setup walkthrough split by device type (buttons+BLE vs BLE-only).
 
 ## Supported hardware
 
