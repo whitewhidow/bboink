@@ -15,6 +15,7 @@ namespace ModeManager {
 // Start in MANAGEMENT so enterManagement()'s "leaving capture" work is skipped
 // on a cold boot (the engine has never run yet).
 static Mode mode_ = Mode::MANAGEMENT;
+static bool s_forceManagement = false;
 
 Mode        current()     { return mode_; }
 bool        inCapture()   { return mode_ == Mode::CAPTURE; }
@@ -136,7 +137,10 @@ void toggle() {
 }
 
 // Resolve the boot mode from the persisted policy, then enter it.
+void forceManagementBoot() { s_forceManagement = true; }
+
 void begin() {
+    if (s_forceManagement) { s_forceManagement = false; enterManagement(); return; }
     uint8_t policy = Config::wifi().bootModePolicy;   // 0=auto, 1=capture, 2=management
     bool goCapture;
     switch (policy) {

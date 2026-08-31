@@ -22,6 +22,7 @@ enum class Mode : uint8_t { CAPTURE, MANAGEMENT };
 // Decide the boot mode from config policy (auto/capture/management) and enter it.
 // Called once from App::begin() in place of the old go(MENU).
 void begin();
+void forceManagementBoot();   // next begin() enters MANAGEMENT (e.g. after a reboot-sync)
 
 Mode        current();
 const char* currentName();      // "CAPTURE" / "MANAGEMENT"

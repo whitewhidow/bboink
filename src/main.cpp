@@ -20,6 +20,7 @@
 #include "core/network_recon.h"
 #include "modes/oink.h"
 #include "app/app.h"
+#include "core/mode_manager.h"
 #include "version.h"
 
 RTC_NOINIT_ATTR uint32_t bootSyncMagic;
@@ -30,7 +31,7 @@ RTC_NOINIT_ATTR char     bootSyncResult[96];
 static void runBootSyncIfQueued() {
     if (bootSyncMagic != BOOT_SYNC_MAGIC || bootSyncReq == 0) return;
     int svc = bootSyncReq;
-    bootSyncMagic = 0; bootSyncReq = 0;   // consume (don't loop on the next reboot)
+    bootSyncReq = 0;   // consume the request (keep magic until result is written, so a crash still shows a result)
 
 
     if (WiFi.status() != WL_CONNECTED) NetLink::connectConfigured();
@@ -68,7 +69,9 @@ static void runBootSyncIfQueued() {
         int cracked = PwnCrack::syncPotfile(err, sizeof(err));
         snprintf(bootSyncResult, sizeof(bootSyncResult), "PwnCrack: files %d hash %d crk %d", files, hashes, cracked);
     }
-
+    // A sync ran — land in MANAGEMENT so the result is immediately visible on the
+    // connect screen / Status page (no need to re-toggle from capture).
+    ModeManager::forceManagementBoot();
 }
 
 void setup() {
