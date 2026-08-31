@@ -110,6 +110,7 @@ struct WiFiConfig {
     char pwncrackKey[40];               // PwnCrack.org key (UUID)
     char relayUrl[96] = "";             // bboink relay base URL (https://...); "" = off, use direct per-service sync
     char relayToken[64] = "";           // Bearer token the relay expects
+    char appUrl[96] = "";               // BLE console web-app URL (shown on the bridge screen)
     char wigleApiName[65];              // WiGLE API Name (from wigle.net/account)
     char wigleApiToken[65];             // WiGLE API Token (from wigle.net/account)
     char ntfyTopic[64] = "capture_alert"; // ntfy.sh topic for capture alerts ("" = off)

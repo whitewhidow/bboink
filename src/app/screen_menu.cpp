@@ -17,7 +17,7 @@
 
 namespace ScreenMenu {
 
-static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "WPASEC SYNC", "OHC SYNC",
+static const char* kItems[] = { "CAPTURE", "CAPTURE TARGETED", "BLE BRIDGE", "WPASEC SYNC", "OHC SYNC",
                                 "PWNCRACK SYNC", "CAPTURES", "STATS", "OPTIONS", "CONFIG AP",
                                 "REBOOT", "POWER OFF" };
 static constexpr int kCount = sizeof(kItems) / sizeof(kItems[0]);
@@ -355,15 +355,16 @@ void tick(const App::Input& in) {
         switch (sel) {
             case 0: ModeManager::enterCapture(); return;   // clears lock, marks ready
             case 1: captureTargetedFlow();          return;
-            case 2: App::go(App::Screen::MANAGE);   return;
-            case 3: App::go(App::Screen::OHC);      return;
-            case 4: App::go(App::Screen::PWNCRACK); return;
-            case 5: capturesFlow();                 return;
-            case 6: statsFlow();                    return;
-            case 7: App::go(App::Screen::OPTIONS);  return;
-            case 8: App::go(App::Screen::CONFIGAP); return;
-            case 9: reboot();                       return;
-            case 10: powerOff();                    return;
+            case 2: ModeManager::enterBleBridge();  return;   // BLE console (phone) — tears down AP
+            case 3: App::go(App::Screen::MANAGE);   return;
+            case 4: App::go(App::Screen::OHC);      return;
+            case 5: App::go(App::Screen::PWNCRACK); return;
+            case 6: capturesFlow();                 return;
+            case 7: statsFlow();                    return;
+            case 8: App::go(App::Screen::OPTIONS);  return;
+            case 9: App::go(App::Screen::CONFIGAP); return;
+            case 10: reboot();                      return;
+            case 11: powerOff();                    return;
         }
     }
     if (dirty) { draw(); dirty = false; }

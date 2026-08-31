@@ -202,6 +202,7 @@ static String buildCfgJson() {
     o += ",\"pwn_key\":"     + jsonQuote(w.pwncrackKey);
     o += ",\"relay_url\":"   + jsonQuote(w.relayUrl);
     o += ",\"relay_token\":" + jsonQuote(w.relayToken);
+    o += ",\"app_url\":"     + jsonQuote(w.appUrl);
     o += ",\"ntfy_topic\":"  + jsonQuote(w.ntfyTopic);
     o += ",\"ap_ssid\":"     + jsonQuote(w.apSSID);
     o += ",\"ch_hop_ms\":"   + String(w.channelHopInterval);
@@ -227,6 +228,7 @@ static void setCfgField(const char* k, const char* v) {
     else if (!strcmp(k, "pwn_key"))     S(w.pwncrackKey, sizeof(w.pwncrackKey));
     else if (!strcmp(k, "relay_url"))   S(w.relayUrl, sizeof(w.relayUrl));
     else if (!strcmp(k, "relay_token")) S(w.relayToken, sizeof(w.relayToken));
+    else if (!strcmp(k, "app_url"))     S(w.appUrl, sizeof(w.appUrl));
     else if (!strcmp(k, "ntfy_topic"))  S(w.ntfyTopic, sizeof(w.ntfyTopic));
     else if (!strcmp(k, "ap_ssid"))     S(w.apSSID, sizeof(w.apSSID));
     else if (!strcmp(k, "ch_hop_ms"))   w.channelHopInterval = atoi(v);

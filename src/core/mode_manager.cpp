@@ -127,8 +127,9 @@ void enterManagement() {
 #endif
 
 void enterBleBridge() {
-    // Bridge is BLE-only: WiFi fully off so NimBLE has the radio + heap. Called at
-    // boot (forceBleBridge) where the BT-controller RAM is retained.
+    // Bridge is BLE-only: WiFi fully off so NimBLE has the radio + heap. Reached at
+    // boot (forceBleBridge) or live from the menu (multi-button boards).
+    if (OinkMode::isRunning()) { OinkMode::stop(); esp_wifi_set_promiscuous(false); }
 #if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
     if (apUp) { WebUI::stop(); WiFi.softAPdisconnect(true); apUp = false; }
 #endif

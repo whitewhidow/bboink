@@ -11,6 +11,9 @@
 
 namespace ScreenBleBridge {
 
+// Fixed public BLE-console app (GitHub Pages) — same for everyone; overridable via appUrl.
+static const char* CONSOLE_URL = "https://whitewhidow.github.io/bboink/bridge/";
+
 static bool     pConn = false;
 static uint16_t pFiles = 0xFFFF, pCrk = 0xFFFF;
 
@@ -26,16 +29,16 @@ static void draw() {
     char l[40]; snprintf(l, sizeof(l), "files %u   cracked %u", BleBridge::filesSent(), BleBridge::crackedIn());
     M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
     M5.Display.drawString(l, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 34);
-    // Relay the phone app should target (board doesn't use it in bridge mode — shown for reference).
+    // What the phone needs: the app URL to open, and the relay it targets.
+    const char* au = Config::wifi().appUrl[0] ? Config::wifi().appUrl : CONSOLE_URL;
+    char al[128]; snprintf(al, sizeof(al), "app: %s", au);
+    M5.Display.setTextColor(0x5AEB, TFT_BLACK);
+    M5.Display.drawString(al, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 48);
     const char* ru = Config::wifi().relayUrl;
-    if (ru[0]) {
-        char rl[112]; snprintf(rl, sizeof(rl), "relay: %s", ru);
-        M5.Display.setTextColor(0x5AEB, TFT_BLACK);   // light blue-grey
-        M5.Display.drawString(rl, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 50);
-    } else {
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.drawString("missing relay url", PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 50);
-    }
+    char rl[128];
+    if (ru[0]) { snprintf(rl, sizeof(rl), "relay: %s", ru); M5.Display.setTextColor(0x5AEB, TFT_BLACK); }
+    else       { snprintf(rl, sizeof(rl), "relay url not set (Config)"); M5.Display.setTextColor(TFT_RED, TFT_BLACK); }
+    M5.Display.drawString(rl, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 62);
     App::footer("tap: exit to capture");
 }
 

@@ -126,6 +126,8 @@ struct __attribute__((packed)) ConfigBlob {
     // v4 fields (appended; old/shorter blobs read these as empty).
     char     relayUrl[96];        // empty (old blob) -> relay off
     char     relayToken[64];
+    // v5 field (appended; old blobs read empty).
+    char     appUrl[96];
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -164,6 +166,7 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     b.captureReady         = wifi.captureReady ? 1 : 0;
     strncpy(b.relayUrl,   wifi.relayUrl,   sizeof(b.relayUrl) - 1);
     strncpy(b.relayToken, wifi.relayToken, sizeof(b.relayToken) - 1);
+    strncpy(b.appUrl,     wifi.appUrl,     sizeof(b.appUrl) - 1);
     b.pmkidCapture         = wifi.pmkidEnabled ? 1 : 2;
     strncpy(b.apSSID, wifi.apSSID, sizeof(b.apSSID) - 1);
     b.displayBrightness    = wifi.displayBrightness;
@@ -263,6 +266,7 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     wifi.captureReady         = b.captureReady != 0;       // 0 = old blob -> false
     strncpy(wifi.relayUrl,   b.relayUrl,   sizeof(wifi.relayUrl) - 1);   wifi.relayUrl[sizeof(wifi.relayUrl) - 1] = 0;
     strncpy(wifi.relayToken, b.relayToken, sizeof(wifi.relayToken) - 1); wifi.relayToken[sizeof(wifi.relayToken) - 1] = 0;
+    strncpy(wifi.appUrl,     b.appUrl,     sizeof(wifi.appUrl) - 1);     wifi.appUrl[sizeof(wifi.appUrl) - 1] = 0;
     wifi.pmkidEnabled         = (b.pmkidCapture != 2);     // 0(old)/1 -> on, 2 -> off
     strncpy(wifi.apSSID, b.apSSID, sizeof(wifi.apSSID) - 1); wifi.apSSID[sizeof(wifi.apSSID) - 1] = '\0';
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
