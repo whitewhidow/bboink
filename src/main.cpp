@@ -37,10 +37,11 @@ static void appendSyncSeg(const char* seg) {
     bootSyncResult[sizeof(bootSyncResult) - 1] = 0;
 }
 
-// PwnCrack upload = one handshake per .22000 file. Collect basenames and CLOSE the
-// directory first so no FS handles are held during the heap-hungry TLS handshake.
+// PwnCrack upload — technique #3: concatenate EVERY .22000 into one combined
+// .hc22000 and upload it in a SINGLE request (one TLS handshake), instead of one
+// handshake per file (which fragments the heap and aborts on the C5).
 static void pwnUploadAll(char* seg, size_t segLen) {
-    int files = 0, hashes = 0; char uperr[48] = {0};
+    // Collect the source basenames first (dir closed before we touch TLS/large buffers).
     std::vector<String> names;
     {
         File d = Storage::fs().open(SDLayout::handshakesDir());
@@ -56,12 +57,30 @@ static void pwnUploadAll(char* seg, size_t segLen) {
             d.close();
         }
     }
+    if (names.empty()) { snprintf(seg, segLen, "pwnUp0"); return; }
+
+    // Merge all WPA* lines (de-duplicated) into one combined file in the handshakes dir.
+    const char* combined = "pwn_all_combined.22000";   // .22000 so uploadFile finds it; renamed to .hc22000 on the wire
+    char cpath[160]; snprintf(cpath, sizeof(cpath), "%s/%s", SDLayout::handshakesDir(), combined);
+    Storage::fs().remove(cpath);
+    File out = Storage::fs().open(cpath, FILE_WRITE);
+    if (!out) { snprintf(seg, segLen, "pwnUp ERR:tmp open"); return; }
     for (auto& nm : names) {
-        PwnCrack::UploadResult r = PwnCrack::uploadFile(nm.c_str());
-        if (r.success) { files++; hashes += r.hashes; }
-        else if (!uperr[0]) strncpy(uperr, r.error, sizeof(uperr) - 1);
+        char sp[160]; snprintf(sp, sizeof(sp), "%s/%s", SDLayout::handshakesDir(), nm.c_str());
+        File in = Storage::fs().open(sp, FILE_READ);
+        if (!in) continue;
+        while (in.available()) {
+            String l = in.readStringUntil('\n'); l.trim();
+            if (l.startsWith("WPA*") && l.length() > 20) out.println(l);
+        }
+        in.close();
     }
-    snprintf(seg, segLen, "pwnUp%d %s", files, uperr);
+    out.close();
+
+    PwnCrack::UploadResult r = PwnCrack::uploadFile(combined);   // ONE handshake for all hashes
+    Storage::fs().remove(cpath);
+    if (r.success) snprintf(seg, segLen, "pwnUp%u/%uf", r.hashes, (unsigned)names.size());
+    else           snprintf(seg, segLen, "pwnUp ERR:%.40s", r.error);
 }
 
 // Run ONE queued sync op early in boot (clean heap, one TLS handshake). If more ops

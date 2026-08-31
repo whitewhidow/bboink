@@ -369,7 +369,8 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     client.setInsecure();
 
     HTTPClient https;
-    https.setTimeout(15000);
+    https.setTimeout(25000);
+    https.setReuse(false);
     String url = String("https://") + WPASEC_HOST + WPASEC_UPLOAD_PATH;
     if (!https.begin(client, url)) {
         free(body);
@@ -410,13 +411,15 @@ bool WPASec::downloadPotfile(uint16_t& newCracks) {
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;
-    https.setTimeout(15000);
+    https.setTimeout(25000);
+    https.setReuse(false);
     String url = String("https://") + WPASEC_HOST + WPASEC_POTFILE_PATH;
     if (!https.begin(client, url)) {
         snprintf(lastError, sizeof(lastError), "POTFILE BEGIN FAILED");
         return false;
     }
     https.addHeader("Cookie", String("key=") + Config::wifi().wpaSecKey);
+    https.addHeader("Connection", "close");
     int status = https.GET();
     if (status != 200) {
         https.end();

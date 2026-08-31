@@ -198,11 +198,13 @@ UploadResult uploadFile(const char* basename) {
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;
-    https.setTimeout(15000);
+    https.setTimeout(25000);
+    https.setReuse(false);
     if (!https.begin(client, String("https://") + PWN_HOST + "/upload_handshake")) {
         free(body); strncpy(r.error, "BEGIN FAILED", sizeof(r.error) - 1); return r;
     }
     https.addHeader("Content-Type", String("multipart/form-data; boundary=") + boundary);
+    https.addHeader("Connection", "close");
     int code = https.POST(body, bodyLen);
     free(body);
     String resp = (code > 0) ? https.getString() : String();
@@ -224,9 +226,11 @@ int syncPotfile(char* err, size_t errLen) {
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;
-    https.setTimeout(15000);
+    https.setTimeout(25000);
+    https.setReuse(false);
     String url = String("https://") + PWN_HOST + "/download_potfile_script?key=" + Config::wifi().pwncrackKey;
     if (!https.begin(client, url)) { if (err) snprintf(err, errLen, "BEGIN FAILED"); return -1; }
+    https.addHeader("Connection", "close");
     int status = https.GET();
     // 404 = no potfile for this key yet (nothing cracked) — not an error.
     if (status == 404) { https.end(); loadCache(); return (int)g_cracked.size(); }

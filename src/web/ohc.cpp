@@ -105,12 +105,14 @@ static bool postV2(const String& body, String& resp, char* err, size_t errLen) {
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient https;
-    https.setTimeout(15000);
+    https.setTimeout(25000);
+    https.setReuse(false);
     if (!https.begin(client, String("https://") + OHC_HOST + "/v2")) {
         if (err) snprintf(err, errLen, "BEGIN FAILED");
         return false;
     }
     https.addHeader("Content-Type", "application/json");
+    https.addHeader("Connection", "close");
     int code = https.POST((uint8_t*)body.c_str(), body.length());
     resp = (code > 0) ? https.getString() : String();
     https.end();
