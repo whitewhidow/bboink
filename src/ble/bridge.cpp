@@ -5,6 +5,7 @@
 #include "../modes/oink.h"
 #include "../version.h"
 #include "../hal/m5compat.h"
+#include "../hal/board.h"
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 #include <FS.h>
@@ -297,6 +298,10 @@ static String buildCfgJson() {
     o += ",\"deauth\":"; o += w.enableDeauth ? "true" : "false";
     o += ",\"pmkid\":";  o += w.pmkidEnabled ? "true" : "false";
     o += ",\"sound\":";  o += w.soundEnabled ? "true" : "false";
+    o += ",\"led\":";    o += w.ledEnabled ? "true" : "false";
+#if PORK_LED_COUNT > 0
+    o += ",\"has_led\":true";
+#endif
     // Read-only device status (surfaced in the portal header). ver is always
     // accurate; batt is only reported on boards with a real fuel gauge.
     o += ",\"ver\":" + jsonQuote(BBOINK_VERSION);
@@ -337,6 +342,7 @@ static void setCfgField(const char* k, const char* v) {
     else if (!strcmp(k, "deauth"))      w.enableDeauth = tb;
     else if (!strcmp(k, "pmkid"))       w.pmkidEnabled = tb;
     else if (!strcmp(k, "sound"))       w.soundEnabled = tb;
+    else if (!strcmp(k, "led"))         w.ledEnabled = tb;
 }
 
 static void delCapture(const char* bhex) {

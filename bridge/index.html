@@ -169,7 +169,7 @@ const STR=[['wifi_ssid','WiFi SSID (for board direct sync)'],['wifi_pass','WiFi 
  ['wpa_key','wpa-sec key'],['ohc_key','OnlineHashCrack key'],['pwn_key','PwnCrack key'],
  ['ap_ssid','BLE name (blank = BBoink-XXXX)']];
 const NUM=[['ch_hop_ms','Channel hop (ms)'],['atk_rssi','Min attack RSSI (dBm)'],['max_tries','Max tries'],['burst','Deauth burst'],['brightness','Brightness (10-255)']];
-const BOOL=[['deauth','Deauth'],['pmkid','PMKID hunt'],['sound','Sound']];
+const BOOL=[['deauth','Deauth'],['pmkid','PMKID hunt'],['sound','Sound (beep on capture)'],['led','LED flash on capture']];
 
 // Group the flat field list into labelled sections (scanning → keys →
 // connectivity → device). Field types/labels come from STR/NUM/BOOL above.
@@ -181,7 +181,7 @@ const SECTIONS=[
   ['Capture & scanning', ['ch_hop_ms','atk_rssi','max_tries','burst','deauth','pmkid']],
   ['Cracking keys',      ['wpa_key','ohc_key','pwn_key']],
   ['WiFi · relay · BLE', ['relay_url','relay_token','wifi_ssid','wifi_pass','app_url','ap_ssid']],
-  ['Device',             ['brightness','sound']],
+  ['Device',             ['brightness','sound','led']],
 ];
 function fieldHtml(k){
   const lab=LAB[k]||k, t=TYP[k];
@@ -194,7 +194,8 @@ function fieldHtml(k){
 async function loadCfg(){
   cfg=await cmdJson({c:'getcfg'})||{};
   let h='';
-  for(const [title,keys] of SECTIONS){
+  for(const [title,keys0] of SECTIONS){
+    const keys=keys0.filter(k=> k!=='led' || cfg.has_led);   // hide LED toggle where there's no LED
     h+=`<div class="sec-h">${title}</div>`;
     const nums=keys.filter(k=>TYP[k]==='num'), rest=keys.filter(k=>TYP[k]!=='num');
     if(nums.length) h+='<div class="grid2">'+nums.map(fieldHtml).join('')+'</div>';
@@ -206,9 +207,9 @@ async function loadCfg(){
 $('savecfg').onclick=async()=>{
   $('cfgMsg').textContent='saving…';
   try{
-    for(const [k] of STR){ const v=$('c_'+k).value; if(k==='wifi_pass'&&!v) continue; await cmdAck({c:'scfg',k,v}); }
-    for(const [k] of NUM){ await cmdAck({c:'scfg',k,v:$('c_'+k).value}); }
-    for(const [k] of BOOL){ await cmdAck({c:'scfg',k,v:$('c_'+k).checked?'1':'0'}); }
+    for(const [k] of STR){ const el=$('c_'+k); if(!el) continue; const v=el.value; if(k==='wifi_pass'&&!v) continue; await cmdAck({c:'scfg',k,v}); }
+    for(const [k] of NUM){ const el=$('c_'+k); if(!el) continue; await cmdAck({c:'scfg',k,v:el.value}); }
+    for(const [k] of BOOL){ const el=$('c_'+k); if(!el) continue; await cmdAck({c:'scfg',k,v:el.checked?'1':'0'}); }
     await cmdAck({c:'savecfg'});
     $('cfgMsg').textContent='saved ✓'; await loadCfg();
   }catch(e){ $('cfgMsg').textContent='save failed: '+(e.message||e); }

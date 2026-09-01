@@ -128,6 +128,8 @@ struct __attribute__((packed)) ConfigBlob {
     char     relayToken[64];
     // v5 field (appended; old blobs read empty).
     char     appUrl[96];
+    // v6 field (appended; old/shorter blobs read 0 -> LED on by default).
+    uint8_t  ledEnabled;          // 0=unset(->on), 1=on, 2=off
 };
 
 static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& wifi,
@@ -171,6 +173,7 @@ static void populateBlob(ConfigBlob& b, const GPSConfig& gps, const WiFiConfig& 
     strncpy(b.apSSID, wifi.apSSID, sizeof(b.apSSID) - 1);
     b.displayBrightness    = wifi.displayBrightness;
     b.soundEnabled         = wifi.soundEnabled ? 1 : 2;   // 2=off so old 0 -> on
+    b.ledEnabled           = wifi.ledEnabled ? 1 : 2;     // 2=off so old 0 -> on
     strncpy(b.ntfyTopic, wifi.ntfyTopic, sizeof(b.ntfyTopic) - 1);
     b.ntfyAttachFile       = wifi.ntfyAttachFile ? 1 : 0;
     b.spectrumTopN         = wifi.spectrumTopN;
@@ -271,6 +274,7 @@ static void extractBlob(const ConfigBlob& b, GPSConfig& gps, WiFiConfig& wifi,
     strncpy(wifi.apSSID, b.apSSID, sizeof(wifi.apSSID) - 1); wifi.apSSID[sizeof(wifi.apSSID) - 1] = '\0';
     wifi.displayBrightness    = b.displayBrightness ? b.displayBrightness : 200;  // 0 = old blob
     wifi.soundEnabled         = (b.soundEnabled != 2);   // 0(old)/1 -> on, 2 -> off
+    wifi.ledEnabled           = (b.ledEnabled != 2);     // 0(old)/1 -> on, 2 -> off
     wifi.spectrumTopN         = b.spectrumTopN;
     wifi.spectrumStaleMs      = b.spectrumStaleMs;
     wifi.spectrumCollapseSsid = b.spectrumCollapseSsid != 0;

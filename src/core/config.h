@@ -98,6 +98,7 @@ struct WiFiConfig {
     bool crackedFallback = false;        // If uplink is down, sync via an in-range cracked AP
     uint8_t displayBrightness = 200;     // Backlight brightness (10-255)
     bool    soundEnabled = true;         // I2S beep notifications on/off
+    bool    ledEnabled = true;           // RGB LED flash on capture (boards with an LED)
     uint8_t spectrumTopN = 0;           // Spectrum: cap visible APs (0 = no cap)
     uint16_t spectrumStaleMs = 5000;    // Spectrum: stale timeout before drop (ms)
     bool spectrumCollapseSsid = false;  // Spectrum: merge same-SSID APs
