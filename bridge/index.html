@@ -30,6 +30,7 @@
   .pw{ color:var(--green); font-family:var(--mono); margin-top:3px; }
   .tag{ display:inline-block; background:var(--panel2); color:var(--muted); border:1px solid var(--line); border-radius:9px; padding:0 7px; font-size:11px; margin:3px 4px 0 0; }
   .tag.k{ background:var(--cyan); color:#04181b; border-color:var(--cyan); }
+  .tag.crk{ background:var(--green); color:#04181b; border-color:var(--green); }
   .del{ position:absolute; top:8px; right:8px; background:transparent; border:1px solid var(--red); color:var(--red); padding:5px 9px; font-size:12px; border-radius:8px; }
   .del:hover{ background:var(--red); color:#fff; }
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
@@ -188,13 +189,16 @@ async function loadCaps(){
       if(f.kind==='pcap'){ e.pcap=true; e.hs=true; if(d.includes('w'))e.w=true; }
       else if(f.kind==='22000'){ e.h22=true; if(f.pmkid)e.pmkid=true; else e.hs=true; if(d.includes('o'))e.o=true; if(d.includes('p'))e.p=true; }
     }
-    const svc=(n,ok)=>`<span class="tag${ok?' k':''}">${n} ${ok?'✓':'…'}</span>`;
+    let srcMap={}; try{ srcMap=JSON.parse(localStorage.getItem('bboink.crksrc')||'{}'); }catch(_){}
+    const svc=(n,ok,crk)=>`<span class="tag${crk?' crk':(ok?' k':'')}">${n} ${crk?'🔓':(ok?'✓':'…')}</span>`;
     const row=(bssid,ssid,ts,ck,manual)=>{
       const e=fi[(bssid||'').toLowerCase()]||{};
+      const src=ck?(srcMap[(bssid||'').toLowerCase()]||[]):[];
+      const crkW=src.includes('wpa-sec'), crkP=src.includes('pwncrack');
       let ty=''; if(e.hs)ty+='<span class="tag">4-way</span>'; if(e.pmkid)ty+='<span class="tag">PMKID</span>';
       if(manual && !e.hs && !e.pmkid)ty+='<span class="tag">excluded</span>';
-      if(ck)ty+='<span class="tag k">CRACKED</span>';
-      let sf=''; if(e.pcap)sf+=svc('wpa-sec',e.w); if(e.h22){sf+=svc('OHC',e.o);sf+=svc('PwnCrack',e.p);}
+      let sf=''; if(e.pcap)sf+=svc('wpa-sec',e.w,crkW); if(e.h22){sf+=svc('OHC',e.o,false);sf+=svc('PwnCrack',e.p,crkP);}
+      if(ck && !crkW && !crkP)sf+='<span class="tag crk">cracked 🔓</span>';
       const tm=(ts&&ts>1600000000)?`<div class="cb">captured ${new Date(ts*1000).toLocaleString()}</div>`:'';
       const pw=ck?`<div class="pw">${ck.pass}</div>`:'';
       const del=bssid?`<button class="del" onclick="delCap('${bssid}')">delete</button>`:'';
@@ -273,6 +277,7 @@ $('sync').onclick=async()=>{
     }
     log('');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
+    try{ const _m={}; for(const c of (cr.cracked||[])) _m[(c.bssid||'').toLowerCase()]=c.sources||(c.source?String(c.source).split('+'):[]); localStorage.setItem('bboink.crksrc',JSON.stringify(_m)); }catch(_){}
     let n=0; for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
     await cmdAck({c:'crkdone'});
     log('');
