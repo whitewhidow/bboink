@@ -84,7 +84,7 @@
   </div>
 
   <div class="pane" id="p_caps">
-    <div class="row" style="justify-content:space-between"><b>Captures &amp; cracked</b><button class="sec" style="padding:7px 11px" onclick="loadCaps()">Refresh</button></div>
+    <div class="row" style="justify-content:space-between"><b>Captures &amp; cracked</b><span style="display:flex;gap:6px"><button id="dlreport" class="sec" style="padding:7px 11px" onclick="reportCsv(this)">⬇ Report (.csv)</button><button class="sec" style="padding:7px 11px" onclick="loadCaps()">Refresh</button></span></div>
     <div class="row"><input id="exclssid" placeholder="SSID to never attack"><button class="sec" style="padding:9px 12px" onclick="addExcl()">Exclude</button></div>
     <div class="filt"><label class="row" style="margin:0"><input type="checkbox" id="crkonly" onchange="loadCaps()"><span>cracked only</span></label><span class="count" id="capcount"></span></div>
     <div id="capsList"></div>
@@ -268,6 +268,37 @@ window.delCap=async(b,btn)=>{
     btn._t=setTimeout(()=>{ btn.dataset.arm=''; btn.classList.remove('arm'); btn.textContent='delete'; },3000); return; }
   if(btn){ clearTimeout(btn._t); }
   try{ await cmdAck({c:'del',bssid:b}); await loadCaps(); }catch(e){} };
+// Engagement report — compile the capture registry + cracked results into a CSV
+// and save it. Built entirely from what the board already reports (no relay).
+window.reportCsv=async(btn)=>{
+  const o=btn?btn.textContent:''; if(btn)btn.textContent='…';
+  try{
+    const caps=await cmdJson({c:'caps'})||[], crks=await cmdJson({c:'crks'})||[], list=await cmdList(true)||[];
+    const nb=s=>(s||'').toLowerCase().replace(/[^0-9a-f]/g,'').slice(0,12);
+    const cm={}; for(const c of crks) cm[nb(c.bssid)]=c;
+    let srcMap={}; try{ srcMap=JSON.parse(localStorage.getItem('bboink.crksrc')||'{}'); }catch(_){}
+    const fi={};
+    for(const f of list){ const m=f.name.match(/_([0-9A-Fa-f]{12})_(22000\.22000|pmkid\.22000|pcap\.pcap)$/i); if(!m)continue;
+      const bs=m[1].toLowerCase(), e=fi[bs]=fi[bs]||{ty:new Set(),done:''};
+      if(f.kind==='pcap') e.ty.add('4-way'); else if(f.kind==='22000') e.ty.add(f.pmkid?'PMKID':'4-way');
+      e.done+=(f.done||''); }
+    const esc=v=>{ v=(v==null?'':String(v)); return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+    const rows=[['ssid','bssid','captured_at','type','uploaded_to','cracked','cracked_by','password']];
+    const seen=new Set();
+    const emit=(bssid,ssid,ts,ck)=>{ const b=nb(bssid); if(!b||seen.has(b))return; seen.add(b);
+      const e=fi[b]||{ty:new Set(),done:''};
+      const up=[e.done.includes('w')?'wpa-sec':'',e.done.includes('o')?'OHC':'',e.done.includes('p')?'PwnCrack':''].filter(Boolean).join('+');
+      const time=(ts&&ts>1600000000)?new Date(ts*1000).toISOString():'';
+      rows.push([ssid||'',bssid||'',time,[...e.ty].join('+'),up,ck?'yes':'no',(srcMap[b]||[]).join('+'),ck?(ck.pass||''):'']); };
+    for(const r of caps) emit(r.bssid,r.ssid,r.ts,cm[nb(r.bssid)]);
+    for(const c of crks) emit(c.bssid,c.ssid,0,c);
+    const csv=rows.map(r=>r.map(esc).join(',')).join('\r\n');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download='bboink_report_'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  }catch(e){ if(btn){ btn.textContent='failed'; setTimeout(()=>btn.textContent=o,1500); return; } }
+  if(btn) btn.textContent=o;
+};
 window.copyPw=async(bs,btn)=>{ const p=pwMap[bs]; if(p==null)return;
   try{ await navigator.clipboard.writeText(p); }catch(_){ const t=document.createElement('textarea'); t.value=p; document.body.appendChild(t); t.select(); try{document.execCommand('copy');}catch(__){} t.remove(); }
   if(btn){ const o=btn.textContent; btn.textContent='✓ copied'; setTimeout(()=>btn.textContent=o,1500); } };
