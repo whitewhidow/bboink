@@ -198,7 +198,6 @@ async function loadCaps(){
       let ty=''; if(e.hs)ty+='<span class="tag">4-way</span>'; if(e.pmkid)ty+='<span class="tag">PMKID</span>';
       if(manual && !e.hs && !e.pmkid)ty+='<span class="tag">excluded</span>';
       let sf=''; if(e.pcap)sf+=svc('wpa-sec',e.w,crkW); if(e.h22){sf+=svc('OHC',e.o,false);sf+=svc('PwnCrack',e.p,crkP);}
-      if(ck && !crkW && !crkP)sf+='<span class="tag crk">cracked 🔓</span>';
       const tm=(ts&&ts>1600000000)?`<div class="cb">captured ${new Date(ts*1000).toLocaleString()}</div>`:'';
       const pw=ck?`<div class="pw">${ck.pass}</div>`:'';
       const del=bssid?`<button class="del" onclick="delCap('${bssid}')">delete</button>`:'';
