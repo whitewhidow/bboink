@@ -131,6 +131,42 @@ static void clearSyncedForBssid(const char* bhex) {
     if (w) { w.print(keep); w.close(); }
 }
 
+// Extract up to 12 lowercase hex chars (drops ':' and case), for robust BSSID
+// matching across the caps (UPPER, no sep) / relay (lower) formats.
+static void hexOnly12(char out[13], const char* in) {
+    int n = 0;
+    for (const char* p = in; *p && n < 12; ++p) {
+        char c = *p;
+        if ((c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F')) out[n++] = (c<='9') ? c : (char)(c | 0x20);
+    }
+    out[n] = 0;
+}
+
+// Drop the cracked-cache line(s) for a BSSID so deleting a cracked network
+// actually removes it (the row is rebuilt from this file). Lines are
+// "bssid:ssid:pass"; match on the normalized BSSID.
+static void removeCrackedForBssid(const char* bhex) {
+    char want[13]; hexOnly12(want, bhex);
+    if (!want[0]) return;
+    File f = Storage::fs().open(SDLayout::wpasecResultsPath(), FILE_READ);
+    if (!f) return;
+    String keep; char line[220];
+    while (f.available()) {
+        size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+        if (L && line[L - 1] == '\r') line[--L] = 0;
+        if (!L) continue;
+        char* c1 = strchr(line, ':');
+        char tmp[64]; size_t nl = c1 ? (size_t)(c1 - line) : strlen(line);
+        if (nl >= sizeof(tmp)) nl = sizeof(tmp) - 1;
+        memcpy(tmp, line, nl); tmp[nl] = 0;
+        char bs[13]; hexOnly12(bs, tmp);
+        if (strcmp(bs, want) != 0) { keep += line; keep += '\n'; }
+    }
+    f.close();
+    File w = Storage::fs().open(SDLayout::wpasecResultsPath(), FILE_WRITE);
+    if (w) { w.print(keep); w.close(); }
+}
+
 static void startMem(const char* name, const String& json);   // fwd decl (defined below)
 
 // Build + send the capture manifest ({"t":"list","files":[{name,size,kind}]}).
@@ -344,7 +380,7 @@ static void handleCommand(const uint8_t* data, size_t len) {
     else if (!strcmp(c, "caps"))   startMem("caps", buildCapsJson());
     else if (!strcmp(c, "crks"))   startMem("crks", buildCrksJson());
     else if (!strcmp(c, "getcfg")) startMem("cfg", buildCfgJson());
-    else if (!strcmp(c, "del"))    { const char* b = doc["bssid"] | ""; if (b[0]) { delCapture(b); clearSyncedForBssid(b); notifyText("{\"t\":\"ok\"}"); } }
+    else if (!strcmp(c, "del"))    { const char* b = doc["bssid"] | ""; if (b[0]) { delCapture(b); clearSyncedForBssid(b); removeCrackedForBssid(b); notifyText("{\"t\":\"ok\"}"); } }
     else if (!strcmp(c, "synced"))  { const char* n = doc["name"] | ""; const char* sv = doc["svc"] | "wop"; if (n[0]) markSynced(n, sv); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "scfg"))   { const char* k = doc["k"] | ""; const char* v = doc["v"] | ""; if (k[0]) { setCfgField(k, v); notifyText("{\"t\":\"ok\"}"); } }
     else if (!strcmp(c, "savecfg")){ Config::save(); notifyText("{\"t\":\"ok\"}"); }
