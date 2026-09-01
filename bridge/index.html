@@ -35,6 +35,15 @@
   .del:hover{ background:var(--red); color:#fff; }
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:0 10px; }
   .row{ display:flex; align-items:center; gap:8px; margin-top:9px; }
+  .devinfo{ display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 2px; }
+  .chip{ font-family:var(--mono); font-size:11px; letter-spacing:.03em; background:var(--panel2); border:1px solid var(--line); color:var(--muted); border-radius:9px; padding:3px 8px; }
+  .chip b{ color:var(--ink); font-weight:600; }
+  .chip.warn{ border-color:var(--red); color:var(--red); }
+  .filt{ display:flex; align-items:center; gap:8px; margin:8px 0 2px; font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .filt .count{ margin-left:auto; }
+  .copy{ background:transparent; border:1px solid var(--line2); color:var(--muted); padding:3px 8px; font-size:11px; border-radius:8px; margin-top:6px; }
+  .copy:hover{ border-color:var(--cyan); color:var(--cyan); }
+  .del.arm{ background:var(--red); color:#fff; }
 </style>
 </head>
 <body>
@@ -53,6 +62,7 @@
 <div id="cstat" class="sub" style="margin-top:8px"></div>
 
 <div id="app" hidden>
+  <div id="devinfo" class="devinfo"></div>
   <div class="tabs">
     <button data-t="sync" class="on">Sync</button>
     <button data-t="caps">Captures</button>
@@ -72,6 +82,7 @@
   <div class="pane" id="p_caps">
     <div class="row" style="justify-content:space-between"><b>Captures &amp; cracked</b><button class="sec" style="padding:7px 11px" onclick="loadCaps()">Refresh</button></div>
     <div class="row"><input id="exclssid" placeholder="SSID to never attack"><button class="sec" style="padding:9px 12px" onclick="addExcl()">Exclude</button></div>
+    <div class="filt"><label class="row" style="margin:0"><input type="checkbox" id="crkonly" onchange="loadCaps()"><span>cracked only</span></label><span class="count" id="capcount"></span></div>
     <div id="capsList"></div>
   </div>
 
@@ -92,7 +103,18 @@ const $=id=>document.getElementById(id);
 const logEl=()=>$('log');
 function log(m){ const e=logEl(); e.textContent+=m+'\n'; e.scrollTop=e.scrollHeight; }
 
-let rxCh=null, txCh=null, waiter=null, cfg={};
+let rxCh=null, txCh=null, waiter=null, cfg={}, devName='', pwMap={};
+
+// ---------- Device status header (#4) ----------
+function renderDevInfo(){
+  const el=$('devinfo'); if(!el) return;
+  const chips=[];
+  chips.push(`<span class="chip">🐷 <b>${esc(devName||'board')}</b></span>`);
+  if(cfg.board) chips.push(`<span class="chip">${esc(cfg.board)}</span>`);
+  if(cfg.ver)   chips.push(`<span class="chip">fw <b>v${esc(cfg.ver)}</b></span>`);
+  if(cfg.has_batt){ const b=+cfg.batt; chips.push(`<span class="chip${b<=15?' warn':''}">🔋 <b>${isFinite(b)?b:'?'}%</b></span>`); }
+  el.innerHTML=chips.join('');
+}
 
 // tab switching
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
@@ -132,7 +154,8 @@ $('connect').onclick=async()=>{
     const g=await dev.gatt.connect(), svc=await g.getPrimaryService(SVC);
     rxCh=await svc.getCharacteristic(RX); txCh=await svc.getCharacteristic(TX);
     await txCh.startNotifications(); txCh.addEventListener('characteristicvaluechanged',onNotify);
-    $('cstat').textContent='✔ connected to '+(dev.name||'board');
+    devName=dev.name||'board';
+    $('cstat').textContent='✔ connected to '+devName;
     $('connect').hidden=true; $('app').hidden=false;
     await loadCfg(); await loadCaps();
   }catch(e){ $('cstat').textContent='✖ '+e.message; }
@@ -159,6 +182,7 @@ async function loadCfg(){
   h+='</div>';
   for(const [k,lab] of BOOL) h+=`<div class="row"><input type="checkbox" id="c_${k}" ${cfg[k]?'checked':''}><label style="margin:0">${lab}</label></div>`;
   $('cfgForm').innerHTML=h;
+  renderDevInfo();
 }
 $('savecfg').onclick=async()=>{
   $('cfgMsg').textContent='saving…';
@@ -173,7 +197,7 @@ $('savecfg').onclick=async()=>{
 
 // ---------- Captures + cracked ----------
 async function loadCaps(){
-  const el=$('capsList'); el.innerHTML='<div class="cb">loading…</div>';
+  const el=$('capsList'); el.innerHTML='<div class="cb">loading…</div>'; pwMap={};
   try{
     const caps=await cmdJson({c:'caps'})||[];
     const crks=await cmdJson({c:'crks'})||[];
@@ -199,19 +223,32 @@ async function loadCaps(){
       if(manual && !e.hs && !e.pmkid)ty+='<span class="tag">excluded</span>';
       let sf=''; if(e.pcap)sf+=svc('wpa-sec',e.w,crkW); if(e.h22){sf+=svc('OHC',e.o,false);sf+=svc('PwnCrack',e.p,crkP);}
       const tm=(ts&&ts>1600000000)?`<div class="cb">captured ${new Date(ts*1000).toLocaleString()}</div>`:'';
-      const pw=ck?`<div class="pw">${ck.pass}</div>`:'';
-      const del=bssid?`<button class="del" onclick="delCap('${bssid}')">delete</button>`:'';
+      if(ck) pwMap[(bssid||'').toLowerCase()]=ck.pass;
+      const pw=ck?`<div class="pw">${esc(ck.pass)}</div><button class="copy" onclick="copyPw('${(bssid||'').toLowerCase()}',this)">⧉ copy password</button>`:'';
+      const del=bssid?`<button class="del" onclick="delCap('${bssid}',this)">delete</button>`:'';
       return `<div class="cap">${del}<div class="cn">${esc(ssid)||'(hidden)'}</div><div class="cb">${bssid}</div>${tm}<div style="margin-top:4px">${ty}${sf}</div>${pw}</div>`;
     };
     const seen=new Set(caps.map(r=>(r.bssid||'').toLowerCase()));
-    let rows=caps.map(r=>row(r.bssid,r.ssid,r.ts,cm[(r.bssid||'').toLowerCase()],r.manual));
-    for(const c of crks){ if(seen.has((c.bssid||'').toLowerCase()))continue; rows.push(row(c.bssid,c.ssid,0,c,false)); }
-    el.innerHTML=rows.length?rows.join(''):'<div class="cb">no captures yet</div>';
+    const items=[];
+    for(const r of caps){ const ck=cm[(r.bssid||'').toLowerCase()]; items.push({ck:!!ck, html:row(r.bssid,r.ssid,r.ts,ck,r.manual)}); }
+    for(const c of crks){ if(seen.has((c.bssid||'').toLowerCase()))continue; items.push({ck:true, html:row(c.bssid,c.ssid,0,c,false)}); }
+    const total=items.length, nck=items.filter(x=>x.ck).length;
+    const cc=$('capcount'); if(cc) cc.textContent=total?`${total} capture${total>1?'s':''} · ${nck} cracked`:'';
+    const crkOnly=$('crkonly')&&$('crkonly').checked;
+    const shown=crkOnly?items.filter(x=>x.ck):items;
+    el.innerHTML=shown.length?shown.map(x=>x.html).join(''):(crkOnly?'<div class="cb">none cracked yet</div>':'<div class="cb">no captures yet</div>');
   }catch(e){ el.innerHTML='<div class="cb">failed: '+(e.message||e)+'</div>'; }
 }
 function esc(s){ return (s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
-window.delCap=async(b)=>{ if(!confirm('Delete capture (removes files, re-enables attacking it)?'))return;
+// Two-tap inline confirm (no blocking dialog): first tap arms, second within 3s deletes.
+window.delCap=async(b,btn)=>{
+  if(btn && !btn.dataset.arm){ btn.dataset.arm='1'; btn.classList.add('arm'); btn.textContent='tap to confirm';
+    btn._t=setTimeout(()=>{ btn.dataset.arm=''; btn.classList.remove('arm'); btn.textContent='delete'; },3000); return; }
+  if(btn){ clearTimeout(btn._t); }
   try{ await cmdAck({c:'del',bssid:b}); await loadCaps(); }catch(e){} };
+window.copyPw=async(bs,btn)=>{ const p=pwMap[bs]; if(p==null)return;
+  try{ await navigator.clipboard.writeText(p); }catch(_){ const t=document.createElement('textarea'); t.value=p; document.body.appendChild(t); t.select(); try{document.execCommand('copy');}catch(__){} t.remove(); }
+  if(btn){ const o=btn.textContent; btn.textContent='✓ copied'; setTimeout(()=>btn.textContent=o,1500); } };
 
 // ---------- Sync (post + pull) ----------
 // Pull the raw WPA 22000 hashes over BLE and save one bboink.hc22000 for offline hashcat —
@@ -244,13 +281,20 @@ $('sync').onclick=async()=>{
   if(!url||!tok){ log('✖ set Relay URL + token in the Config tab first'); return; }
   const keys=JSON.stringify({wpasec:cfg.wpa_key||'',ohc:cfg.ohc_key||'',pwncrack:cfg.pwn_key||''});
   const auth={'Authorization':'Bearer '+tok,'X-Keys':keys};
-  $('sync').disabled=true;
+  const btn=$('sync'), btnTxt=btn.textContent;
+  btn.disabled=true;
   try{
     logEl().textContent='';
+    // Pre-warm Render so the first upload doesn't hit a cold-start timeout.
+    log('waking relay… (free tier can nap ~40s)');
+    try{ const up=await wakeRelay(url); log(up?'✔ relay awake':'⚠ relay responded non-200 — continuing'); }
+    catch(e){ log('✖ relay unreachable — '+(e.name==='AbortError'?'timed out; try Sync again in a moment':(e.message||e))); btn.disabled=false; return; }
     const files=await cmdList($('resyncall').checked);
     if(!files.length) log('(nothing new to upload)');
+    const N=files.length; let idx=0;
     const ssidOf=n=>n.replace(/_[0-9A-Fa-f]{12}_(22000\.22000|pmkid\.22000|pcap\.pcap)$/i,'')||n;
     for(const f of files){
+      idx++; btn.textContent='Syncing '+idx+'/'+N+'…';
       const done=f.done||'', ssid=ssidOf(f.name);
       if(f.kind==='22000'){
         const needO=done.indexOf('o')<0, needP=done.indexOf('p')<0;
@@ -284,17 +328,23 @@ $('sync').onclick=async()=>{
     log('✔ sync complete');
     await loadCaps();
   }catch(e){ log('✖ '+(e.message||e)); }
-  $('sync').disabled=false;
+  btn.textContent=btnTxt; btn.disabled=false;
 };
 
+// Ping /healthz to wake Render's free tier (naps after ~15min). Resolves to the
+// HTTP-ok flag; throws on unreachable/timeout. Reused by the button and by Sync.
+async function wakeRelay(url){
+  const c=new AbortController(); const to=setTimeout(()=>c.abort(),70000);
+  try{ const r=await fetch(url+'/healthz',{signal:c.signal}); return r.ok; }
+  finally{ clearTimeout(to); }
+}
 $('relaychk').onclick=async()=>{
   const url=(cfg.relay_url||'').replace(/\/+$/,'');
   if(!url){ $('relaystat').textContent='set Relay URL in the Config tab first'; return; }
   $('relaystat').textContent='checking… (free tier can take ~40s to wake)';
   const t0=Date.now();
-  try{ const c=new AbortController(); const to=setTimeout(()=>c.abort(),70000);
-    const r=await fetch(url+'/healthz',{signal:c.signal}); clearTimeout(to);
-    $('relaystat').textContent=r.ok?('✔ relay UP ('+(Date.now()-t0)+'ms)'):('✖ relay HTTP '+r.status);
+  try{ const ok=await wakeRelay(url);
+    $('relaystat').textContent=ok?('✔ relay UP ('+(Date.now()-t0)+'ms)'):'✖ relay responded non-200';
   }catch(e){ $('relaystat').textContent='✖ unreachable — '+(e.name==='AbortError'?'timed out':e.message); }
 };
 window.addExcl=async()=>{ const ssid=$('exclssid').value.trim(); if(!ssid){return;}
