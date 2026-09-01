@@ -251,12 +251,15 @@ $('sync').onclick=async()=>{
         log('    OHC:       '+ohcMsg);
         const pc=j.pwncrack||{};
         log('    PwnCrack:  '+(pc.error?('error — '+pc.error):(pc.ok?'accepted':('HTTP '+pc.http))));
-        if(rec.h22name) await cmdAck({c:'synced',name:rec.h22name});
+        const ohcOk = !o.error && o.http>=200 && o.http<300;   // 2xx = accepted / already-submitted
+        if(rec.h22name && ohcOk && pc.ok) await cmdAck({c:'synced',name:rec.h22name});
+        else log('    \u21bb kept for retry \u2014 a service did not accept it (e.g. PwnCrack 522/timeout)');
       }
       if(rec.pcap){
         const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(rec.pcapname),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:rec.pcap})).json().catch(()=>({}))).wpasec||{};
         log('    wpa-sec:   '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
-        if(!w.error) await cmdAck({c:'synced',name:rec.pcapname});
+        if(w.ok) await cmdAck({c:'synced',name:rec.pcapname});
+        else log('    \u21bb kept for retry \u2014 wpa-sec did not accept it');
       }
     }
     log('');
