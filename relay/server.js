@@ -86,8 +86,13 @@ app.post('/v1/hashes', async (req, res) => {
 
   const out = { hashes: uniq.length, ohc: null, pwncrack: null };
 
+  // ?only=ohc,pwncrack  -> submit to just those services (used for per-service retries after
+  // one fails, so a PwnCrack 522 doesn't re-hit OHC's API for nothing). Absent = both.
+  const only = String(req.query.only || '').split(',').map(x => x.trim()).filter(Boolean);
+  const wants = (svc) => only.length === 0 || only.includes(svc);
+
   // OnlineHashCrack — JSON add_tasks
-  try {
+  if (wants('ohc')) try {
     const r = await fetch('https://api.onlinehashcrack.com/v2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
@@ -107,7 +112,7 @@ app.post('/v1/hashes', async (req, res) => {
   } catch (e) { out.ohc = { error: String(e.message || e) }; }
 
   // PwnCrack — multipart .hc22000
-  try {
+  if (wants('pwncrack')) try {
     const fd = new FormData();
     fd.append('key', keyOf(req, 'pwncrack', PWNCRACK_KEY));
     fd.append('handshake', new Blob([uniq.join('\n') + '\n']), 'bboink.hc22000');

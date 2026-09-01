@@ -56,36 +56,73 @@ static bool notifyText(const String& json) {
 static const char* syncedPath() {
     static char p[80]; snprintf(p, sizeof(p), "%s/bridge_synced.txt", SDLayout::miscDir()); return p;
 }
-static bool isSynced(const char* name) {
+// bridge_synced.txt: one line per file  "name\tflags"  — flags is a subset of "wop"
+// (the wpa-sec/OHC/PwnCrack services that already ACCEPTED that file). A legacy line
+// with no tab counts as fully synced. A file is "done" once all its applicable services
+// are present: .pcap needs "w"; .22000 needs "o" and "p". This is what makes a failed
+// service (e.g. PwnCrack 522) retry ONLY that service instead of re-hitting the others.
+static String applicableSvc(const char* name) {
+    size_t L = strlen(name);
+    if (L > 5 && strcmp(name + L - 5, ".pcap") == 0) return "w";
+    return "op";
+}
+static String syncedFlags(const char* name) {
     File f = Storage::fs().open(syncedPath(), FILE_READ);
-    if (!f) return false;
-    char line[96]; bool found = false;
+    if (!f) return "";
+    char line[128]; String res = "";
     while (f.available()) {
         size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
         if (L && line[L - 1] == '\r') line[--L] = 0;
-        if (!strcmp(line, name)) { found = true; break; }
+        char* tab = strchr(line, '\t');
+        const char* nm = line; const char* fl = "wop";
+        if (tab) { *tab = 0; fl = tab + 1; }
+        if (!strcmp(nm, name)) { res = fl; break; }
     }
-    f.close(); return found;
+    f.close(); return res;
 }
-static void markSynced(const char* name) {
-    if (isSynced(name)) return;
+static bool isSynced(const char* name) {
+    String have = syncedFlags(name), need = applicableSvc(name);
+    for (size_t i = 0; i < need.length(); i++) if (have.indexOf(need[i]) < 0) return false;
+    return true;   // all applicable services accepted
+}
+// Merge svc flags into name's record (rewrites the file).
+static void markSynced(const char* name, const char* svc) {
     if (!Storage::fs().exists(SDLayout::miscDir())) Storage::fs().mkdir(SDLayout::miscDir());
-    File f = Storage::fs().open(syncedPath(), FILE_APPEND);
-    if (f) { f.println(name); f.close(); }
+    String out; bool updated = false;
+    File f = Storage::fs().open(syncedPath(), FILE_READ);
+    if (f) {
+        char line[128];
+        while (f.available()) {
+            size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+            if (L && line[L - 1] == '\r') line[--L] = 0;
+            if (!L) continue;
+            char* tab = strchr(line, '\t');
+            String nm = tab ? String(line).substring(0, tab - line) : String(line);
+            String fl = tab ? String(tab + 1) : String("wop");
+            if (nm == name) { for (const char* p = svc; *p; p++) if (fl.indexOf(*p) < 0) fl += *p; updated = true; }
+            out += nm; out += '\t'; out += fl; out += '\n';
+        }
+        f.close();
+    }
+    if (!updated) { out += name; out += '\t'; out += svc; out += '\n'; }
+    File w = Storage::fs().open(syncedPath(), FILE_WRITE);
+    if (w) { w.print(out); w.close(); }
 }
-// Drop synced entries whose filename carries this BSSID (so a re-captured, re-added
-// network syncs again after a delete).
+// Drop synced entries whose filename carries this BSSID (re-captured -> syncs again).
 static void clearSyncedForBssid(const char* bhex) {
     File f = Storage::fs().open(syncedPath(), FILE_READ);
     if (!f) return;
-    String keep;
-    char line[96];
+    String keep; char line[128];
     while (f.available()) {
         size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
         if (L && line[L - 1] == '\r') line[--L] = 0;
         if (!L) continue;
+        char* tab = strchr(line, '\t'); char nm[110];
+        size_t nl = tab ? (size_t)(tab - line) : strlen(line);
+        if (nl >= sizeof(nm)) nl = sizeof(nm) - 1;
+        memcpy(nm, line, nl); nm[nl] = 0;
         char fb[13];
-        if (!(SDLayout::captureBssid(line, fb) && strcasecmp(fb, bhex) == 0)) { keep += line; keep += '\n'; }
+        if (!(SDLayout::captureBssid(nm, fb) && strcasecmp(fb, bhex) == 0)) { keep += line; keep += '\n'; }
     }
     f.close();
     File w = Storage::fs().open(syncedPath(), FILE_WRITE);
@@ -112,6 +149,7 @@ static void sendList(bool all) {
                 if (kind && (all || !isSynced(n))) {
                     JsonObject o = arr.add<JsonObject>();
                     o["name"] = n; o["size"] = (uint32_t)f.size(); o["kind"] = kind;
+                    o["done"] = syncedFlags(n); o["pmkid"] = (strstr(n, "pmkid") != nullptr);
                 }
             }
             f.close();
@@ -172,6 +210,7 @@ static String buildCapsJson() {
         o += "{\"bssid\":\""; o += hb; o += "\",\"ssid\":"; o += jsonQuote(list[i].ssid);
         o += ",\"captured\":"; o += (list[i].flags & OinkMode::BB_CAPTURED) ? "true" : "false";
         o += ",\"manual\":";   o += (list[i].flags & OinkMode::BB_MANUAL) ? "true" : "false";
+        o += ",\"ts\":"; o += (uint32_t)list[i].ts;
         o += "}";
     }
     o += "]";
@@ -290,7 +329,7 @@ static void handleCommand(const uint8_t* data, size_t len) {
     else if (!strcmp(c, "crks"))   startMem("crks", buildCrksJson());
     else if (!strcmp(c, "getcfg")) startMem("cfg", buildCfgJson());
     else if (!strcmp(c, "del"))    { const char* b = doc["bssid"] | ""; if (b[0]) { delCapture(b); clearSyncedForBssid(b); notifyText("{\"t\":\"ok\"}"); } }
-    else if (!strcmp(c, "synced"))  { const char* n = doc["name"] | ""; if (n[0]) markSynced(n); notifyText("{\"t\":\"ok\"}"); }
+    else if (!strcmp(c, "synced"))  { const char* n = doc["name"] | ""; const char* sv = doc["svc"] | "wop"; if (n[0]) markSynced(n, sv); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "scfg"))   { const char* k = doc["k"] | ""; const char* v = doc["v"] | ""; if (k[0]) { setCfgField(k, v); notifyText("{\"t\":\"ok\"}"); } }
     else if (!strcmp(c, "savecfg")){ Config::save(); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "excl"))   {   // add a manual never-attack exclusion (by SSID name, optional BSSID)

@@ -176,17 +176,33 @@ async function loadCaps(){
   try{
     const caps=await cmdJson({c:'caps'})||[];
     const crks=await cmdJson({c:'crks'})||[];
+    const list=await cmdList(true)||[];
     const cm={}; for(const c of crks) cm[(c.bssid||'').toLowerCase()]=c;
-    // any cracked not in the capture registry, list too
-    const seen=new Set(caps.map(r=>(r.bssid||'').toLowerCase()));
-    let rows=caps.map(r=>{
-      const ck=cm[(r.bssid||'').toLowerCase()];
-      let t=''; if(r.captured)t+='<span class="tag">captured</span>'; if(r.manual)t+='<span class="tag">manual</span>'; if(ck)t+='<span class="tag k">CRACKED</span>';
+    // per-bssid: which capture types exist + which services are already synced
+    const fi={};
+    for(const f of list){
+      const m=f.name.match(/_([0-9A-Fa-f]{12})_(22000\.22000|pmkid\.22000|pcap\.pcap)$/i);
+      if(!m) continue;
+      const bs=m[1].toLowerCase(), d=f.done||'';
+      const e=fi[bs]=fi[bs]||{pcap:false,h22:false,w:false,o:false,p:false,hs:false,pmkid:false};
+      if(f.kind==='pcap'){ e.pcap=true; e.hs=true; if(d.includes('w'))e.w=true; }
+      else if(f.kind==='22000'){ e.h22=true; if(f.pmkid)e.pmkid=true; else e.hs=true; if(d.includes('o'))e.o=true; if(d.includes('p'))e.p=true; }
+    }
+    const svc=(n,ok)=>`<span class="tag${ok?' k':''}">${n} ${ok?'✓':'…'}</span>`;
+    const row=(bssid,ssid,ts,ck,manual)=>{
+      const e=fi[(bssid||'').toLowerCase()]||{};
+      let ty=''; if(e.hs)ty+='<span class="tag">4-way</span>'; if(e.pmkid)ty+='<span class="tag">PMKID</span>';
+      if(manual && !e.hs && !e.pmkid)ty+='<span class="tag">excluded</span>';
+      if(ck)ty+='<span class="tag k">CRACKED</span>';
+      let sf=''; if(e.pcap)sf+=svc('wpa-sec',e.w); if(e.h22){sf+=svc('OHC',e.o);sf+=svc('PwnCrack',e.p);}
+      const tm=(ts&&ts>1600000000)?`<div class="cb">captured ${new Date(ts*1000).toLocaleString()}</div>`:'';
       const pw=ck?`<div class="pw">${ck.pass}</div>`:'';
-      return `<div class="cap"><button class="del" onclick="delCap('${r.bssid}')">delete</button><div class="cn">${esc(r.ssid)||'(hidden)'}</div><div class="cb">${r.bssid}</div>${t}${pw}</div>`;
-    });
-    for(const c of crks){ if(seen.has((c.bssid||'').toLowerCase())) continue;
-      rows.push(`<div class="cap"><div class="cn">${esc(c.ssid)||'(hidden)'}</div><div class="cb">${c.bssid}</div><span class="tag k">CRACKED</span><div class="pw">${c.pass}</div></div>`); }
+      const del=bssid?`<button class="del" onclick="delCap('${bssid}')">delete</button>`:'';
+      return `<div class="cap">${del}<div class="cn">${esc(ssid)||'(hidden)'}</div><div class="cb">${bssid}</div>${tm}<div style="margin-top:4px">${ty}${sf}</div>${pw}</div>`;
+    };
+    const seen=new Set(caps.map(r=>(r.bssid||'').toLowerCase()));
+    let rows=caps.map(r=>row(r.bssid,r.ssid,r.ts,cm[(r.bssid||'').toLowerCase()],r.manual));
+    for(const c of crks){ if(seen.has((c.bssid||'').toLowerCase()))continue; rows.push(row(c.bssid,c.ssid,0,c,false)); }
     el.innerHTML=rows.length?rows.join(''):'<div class="cb">no captures yet</div>';
   }catch(e){ el.innerHTML='<div class="cb">failed: '+(e.message||e)+'</div>'; }
 }
@@ -229,38 +245,31 @@ $('sync').onclick=async()=>{
   try{
     logEl().textContent='';
     const files=await cmdList($('resyncall').checked);
-    // group files into networks (strip the _22000.22000 / _pcap.pcap suffix)
-    const nets={};
+    if(!files.length) log('(nothing new to upload)');
+    const ssidOf=n=>n.replace(/_[0-9A-Fa-f]{12}_(22000\.22000|pmkid\.22000|pcap\.pcap)$/i,'')||n;
     for(const f of files){
-      const key=f.name.replace(/_(22000\.22000|pmkid\.22000|pcap\.pcap)$/,'');
-      const b=await cmdCollect({c:'get',name:f.name});
-      nets[key]=nets[key]||{key};
-      if(f.kind==='22000'){ nets[key].h22=new TextDecoder().decode(b); nets[key].h22name=f.name; }
-      else if(f.kind==='pcap'){ nets[key].pcap=b; nets[key].pcapname=f.name; }
-    }
-    const netKeys=Object.keys(nets);
-    if(!netKeys.length) log('(nothing new to upload)');
-    for(const key of netKeys){
-      const rec=nets[key];
-      const ssid=key.replace(/_[0-9A-Fa-f]{12}$/,'')||key;
-      log('• '+ssid);
-      if(rec.h22 && rec.h22.trim()){
-        const j=await (await fetch(url+'/v1/hashes',{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:rec.h22})).json().catch(()=>({}));
-        const o=j.ohc||{};
-        const ohcMsg = o.error?('error — '+o.error): o.accepted?(o.accepted+' queued'): o.skipped?'already submitted': o.rejected?(o.rejected+' rejected'): o.success?'already submitted':('HTTP '+o.http);
-        log('    OHC:       '+ohcMsg);
-        const pc=j.pwncrack||{};
-        log('    PwnCrack:  '+(pc.error?('error — '+pc.error):(pc.ok?'accepted':('HTTP '+pc.http))));
-        const ohcOk = !o.error && o.http>=200 && o.http<300;   // 2xx = accepted / already-submitted
-        if(rec.h22name && ohcOk && pc.ok) await cmdAck({c:'synced',name:rec.h22name});
-        else log('    \u21bb kept for retry \u2014 a service did not accept it (e.g. PwnCrack 522/timeout)');
-      }
-      if(rec.pcap){
-        const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(rec.pcapname),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:rec.pcap})).json().catch(()=>({}))).wpasec||{};
+      const done=f.done||'', ssid=ssidOf(f.name);
+      if(f.kind==='22000'){
+        const needO=done.indexOf('o')<0, needP=done.indexOf('p')<0;
+        if(!needO && !needP) continue;
+        const only=(needO&&needP)?'':(needP?'pwncrack':'ohc');   // retry ONLY the pending service
+        log('• '+ssid+(f.pmkid?' (PMKID)':' (4-way)'));
+        const h22=new TextDecoder().decode(await cmdCollect({c:'get',name:f.name}));
+        if(!h22.trim()){ log('    (empty)'); continue; }
+        const j=await (await fetch(url+'/v1/hashes'+(only?('?only='+only):''),{method:'POST',headers:{...auth,'Content-Type':'text/plain'},body:h22})).json().catch(()=>({}));
+        if(needO){ const o=j.ohc||{}, ok=!o.error&&o.http>=200&&o.http<300;
+          log('    OHC:       '+(o.error?('error — '+o.error):(ok?((o.accepted||0)+' queued'+(o.skipped?(', '+o.skipped+' known'):'')):('HTTP '+o.http))));
+          if(ok) await cmdAck({c:'synced',name:f.name,svc:'o'}); else log('    \u21bb OHC kept for retry'); }
+        if(needP){ const pc=j.pwncrack||{};
+          log('    PwnCrack:  '+(pc.error?('error — '+pc.error):(pc.ok?'accepted':('HTTP '+pc.http))));
+          if(pc.ok) await cmdAck({c:'synced',name:f.name,svc:'p'}); else log('    \u21bb PwnCrack kept for retry (e.g. 522/timeout)'); }
+      } else if(f.kind==='pcap'){
+        if(done.indexOf('w')>=0) continue;
+        log('• '+ssid+' (pcap)');
+        const b=await cmdCollect({c:'get',name:f.name});
+        const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(f.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:b})).json().catch(()=>({}))).wpasec||{};
         log('    wpa-sec:   '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
-        if(w.ok) await cmdAck({c:'synced',name:rec.pcapname});
-        else log('    \u21bb kept for retry \u2014 wpa-sec did not accept it');
-      }
+        if(w.ok) await cmdAck({c:'synced',name:f.name,svc:'w'}); else log('    \u21bb wpa-sec kept for retry'); }
     }
     log('');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
