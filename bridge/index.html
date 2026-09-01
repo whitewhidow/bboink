@@ -21,6 +21,8 @@
   button.sec{ background:transparent; color:var(--ink); border:1px solid var(--line2); }
   button.sec:hover{ border-color:var(--cyan); color:var(--cyan); }
   button.wide{ width:100%; margin-top:10px; } button:disabled{ opacity:.45; }
+  /* keep a disabled PRIMARY (cyan) button's label dark/readable — theme.css dims it to muted grey */
+  button:not(.sec):disabled{ color:#04181b; opacity:.55; }
   .tabs{ display:flex; gap:6px; margin:14px 0; } .tabs button{ flex:1; background:var(--panel); color:var(--muted); border:1px solid var(--line); font-weight:500; padding:9px; }
   .tabs button.on{ background:var(--cyan); color:#04181b; border-color:var(--cyan); }
   .pane{ display:none; } .pane.on{ display:block; }
@@ -356,9 +358,9 @@ $('sync').onclick=async()=>{
     log('');
     log('Cracked so far: '+n+' network(s) · see the Captures tab');
     log('✔ sync complete');
-    await loadCaps();
   }catch(e){ log('✖ '+(e.message||e)); }
-  btn.textContent=btnTxt; btn.disabled=false;
+  btn.textContent=btnTxt; btn.disabled=false;   // re-enable BEFORE the (slow) refresh
+  try{ await loadCaps(); }catch(_){}
 };
 
 // Ping /healthz to wake Render's free tier (naps after ~15min). Resolves to the
