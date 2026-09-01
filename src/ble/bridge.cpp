@@ -3,6 +3,8 @@
 #include "../core/sd_layout.h"
 #include "../core/config.h"
 #include "../modes/oink.h"
+#include "../version.h"
+#include "../hal/m5compat.h"
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 #include <FS.h>
@@ -259,6 +261,20 @@ static String buildCfgJson() {
     o += ",\"deauth\":"; o += w.enableDeauth ? "true" : "false";
     o += ",\"pmkid\":";  o += w.pmkidEnabled ? "true" : "false";
     o += ",\"sound\":";  o += w.soundEnabled ? "true" : "false";
+    // Read-only device status (surfaced in the portal header). ver is always
+    // accurate; batt is only reported on boards with a real fuel gauge.
+    o += ",\"ver\":" + jsonQuote(BBOINK_VERSION);
+#if defined(PORK_BOARD_TEMBED_CC1101)
+    o += ",\"board\":" + jsonQuote("T-Embed CC1101");
+#elif defined(PORK_BOARD_TDISPLAY_C5)
+    o += ",\"board\":" + jsonQuote("T-Display C5");
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    o += ",\"board\":" + jsonQuote("Waveshare C5-LCD");
+#endif
+#if !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    o += ",\"batt\":"     + String(M5.Power.getBatteryLevel());
+    o += ",\"has_batt\":true";
+#endif
     o += "}";
     return o;
 }
