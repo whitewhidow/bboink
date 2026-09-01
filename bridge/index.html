@@ -44,6 +44,8 @@
   .copy{ background:transparent; border:1px solid var(--line2); color:var(--muted); padding:3px 8px; font-size:11px; border-radius:8px; margin-top:6px; }
   .copy:hover{ border-color:var(--cyan); color:var(--cyan); }
   .del.arm{ background:var(--red); color:#fff; }
+  .sec-h{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--cyan); border-bottom:1px solid var(--line2); padding-bottom:5px; margin:18px 0 4px; }
+  .sec-h:first-child{ margin-top:6px; }
 </style>
 </head>
 <body>
@@ -169,18 +171,35 @@ const STR=[['wifi_ssid','WiFi SSID (for board direct sync)'],['wifi_pass','WiFi 
 const NUM=[['ch_hop_ms','Channel hop (ms)'],['atk_rssi','Min attack RSSI (dBm)'],['max_tries','Max tries'],['burst','Deauth burst'],['brightness','Brightness (10-255)']];
 const BOOL=[['deauth','Deauth'],['pmkid','PMKID hunt'],['sound','Sound']];
 
+// Group the flat field list into labelled sections (scanning → keys →
+// connectivity → device). Field types/labels come from STR/NUM/BOOL above.
+const LAB={}, TYP={};
+for(const [k,l] of STR){ LAB[k]=l; TYP[k]='str'; }
+for(const [k,l] of NUM){ LAB[k]=l; TYP[k]='num'; }
+for(const [k,l] of BOOL){ LAB[k]=l; TYP[k]='bool'; }
+const SECTIONS=[
+  ['Capture & scanning', ['ch_hop_ms','atk_rssi','max_tries','burst','deauth','pmkid']],
+  ['Cracking keys',      ['wpa_key','ohc_key','pwn_key']],
+  ['WiFi · relay · BLE', ['relay_url','relay_token','wifi_ssid','wifi_pass','app_url','ap_ssid']],
+  ['Device',             ['brightness','sound']],
+];
+function fieldHtml(k){
+  const lab=LAB[k]||k, t=TYP[k];
+  if(t==='num')  return `<div><label>${lab}</label><input id="c_${k}" type="number" value="${cfg[k]??''}"></div>`;
+  if(t==='bool') return `<div class="row"><input type="checkbox" id="c_${k}" ${cfg[k]?'checked':''}><label style="margin:0">${lab}</label></div>`;
+  const val=(k==='wifi_pass')?'':(cfg[k]||'');
+  const ph=(k==='wifi_pass'&&cfg.has_wifi_pass)?'(unchanged)':'';
+  return `<label>${lab}</label><input id="c_${k}" value="${(''+val).replace(/"/g,'&quot;')}" placeholder="${ph}">`;
+}
 async function loadCfg(){
   cfg=await cmdJson({c:'getcfg'})||{};
   let h='';
-  for(const [k,lab] of STR){
-    const val=(k==='wifi_pass')?'':(cfg[k]||'');
-    const ph=(k==='wifi_pass'&&cfg.has_wifi_pass)?'(unchanged)':'';
-    h+=`<label>${lab}</label><input id="c_${k}" value="${(''+val).replace(/"/g,'&quot;')}" placeholder="${ph}">`;
+  for(const [title,keys] of SECTIONS){
+    h+=`<div class="sec-h">${title}</div>`;
+    const nums=keys.filter(k=>TYP[k]==='num'), rest=keys.filter(k=>TYP[k]!=='num');
+    if(nums.length) h+='<div class="grid2">'+nums.map(fieldHtml).join('')+'</div>';
+    h+=rest.map(fieldHtml).join('');
   }
-  h+='<div class="grid2">';
-  for(const [k,lab] of NUM) h+=`<div><label>${lab}</label><input id="c_${k}" type="number" value="${cfg[k]??''}"></div>`;
-  h+='</div>';
-  for(const [k,lab] of BOOL) h+=`<div class="row"><input type="checkbox" id="c_${k}" ${cfg[k]?'checked':''}><label style="margin:0">${lab}</label></div>`;
   $('cfgForm').innerHTML=h;
   renderDevInfo();
 }
@@ -321,8 +340,18 @@ $('sync').onclick=async()=>{
     log('');
     const cr=await (await fetch(url+'/v1/cracked',{headers:auth})).json();
     try{ const _m={}; for(const c of (cr.cracked||[])) _m[(c.bssid||'').toLowerCase()]=c.sources||(c.source?String(c.source).split('+'):[]); localStorage.setItem('bboink.crksrc',JSON.stringify(_m)); }catch(_){}
-    let n=0; for(const c of (cr.cracked||[])){ await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++; }
+    // Only write back cracks for networks THIS board still knows (so a deleted
+    // capture stays deleted; re-capturing it later brings the result back).
+    const nb=s=>(s||'').toLowerCase().replace(/[^0-9a-f]/g,'').slice(0,12);
+    const capsNow=await cmdJson({c:'caps'})||[];
+    const known=new Set(capsNow.map(r=>nb(r.bssid)));
+    let n=0, skipped=0;
+    for(const c of (cr.cracked||[])){
+      if(c.bssid && !known.has(nb(c.bssid))){ skipped++; continue; }   // deleted / not captured here
+      await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++;
+    }
     await cmdAck({c:'crkdone'});
+    if(skipped) log('('+skipped+' cracked network(s) not captured on this board — skipped)');
     log('');
     log('Cracked so far: '+n+' network(s) · see the Captures tab');
     log('✔ sync complete');
