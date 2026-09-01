@@ -194,6 +194,11 @@ public:
     static bool excludeNetwork(int index); // Add selected network to exclusion list
     static bool excludeNetworkByBSSID(const uint8_t* bssid, const char* ssid); // manual add
     static void registerCapture(const uint8_t* bssid, const char* ssid); // captured -> registry
+    // Capture metadata sidecar (auth/channel/rssi/pmf), keyed by BSSID. Kept out of
+    // the boar-bro registry so its file format stays stable. Best-effort.
+    static bool capMeta(uint64_t bssid, uint8_t& ch, int8_t& rssi, uint8_t& auth, bool& pmf);
+    static void authBreakdown(uint16_t& wpa2, uint16_t& wpa3, uint16_t& openN, uint16_t& other);
+    static void forgetCapMeta(uint64_t bssid);
     static void importCapturedFiles();    // add any on-disk captures not yet in the registry
     static bool isExcluded(const uint8_t* bssid);  // Check if BSSID is excluded
     // Name-aware: excluded if the BSSID matches OR any registry entry shares the

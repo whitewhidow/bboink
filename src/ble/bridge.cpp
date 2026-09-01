@@ -223,6 +223,19 @@ static void writeCracked(const char* b, const char* ssid, const char* pass) {
     if (f) { f.printf("%s:%s:%s\n", b ? b : "", ssid ? ssid : "", pass); f.close(); s_crackedIn++; }
 }
 
+static const char* authStr(wifi_auth_mode_t a) {
+    switch (a) {
+        case WIFI_AUTH_OPEN:            return "OPEN";
+        case WIFI_AUTH_WPA_PSK:         return "WPA";
+        case WIFI_AUTH_WPA2_PSK:        return "WPA2";
+        case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA/2";
+        case WIFI_AUTH_WPA3_PSK:        return "WPA3";
+        case WIFI_AUTH_WPA2_WPA3_PSK:   return "WPA2/3";
+        case WIFI_AUTH_WPA2_ENTERPRISE: return "WPA2-E";
+        default:                        return "?";
+    }
+}
+
 static String jsonQuote(const char* v) {
     String o = "\"";
     for (; v && *v; v++) {
@@ -250,6 +263,13 @@ static String buildCapsJson() {
         o += ",\"captured\":"; o += (list[i].flags & OinkMode::BB_CAPTURED) ? "true" : "false";
         o += ",\"manual\":";   o += (list[i].flags & OinkMode::BB_MANUAL) ? "true" : "false";
         o += ",\"ts\":"; o += (uint32_t)list[i].ts;
+        uint8_t mch, mau; int8_t mrs; bool mpf;
+        if (OinkMode::capMeta(list[i].bssid, mch, mrs, mau, mpf)) {
+            o += ",\"ch\":";   o += mch;
+            o += ",\"rssi\":"; o += (int)mrs;
+            o += ",\"auth\":"; o += jsonQuote(authStr((wifi_auth_mode_t)mau));
+            o += ",\"pmf\":";  o += mpf ? "true" : "false";
+        }
         o += "}";
     }
     o += "]";

@@ -3636,11 +3636,57 @@ bool OinkMode::saveBoarBros() {
     return true;
 }
 
+// ---- capture-metadata sidecar (auth/channel/rssi/pmf) --------------------
+// Kept OUT of the boar-bro registry so that file's format stays stable. A
+// missing/corrupt sidecar just means empty columns in the report.
+namespace {
+String capMetaPath() {
+    String p = SDLayout::miscDir();
+    if (!p.endsWith("/")) p += "/";
+    p += "capmeta.csv";
+    return p;
+}
+void bssidHex(uint64_t b, char out[13]) {
+    snprintf(out, 13, "%02X%02X%02X%02X%02X%02X",
+             (uint8_t)(b >> 40), (uint8_t)(b >> 32), (uint8_t)(b >> 24),
+             (uint8_t)(b >> 16), (uint8_t)(b >> 8), (uint8_t)b);
+}
+// Rewrite the sidecar, dropping any line for `key`; if add, append the new one.
+void capMetaUpsert(uint64_t key, bool add, uint8_t ch, int8_t rssi, uint8_t auth, uint8_t pmf) {
+    char want[13]; bssidHex(key, want);
+    if (!Storage::fs().exists(SDLayout::miscDir())) Storage::fs().mkdir(SDLayout::miscDir());
+    String path = capMetaPath(), keep;
+    File f = Storage::fs().open(path, FILE_READ);
+    if (f) { char line[96];
+        while (f.available()) {
+            size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+            if (L && line[L - 1] == '\r') line[--L] = 0;
+            if (!L) continue;
+            if (!(L >= 12 && line[12] == ',' && strncasecmp(line, want, 12) == 0)) { keep += line; keep += '\n'; }
+        }
+        f.close();
+    }
+    if (add) { char h[13]; bssidHex(key, h);
+        keep += h; keep += ','; keep += String((int)ch); keep += ','; keep += String((int)rssi);
+        keep += ','; keep += String((int)auth); keep += ','; keep += (pmf ? '1' : '0'); keep += '\n'; }
+    File w = Storage::fs().open(path, FILE_WRITE);
+    if (w) { w.print(keep); w.close(); }
+}
+} // namespace
+
 // Register a network we just captured into the persistent registry (so it stays
 // excluded even after the capture file is deleted). Adds a new CAPTURED entry, or
 // flags an existing one as captured + stamps the time.
 void OinkMode::registerCapture(const uint8_t* bssid, const char* ssidIn) {
     uint64_t key = bssidToUint64(bssid);
+    // snapshot live auth/channel/rssi/pmf for the report + STATS (networks() is
+    // populated during capture; nothing recorded on the boot-time file backfill).
+    for (const auto& net : networks()) {
+        if (bssidToUint64(net.bssid) == key) {
+            capMetaUpsert(key, true, net.channel, net.rssi, (uint8_t)net.authmode, net.hasPMF ? 1 : 0);
+            break;
+        }
+    }
     uint32_t nowTs = (uint32_t)time(nullptr);
     if (nowTs < 1700000000UL) nowTs = 0;   // clock not set yet -> unknown
     for (uint16_t i = 0; i < boarBrosCount; i++) {
@@ -3662,6 +3708,46 @@ void OinkMode::registerCapture(const uint8_t* bssid, const char* ssidIn) {
     e.ts = nowTs;
     boarBrosCount++;
     saveBoarBros();
+}
+
+bool OinkMode::capMeta(uint64_t key, uint8_t& ch, int8_t& rssi, uint8_t& auth, bool& pmf) {
+    char want[13]; bssidHex(key, want);
+    File f = Storage::fs().open(capMetaPath(), FILE_READ);
+    if (!f) return false;
+    char line[96]; bool found = false;
+    while (f.available()) {
+        size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+        if (L < 13 || line[12] != ',' || strncasecmp(line, want, 12) != 0) continue;
+        int c = 0, r = 0, a = 0, pm = 0;
+        if (sscanf(line + 13, "%d,%d,%d,%d", &c, &r, &a, &pm) >= 3) {
+            ch = (uint8_t)c; rssi = (int8_t)r; auth = (uint8_t)a; pmf = (pm != 0); found = true;
+        }
+        break;
+    }
+    f.close();
+    return found;
+}
+
+void OinkMode::forgetCapMeta(uint64_t key) { capMetaUpsert(key, false, 0, 0, 0, 0); }
+
+void OinkMode::authBreakdown(uint16_t& wpa2, uint16_t& wpa3, uint16_t& openN, uint16_t& other) {
+    wpa2 = wpa3 = openN = other = 0;
+    File f = Storage::fs().open(capMetaPath(), FILE_READ);
+    if (!f) return;
+    char line[96];
+    while (f.available()) {
+        size_t L = f.readBytesUntil('\n', (uint8_t*)line, sizeof(line) - 1); line[L] = 0;
+        char* p = strchr(line, ','); if (!p) continue;
+        int c = 0, r = 0, a = 0, pm = 0;
+        if (sscanf(p + 1, "%d,%d,%d,%d", &c, &r, &a, &pm) < 3) continue;
+        switch ((wifi_auth_mode_t)a) {
+            case WIFI_AUTH_OPEN: openN++; break;
+            case WIFI_AUTH_WPA3_PSK: case WIFI_AUTH_WPA2_WPA3_PSK: wpa3++; break;
+            case WIFI_AUTH_WPA_PSK: case WIFI_AUTH_WPA2_PSK: case WIFI_AUTH_WPA_WPA2_PSK: wpa2++; break;
+            default: other++; break;
+        }
+    }
+    f.close();
 }
 
 // Import any capture files already on the SD into the registry (one-time backfill
@@ -3733,6 +3819,7 @@ void OinkMode::removeBoarBro(uint64_t bssid) {
             break;
         }
     }
+    forgetCapMeta(bssid);
     saveBoarBros();
 }
 

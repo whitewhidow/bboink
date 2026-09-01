@@ -293,6 +293,10 @@ static void statsFlow() {
     snprintf(line, sizeof(line), ".22000 hashes : %d", h22);   M5.Display.drawString(line, 6, y); y += 16;
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     snprintf(line, sizeof(line), "cracked wpa:%u pwn:%u", cracked, crackedPwn); M5.Display.drawString(line, 6, y); y += 16;
+    uint16_t a2 = 0, a3 = 0, aOpen = 0, aOther = 0;
+    OinkMode::authBreakdown(a2, a3, aOpen, aOther);
+    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    snprintf(line, sizeof(line), "auth wpa2:%u wpa3:%u open:%u", a2, a3, aOpen); M5.Display.drawString(line, 6, y); y += 16;
     M5.Display.setTextColor(TFT_CYAN, TFT_BLACK);
     snprintf(line, sizeof(line), "storage: %s  %s free", Storage::backendName(), App::fmtBytes(freeB));
     M5.Display.drawString(line, 6, y);

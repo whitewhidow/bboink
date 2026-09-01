@@ -283,15 +283,16 @@ window.reportCsv=async(btn)=>{
       if(f.kind==='pcap') e.ty.add('4-way'); else if(f.kind==='22000') e.ty.add(f.pmkid?'PMKID':'4-way');
       e.done+=(f.done||''); }
     const esc=v=>{ v=(v==null?'':String(v)); return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-    const rows=[['ssid','bssid','captured_at','type','uploaded_to','cracked','cracked_by','password']];
+    const rows=[['ssid','bssid','captured_at','auth','channel','rssi','type','uploaded_to','cracked','cracked_by','password']];
     const seen=new Set();
-    const emit=(bssid,ssid,ts,ck)=>{ const b=nb(bssid); if(!b||seen.has(b))return; seen.add(b);
+    const emit=(bssid,ssid,ts,ck,m)=>{ const b=nb(bssid); if(!b||seen.has(b))return; seen.add(b);
       const e=fi[b]||{ty:new Set(),done:''};
       const up=[e.done.includes('w')?'wpa-sec':'',e.done.includes('o')?'OHC':'',e.done.includes('p')?'PwnCrack':''].filter(Boolean).join('+');
       const time=(ts&&ts>1600000000)?new Date(ts*1000).toISOString():'';
-      rows.push([ssid||'',bssid||'',time,[...e.ty].join('+'),up,ck?'yes':'no',(srcMap[b]||[]).join('+'),ck?(ck.pass||''):'']); };
-    for(const r of caps) emit(r.bssid,r.ssid,r.ts,cm[nb(r.bssid)]);
-    for(const c of crks) emit(c.bssid,c.ssid,0,c);
+      const auth=(m&&m.auth)||'', ch=(m&&m.ch!=null)?m.ch:'', rssi=(m&&m.rssi!=null)?m.rssi:'';
+      rows.push([ssid||'',bssid||'',time,auth,ch,rssi,[...e.ty].join('+'),up,ck?'yes':'no',(srcMap[b]||[]).join('+'),ck?(ck.pass||''):'']); };
+    for(const r of caps) emit(r.bssid,r.ssid,r.ts,cm[nb(r.bssid)],r);
+    for(const c of crks) emit(c.bssid,c.ssid,0,c,null);
     const csv=rows.map(r=>r.map(esc).join(',')).join('\r\n');
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
     a.download='bboink_report_'+new Date().toISOString().slice(0,10)+'.csv';
