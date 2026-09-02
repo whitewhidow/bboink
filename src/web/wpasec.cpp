@@ -15,6 +15,7 @@
 #include <HTTPClient.h>
 #include <ctype.h>
 #include <esp_heap_caps.h>
+#include <Preferences.h>
 
 // WPA-SEC API
 static const char* WPASEC_HOST = "wpa-sec.stanev.org";
@@ -181,6 +182,24 @@ bool WPASec::loadCache() {
         }
 
         f.close();
+    }
+
+    // One-shot migration (v0.9.22 wpa-sec upload fix): the pre-fix firmware marked
+    // uploads "done" that never actually landed (HTTP 200 on reject + C5 empty-body).
+    // Clear the stale uploaded list ONCE so the next sync re-pushes every capture
+    // through the fixed path — wpa-sec dedups by content, so already-landed ones just
+    // return "already submitted". NVS flag guards it so it runs exactly once.
+    {
+        Preferences p;
+        if (p.begin("bboink", false)) {
+            if (!p.getBool("wpafix22", false)) {
+                const char* up = SDLayout::wpasecUploadedPath();
+                if (Storage::fs().exists(up)) Storage::fs().remove(up);
+                p.putBool("wpafix22", true);
+                Serial.println("[WPASEC] one-shot: cleared stale uploaded list (v0.9.22 fix)");
+            }
+            p.end();
+        }
     }
 
     if (!loadUploadedList()) {
