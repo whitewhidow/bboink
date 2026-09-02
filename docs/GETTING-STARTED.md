@@ -6,8 +6,9 @@ Pick the path that matches your board:
   (T-Embed CC1101 / T-Display C5): flash, set one key, capture, sync from the menu.
   **No relay and no phone** — you just need a free key from one cracking service.
 - **[Path B — relay + phone portal](#path-b--relay--phone-portal)**: needed **only** if
-  you have the button-less **Waveshare**, or you *want* to drive a button board from your
-  phone (per-network results + cracked write-back). This is the part with the Render relay.
+  you have a single-button board (**Waveshare** or **Cardputer ADV**), or you *want* to drive a
+  button board from your phone (per-network results + cracked write-back). This is the part with
+  the Render relay.
 
 > If you have a button board and just want it working, do **Path A** and stop. Path B is an
 > optional upgrade — come back to it later if you want it.
@@ -31,8 +32,8 @@ board that already runs BBoink? Leave it unticked to keep your saved config. Aft
 
 > **T-Display C5 fails with "Failed to initialize"?** Its ROM often rejects esptool's stub loader,
 > so the browser flasher can't sync it even in download mode. Flash it by hand with `--no-stub`:
-> `esptool --chip esp32c5 --no-stub write_flash 0x0 bboink-tdisplay-c5.bin`. The T-Embed and
-> Waveshare are fine in the browser.
+> `esptool --chip esp32c5 --no-stub write_flash 0x0 bboink-tdisplay-c5.bin`. The T-Embed,
+> Waveshare and Cardputer ADV are fine in the browser.
 
 **By hand (esptool):** grab the latest merged image from
 [**Releases**](https://github.com/whitewhidow/bboink/releases) and flash it at `0x0`:
@@ -42,14 +43,16 @@ board that already runs BBoink? Leave it unticked to keep your saved config. Aft
 | T-Embed CC1101 | `bboink-t-embed-cc1101.bin` | `esptool --chip esp32s3 write_flash 0x0 bboink-t-embed-cc1101.bin` |
 | T-Display C5 | `bboink-tdisplay-c5.bin` | `esptool --chip esp32c5 write_flash 0x0 bboink-tdisplay-c5.bin` |
 | Waveshare C5-LCD | `bboink-waveshare-c5-lcd.bin` | `esptool --chip esp32c5 write_flash 0x0 bboink-waveshare-c5-lcd.bin` |
+| Cardputer ADV | `bboink-cardputer-adv.bin` | `esptool --chip esp32s3 write_flash 0x0 bboink-cardputer-adv.bin` |
 
 > The C5 chips need **esptool 5.x** (`pip install --upgrade "esptool>=5.1.0"`), and a one-time
 > `esptool erase_flash` before their first flash. Building it yourself?
 > See [Build / flash](../README.md#build--flash).
 
 > **Updating later:** button boards update themselves over WiFi (**Options → Update FW**).
-> The **Waveshare has no on-device OTA** (single-slot 4 MB flash, no menu) — re-flash it with
-> the [web flasher](https://whitewhidow.github.io/bboink/flasher/) (leave *Erase device* off to
+> The **Waveshare** (single-slot 4 MB flash, no menu) **and Cardputer ADV** (single-button, no
+> menu) **have no on-device OTA** — re-flash them with the
+> [web flasher](https://whitewhidow.github.io/bboink/flasher/) (leave *Erase device* off to
 > keep your config) or the `write_flash` command above. See
 > [Firmware updates](../README.md#firmware-updates).
 
@@ -90,7 +93,8 @@ automatic cracked write-back, add **Path B** on top — it doesn't replace anyth
 
 ## Path B — relay + phone portal
 
-*Required for the **Waveshare** (it has no menu). Optional for button boards.*
+*Required for the single-button boards (**Waveshare**, **Cardputer ADV**) — they have no menu.
+Optional for button boards.*
 
 Here the board talks to **one** small web service you host (the **relay**), which fans your
 captures out to all three cracking services and merges the results. You drive it from a **web
@@ -113,7 +117,8 @@ You need a **Web Bluetooth browser**: Chrome / Chromium / Edge on **Android or d
 (Linux confirmed). ❌ Not iOS / Safari.
 
 1. Put the board in **BLE BRIDGE**:
-   - **Waveshare:** **tap** the button (it reboots into the bridge, ~15 s).
+   - **Single-button (Waveshare / Cardputer ADV):** **tap** the button (it reboots into the
+     bridge, ~15 s).
    - **Button board:** **MENU → BLE BRIDGE**.
    - The screen shows the board name `BBoink-XXXX`, the portal URL to open, and the relay
      URL — on every board (not just the Waveshare).
@@ -166,7 +171,7 @@ Settings live **on the device** and are read back by whatever UI you use (button
 |---|---|
 | C5 board won't flash / bad image | Use **esptool 5.x**; run `esptool erase_flash` once before the first flash. |
 | Portal won't connect / no chooser | Needs a Web Bluetooth browser (Chrome/Edge, **not** iOS/Safari), and the board must be **in BLE BRIDGE**. |
-| Board name not in the chooser | Board must be in BLE BRIDGE (Waveshare: tap; button board: menu → BLE BRIDGE). Only one phone can connect at a time. |
+| Board name not in the chooser | Board must be in BLE BRIDGE (single-button Waveshare / Cardputer ADV: tap; button board: menu → BLE BRIDGE). Only one phone can connect at a time. |
 | `relay (not set)` in red | Set **Relay URL** (Path B only). Path A ignores it. |
 | Relay sync says unreachable | Hit **Check / wake relay**, wait ~30–50 s for Render to wake, retry. |
 | Nothing uploads | Those captures already synced — tick **re-sync everything**, or capture new ones. |
