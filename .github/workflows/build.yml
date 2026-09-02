@@ -3,17 +3,14 @@ name: build
 # Builds BBoink for every supported board and produces, per board:
 #   bboink-<env>.bin      merged single image, full flash at 0x0 (esptool)
 #   bboink-app-<env>.bin  app-only image (SD-launcher / in-app self-updater)
-# Every push uploads them as artifacts; pushing a tag (v*) also cuts a Release
-# with all of them attached.
+# Runs ONLY on a version tag (v*) — cuts a Release with all bins attached and
+# publishes the merged bins into flasher/. Pushes to main do NOT trigger a build;
+# use the manual "Run workflow" (workflow_dispatch) for a one-off build if needed.
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
-    # The publish-flasher job auto-commits bins under flasher/ back to main — don't let
-    # that commit retrigger a full rebuild.
-    paths-ignore: [ 'flasher/**' ]
-  workflow_dispatch:
+    tags: [ 'v*' ]        # ONLY build/release on version tags — pushes to main do NOT build
+  workflow_dispatch:      # manual one-off build when you want one without tagging
 
 permissions:
   contents: write   # release step uploads the .bins
