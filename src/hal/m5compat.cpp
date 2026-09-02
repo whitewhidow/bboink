@@ -583,7 +583,7 @@ static void bringUpHardware() {
     porkhal::ledInit();                 // no-op (no LED)
 #elif defined(PORK_BOARD_CARDPUTER_ADV)
     M5.Display.init();
-    M5.Display.setRotation(3);          // proven-booting; rotation 1 (M5GFX default) regressed boot — revisit
+    M5.Display.setRotation(1);          // right-side up (M5GFX default for Cardputer); boot is stable now
     M5.Display.setBrightness(200);
     porkhal::inputInit();
     porkhal::ledInit();                 // no-op (GPIO21 is not the ADV's LED — TODO verify)

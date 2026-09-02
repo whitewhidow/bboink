@@ -234,7 +234,7 @@ void setup() {
     M5Cardputer.begin(cfg);
     M5.Display.setBrightness(Config::wifi().displayBrightness);
 #if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0); delay(500);   // TEMP timing margin — ADV hangs without it (init race; root-cause TODO)
+    M5.Display.setBrightness(255); M5.Display.fillScreen(0x07E0); delay(500);   // TEMP GREEN marker (this exact combo booted)
 #endif
 
 #if !defined(PORK_BOARD_TDISPLAY_C5)
@@ -248,22 +248,22 @@ void setup() {
     // boot re-establishes its own promiscuous radio in NetworkRecon::start() (which
     // needs no association, so no GDMA race), and this headroom matters now that
     // NimBLE's static RAM is linked in. Skip for a MANAGEMENT boot (needs the STA up).
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
     if (!g_bleBridge && Config::wifi().bootModePolicy != 2) {
         WiFi.disconnect(true, true);
-        WiFi.mode(WIFI_OFF);
-    }
+        WiFi.mode(WIFI_OFF);   // capture uses promiscuous mode only; keeping the STA up
+    }                          // races the flash writes (pcap save hangs ~1min in)
 #endif
 #if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0); delay(500);
+    M5.Display.fillScreen(0x001F); delay(500);   // BLUE
 #endif
     NetworkRecon::init();
 #if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0); delay(500);
+    M5.Display.fillScreen(0xFFE0); delay(500);   // YELLOW
 #endif
     OinkMode::init();
 #if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0); delay(500);
+    M5.Display.fillScreen(0xF81F); delay(500);   // MAGENTA
 #endif
 
     App::clear();
