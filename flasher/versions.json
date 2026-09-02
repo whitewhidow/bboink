@@ -14,10 +14,15 @@
       "env": "waveshare-c5-lcd",
       "name": "Waveshare ESP32-C5-LCD-1.47",
       "chipFamily": "ESP32-C5"
+    },
+    {
+      "env": "cardputer-adv",
+      "name": "M5Cardputer ADV",
+      "chipFamily": "ESP32-S3"
     }
   ],
   "versions": [
-    "v0.9.20",
-    "v0.9.19"
+    "v0.9.22",
+    "v0.9.20"
   ]
 }
