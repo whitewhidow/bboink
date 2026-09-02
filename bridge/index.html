@@ -369,7 +369,7 @@ $('sync').onclick=async()=>{
         log('• '+ssid+' (pcap)');
         const b=await cmdCollect({c:'get',name:f.name});
         const w=(await (await fetch(url+'/v1/pcap?name='+encodeURIComponent(f.name),{method:'POST',headers:{...auth,'Content-Type':'application/octet-stream'},body:b})).json().catch(()=>({}))).wpasec||{};
-        log('    wpa-sec:   '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status||('HTTP '+w.http))));
+        log('    wpa-sec:   '+(w.error?('error — '+w.error):(w.status==='duplicate'?'already submitted':w.status==='accepted'?'accepted':('rejected — '+(w.msg||('HTTP '+w.http))))));
         if(w.ok) await cmdAck({c:'synced',name:f.name,svc:'w'}); else log('    \u21bb wpa-sec kept for retry'); }
     }
     log('');

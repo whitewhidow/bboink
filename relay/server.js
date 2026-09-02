@@ -137,9 +137,19 @@ app.post('/v1/pcap', async (req, res) => {
     const r = await fetch('https://wpa-sec.stanev.org/', {
       method: 'POST', headers: { Cookie: `key=${keyOf(req, 'wpasec', WPASEC_KEY)}` }, body: fd,
     });
-    const status = (r.status === 200 || r.status === 201) ? 'accepted'
-                 : (r.status === 409) ? 'duplicate' : 'rejected';
-    res.json({ wpasec: { http: r.status, ok: [200, 201, 409].includes(r.status), status } });
+    // wpa-sec returns HTTP 200 even when it REJECTS the file — the real result is in
+    // the BODY: a valid upload returns the hcxpcapngtool report; a bad/empty one returns
+    // "Not a valid capture file..."; a dupe returns "This capture file was already
+    // submitted.". Reporting from the status code alone marked every upload "accepted"
+    // while rejects silently never landed. Parse the body.
+    const text = (await r.text().catch(() => '')) || '';
+    const low = text.toLowerCase();
+    const dup = low.includes('already submitted');
+    const bad = text.trim() === '' || low.includes('not a valid capture') || low.includes('please provide a valid key');
+    const okHttp = (r.status === 200 || r.status === 201);
+    const status = dup ? 'duplicate' : (okHttp && !bad) ? 'accepted' : 'rejected';
+    res.json({ wpasec: { http: r.status, ok: (status === 'accepted' || status === 'duplicate'),
+                         status, msg: text.slice(0, 160).replace(/\s+/g, ' ').trim() } });
   } catch (e) { res.status(502).json({ wpasec: { error: String(e.message || e) } }); }
 });
 
