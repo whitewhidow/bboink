@@ -219,10 +219,13 @@ void tick() {
     if (porkhal::vkey.changed) {
         lastInputMs = millis();
         if (dimmed) { M5.Display.setBrightness(Config::wifi().displayBrightness); dimmed = false; }
-    } else if (!dimmed && millis() - lastInputMs > kIdleDimMs) {
+    }
+#if !defined(PORK_BOARD_CARDPUTER_ADV)   // USB-powered — skip the battery-saver idle dim
+    else if (!dimmed && millis() - lastInputMs > kIdleDimMs) {   // (dim-to-12 looked like a ~30s crash)
         M5.Display.setBrightness(kDimLevel);
         dimmed = true;
     }
+#endif
 
     Input in = readInput();
     switch (screen) {

@@ -34,8 +34,7 @@ public:
             cfg.freq_read   = 16000000;
             cfg.spi_3wire   = false;
             cfg.use_lock    = true;
-            cfg.dma_channel = 0;   // NO DMA — avoids the display SPI-DMA vs WiFi GDMA race on the S3
-                                   // (boot/capture hangs). Slower blocking writes, fine for a status UI.
+            cfg.dma_channel = SPI_DMA_CH_AUTO;
             cfg.pin_sclk    = PORK_TFT_SCLK;
             cfg.pin_mosi    = PORK_TFT_MOSI;
             cfg.pin_miso    = PORK_TFT_MISO;   // -1 (unwired on the panel)
