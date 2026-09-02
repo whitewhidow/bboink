@@ -363,7 +363,7 @@ $('sync').onclick=async()=>{
           if(ok) await cmdAck({c:'synced',name:f.name,svc:'o'}); else log('    \u21bb OHC kept for retry'); }
         if(needP){ const pc=j.pwncrack||{};
           log('    PwnCrack:  '+(pc.error?('error — '+pc.error):(pc.ok?'accepted':('HTTP '+pc.http))));
-          if(pc.ok) await cmdAck({c:'synced',name:f.name,svc:'p'}); else log('    \u21bb PwnCrack kept for retry (e.g. 522/timeout)'); }
+          if(pc.ok) await cmdAck({c:'synced',name:f.name,svc:'p'}); else log('    \u21bb PwnCrack kept for retry'); }
       } else if(f.kind==='pcap'){
         if(done.indexOf('w')>=0) continue;
         log('• '+ssid+' (pcap)');
