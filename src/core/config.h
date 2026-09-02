@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <SPI.h>
+#include "../version.h"   // BBOINK_OTA_BIN (per-board CI asset name)
 
 #define CONFIG_FILE "/porkchop.conf"
 #define PERSONALITY_FILE "/personality.json"
@@ -119,7 +120,7 @@ struct WiFiConfig {
     bool autoPurgeCracked = false;      // after WPA-SEC sync, delete local files for cracked nets
     // SD path the launcher loads / self-update writes. Defaults to the CI asset
     // name so you can copy the downloaded .bin verbatim to the SD root.
-    char otaBinPath[48] = "/bboink-app-t-embed-cc1101.bin";
+    char otaBinPath[48] = "/" BBOINK_OTA_BIN;
 
     // --- Mode / provisioning (ModeManager, see docs/DESIGN-mode-webui.md) ---
     // Capture a PMKID from M1 when the AP offers one (clientless). Disable to keep

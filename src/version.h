@@ -7,6 +7,16 @@
 
 // App-only image (firmware.bin) published by CI — this is what an SD-card launcher
 // loads (NOT the merged 0x0 image). The self-updater downloads this over WiFi and
-// writes it to the SD path configured in Options.
+// writes it to the SD path configured in Options. Each board pulls its OWN asset
+// (different pins/LCD/chip -> different binary), matching the CI env name.
+#if defined(PORK_BOARD_TDISPLAY_C5)
+#define BBOINK_OTA_BIN "bboink-app-tdisplay-c5.bin"
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#define BBOINK_OTA_BIN "bboink-app-waveshare-c5-lcd.bin"
+#elif defined(PORK_BOARD_CARDPUTER_ADV)
+#define BBOINK_OTA_BIN "bboink-app-cardputer-adv.bin"
+#else
+#define BBOINK_OTA_BIN "bboink-app-t-embed-cc1101.bin"
+#endif
 #define BBOINK_OTA_URL \
-    "https://github.com/whitewhidow/bboink/releases/latest/download/bboink-app-t-embed-cc1101.bin"
+    "https://github.com/whitewhidow/bboink/releases/latest/download/" BBOINK_OTA_BIN

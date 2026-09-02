@@ -34,6 +34,10 @@ jobs:
             chip: esp32c5
             flash_size: 4MB
             boot: "0x2000"
+          - env: cardputer-adv    # M5Cardputer ADV (StampS3, ESP32-S3, 8MB)
+            chip: esp32s3
+            flash_size: 8MB
+            boot: "0x0"
     steps:
       - uses: actions/checkout@v4
 
@@ -117,7 +121,7 @@ jobs:
           set -e
           VER="${GITHUB_REF_NAME}"
           mkdir -p "flasher/fw/$VER"
-          for env in t-embed-cc1101 tdisplay-c5 waveshare-c5-lcd; do
+          for env in t-embed-cc1101 tdisplay-c5 waveshare-c5-lcd cardputer-adv; do
             cp "_bins/bboink-$env.bin" "flasher/fw/$VER/bboink-$env.bin"
           done
           rm -rf _bins
@@ -132,7 +136,8 @@ jobs:
             boards: [
               {env:"t-embed-cc1101",   name:"LilyGo T-Embed CC1101 / PLUS", chipFamily:"ESP32-S3"},
               {env:"tdisplay-c5",      name:"LilyGo T-Display C5",           chipFamily:"ESP32-C5"},
-              {env:"waveshare-c5-lcd", name:"Waveshare ESP32-C5-LCD-1.47",   chipFamily:"ESP32-C5"}
+              {env:"waveshare-c5-lcd", name:"Waveshare ESP32-C5-LCD-1.47",   chipFamily:"ESP32-C5"},
+              {env:"cardputer-adv",    name:"M5Cardputer ADV",               chipFamily:"ESP32-S3"}
             ],
             versions: $versions
           }' > flasher/versions.json
