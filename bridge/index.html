@@ -380,15 +380,20 @@ $('sync').onclick=async()=>{
     const nb=s=>(s||'').toLowerCase().replace(/[^0-9a-f]/g,'').slice(0,12);
     const capsNow=await cmdJson({c:'caps'})||[];
     const known=new Set(capsNow.map(r=>nb(r.bssid)));
-    let n=0, skipped=0;
+    const prevCracked=await cmdJson({c:'crks'})||[];        // what the board already had cracked
+    const had=new Set(prevCracked.map(c=>nb(c.bssid)));
+    let n=0, fresh=0;
     for(const c of (cr.cracked||[])){
-      if(c.bssid && !known.has(nb(c.bssid))){ skipped++; continue; }   // deleted / not captured here
+      const b=nb(c.bssid);
+      if(c.bssid && !known.has(b)) continue;                // cracked elsewhere / deleted here — not ours
+      if(!had.has(b)) fresh++;                              // newly cracked this sync
       await cmdAck({c:'crk',b:c.bssid||'',s:c.ssid||'',p:c.password||''}); n++;
     }
     await cmdAck({c:'crkdone'});
-    if(skipped) log('('+skipped+' cracked network(s) not captured on this board — skipped)');
     log('');
-    log('Cracked so far: '+n+' network(s) · see the Captures tab');
+    log('Cracked by services:    '+(cr.cracked||[]).length);
+    log('Cracked on this device: '+n);
+    log('New this sync:          '+fresh);
     log('✔ sync complete');
   }catch(e){ log('✖ '+(e.message||e)); }
   btn.textContent=btnTxt; btn.disabled=false;   // re-enable BEFORE the (slow) refresh
