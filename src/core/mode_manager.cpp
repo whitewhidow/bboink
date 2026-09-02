@@ -15,7 +15,14 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <esp_mac.h>
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+
+// Single-button boards have no on-device menu: their "management" IS the BLE bridge
+// (tap -> reboot into bridge). Multi-button boards get the on-device MENU instead.
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#define PORK_SINGLE_BUTTON_MGMT 1
+#endif
+
+#if !defined(PORK_SINGLE_BUTTON_MGMT)
 #include "../web/ntfy.h"
 #endif
 
@@ -23,7 +30,7 @@ namespace ModeManager {
 
 static Mode mode_ = Mode::CAPTURE;
 static bool s_forceBridge = false;
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#if !defined(PORK_SINGLE_BUTTON_MGMT)
 static bool s_forceManagement = false;
 #endif
 
@@ -69,7 +76,7 @@ void enterCapture(bool clearLock) {
     App::go(App::Screen::CAPTURE);
 }
 
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#if defined(PORK_SINGLE_BUTTON_MGMT)
 // Single-button, no menu: "management" is the BLE bridge (reboots in for the BT RAM).
 void enterManagement() { requestBleBridge(); }
 #else
@@ -129,7 +136,7 @@ void enterBleBridge() {
 }
 
 void toggle() {
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#if defined(PORK_SINGLE_BUTTON_MGMT)
     if (mode_ == Mode::BLE_BRIDGE) enterCapture();      // bridge -> capture (live)
     else                           requestBleBridge();  // capture -> reboot into bridge
 #else
@@ -140,7 +147,7 @@ void toggle() {
 }
 
 void forceBleBridgeBoot() { s_forceBridge = true; }
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#if !defined(PORK_SINGLE_BUTTON_MGMT)
 void forceManagementBoot() { s_forceManagement = true; }
 #else
 void forceManagementBoot() {}   // no management mode on this board
@@ -148,7 +155,7 @@ void forceManagementBoot() {}   // no management mode on this board
 
 void begin() {
     if (s_forceBridge) { s_forceBridge = false; enterBleBridge(); return; }
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+#if !defined(PORK_SINGLE_BUTTON_MGMT)
     if (s_forceManagement) { s_forceManagement = false; enterManagement(); return; }
     if (Config::wifi().bootModePolicy == 2) { enterManagement(); return; }   // policy: always management
 #endif
