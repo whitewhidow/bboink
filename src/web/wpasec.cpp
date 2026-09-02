@@ -23,6 +23,25 @@ static const char* WPASEC_UPLOAD_PATH = "/";
 static const char* WPASEC_POTFILE_PATH = "/?api&dl=1";
 static const size_t WPASEC_MAX_CACHE_ENTRIES = 500;
 
+// Write ALL bytes over a (TLS) client, tolerating partial writes and transient 0s.
+// The one-shot write path (HTTPClient.POST / hand-rolled write) sent 0 bytes right
+// after the ESP32-C5 TLS handshake, so the multipart body never reached wpa-sec and
+// uploads silently failed. Looping in <=1KB chunks with a bounded retry is what
+// actually gets the body across.
+static bool wpasecWriteAll(WiFiClientSecure& c, const uint8_t* p, size_t n) {
+    size_t sent = 0;
+    uint32_t t0 = millis();
+    while (sent < n) {
+        if (!c.connected()) return false;
+        size_t chunk = n - sent;
+        if (chunk > 1024) chunk = 1024;
+        int w = c.write(p + sent, chunk);
+        if (w > 0) { sent += (size_t)w; t0 = millis(); }
+        else { if (millis() - t0 > 10000) return false; delay(3); }
+    }
+    return true;
+}
+
 // Static member initialization
 bool WPASec::cacheLoaded = false;
 char WPASec::lastError[64] = "";
@@ -365,33 +384,66 @@ bool WPASec::uploadSingleCapture(const char* filepath, const char* bssid) {
     Serial.printf("[WPASEC] upload body=%u maxAlloc=%u free=%u\n",
                   (unsigned)bodyLen, (unsigned)maxblk, (unsigned)ESP.getFreeHeap());
     if (maxblk < 36000) { free(body); snprintf(lastError, sizeof(lastError), "LOW HEAP %u/%u", (unsigned)maxblk, (unsigned)ESP.getFreeHeap()); return false; }
+    // FIX #2 (C5 empty-body bug): HTTPClient.POST() sent 0 body bytes right after the
+    // TLS handshake on the ESP32-C5, so wpa-sec received an empty upload. POST the
+    // request ourselves, writing head+body in <=1KB chunks via wpasecWriteAll().
     WiFiClientSecure client;
     client.setInsecure();
-
-    HTTPClient https;
-    https.setTimeout(25000);
-    https.setReuse(false);
-    String url = String("https://") + WPASEC_HOST + WPASEC_UPLOAD_PATH;
-    if (!https.begin(client, url)) {
+    client.setTimeout(25);
+    if (!client.connect(WPASEC_HOST, WPASEC_PORT)) {
         free(body);
-        snprintf(lastError, sizeof(lastError), "BEGIN FAILED");
-        Serial.println("[WPASEC] https.begin failed");
+        snprintf(lastError, sizeof(lastError), "CONNECT FAIL");
         return false;
     }
-    https.addHeader("Cookie", String("key=") + Config::wifi().wpaSecKey);
-    https.addHeader("Content-Type", String("multipart/form-data; boundary=") + boundary);
-
-    Serial.printf("[WPASEC] POST %s (%u bytes body)\n", url.c_str(), (unsigned int)bodyLen);
-    int code = https.POST(body, bodyLen);
+    String head = String("POST ") + WPASEC_UPLOAD_PATH + " HTTP/1.1\r\n"
+        + "Host: " + WPASEC_HOST + "\r\n"
+        + "Cookie: key=" + Config::wifi().wpaSecKey + "\r\n"
+        + "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n"
+        + "Content-Length: " + String((unsigned)bodyLen) + "\r\n"
+        + "Connection: close\r\n\r\n";
+    Serial.printf("[WPASEC] POST / (%u bytes body)\n", (unsigned int)bodyLen);
+    bool okSend = wpasecWriteAll(client, (const uint8_t*)head.c_str(), head.length())
+               && wpasecWriteAll(client, body, bodyLen);
     free(body);
+    if (!okSend) {
+        client.stop();
+        snprintf(lastError, sizeof(lastError), "BODY SEND FAIL");
+        return false;
+    }
+    client.flush();
 
-    String resp = (code > 0) ? https.getString() : String();
-    https.end();
-    Serial.printf("[WPASEC] HTTP %d resp: %s\n", code, resp.c_str());
+    // Read the whole response (headers + body) until wpa-sec closes the connection.
+    String raw; raw.reserve(1024);
+    uint32_t t0 = millis();
+    while ((client.connected() || client.available()) && millis() - t0 < 25000) {
+        while (client.available()) { raw += (char)client.read(); t0 = millis(); }
+        delay(2);
+    }
+    client.stop();
 
-    bool success = (code == 200 || code == 201 || code == 409);
+    int code = 0;
+    int sp = raw.indexOf(' ');
+    if (sp >= 0) code = raw.substring(sp + 1, sp + 4).toInt();
+    int bs = raw.indexOf("\r\n\r\n");
+    String resp = (bs >= 0) ? raw.substring(bs + 4) : raw;
+    resp.trim();
+    Serial.printf("[WPASEC] HTTP %d resp: %.80s\n", code, resp.c_str());
+
+    // FIX #1: wpa-sec returns HTTP 200 for REJECTS too — a valid upload returns the
+    // hcxpcapngtool report, an empty/bad one returns "Not a valid capture file...".
+    // Checking only the status code marked rejected uploads as "accepted" (they never
+    // landed). Parse the body: accept only when it's not an empty/known-error page.
+    String lower = resp; lower.toLowerCase();
+    bool httpOk   = (code == 200 || code == 201);
+    bool rejected = (resp.length() == 0)
+                 || (lower.indexOf("not a valid capture") >= 0)
+                 || (lower.indexOf("please provide a valid key") >= 0);
+    bool success = httpOk && !rejected;
     if (success) {
-        Serial.printf("[WPASEC] Upload success: %s\n", bssid);
+        Serial.printf("[WPASEC] Upload accepted: %s\n", bssid);
+    } else if (httpOk) {
+        // reached wpa-sec but it rejected the file (usually a truncated/empty body)
+        snprintf(lastError, sizeof(lastError), "REJECTED: %.40s", resp.c_str());
     } else if (code > 0) {
         snprintf(lastError, sizeof(lastError), "HTTP %d", code);
     } else {
