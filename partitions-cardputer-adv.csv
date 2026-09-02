@@ -1,0 +1,9 @@
+# M5Cardputer ADV (ESP32-S3) — 8MB flash, A/B OTA layout + LittleFS captures.
+# StampS3 is 8MB; if your ADV variant is 16MB, switch the env to 16MB and widen
+# the app slots / littlefs to match. Two ~2.87MB app slots leave ~2.2MB for the FS.
+# Name,     Type, SubType,  Offset,   Size,     Flags
+nvs,        data, nvs,      0x9000,   0x5000,
+otadata,    data, ota,      0xe000,   0x2000,
+app0,       app,  ota_0,    0x10000,  0x2E0000,
+app1,       app,  ota_1,    0x2F0000, 0x2E0000,
+littlefs,   data, spiffs,   0x5D0000, 0x230000,

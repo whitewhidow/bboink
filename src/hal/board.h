@@ -11,7 +11,8 @@
 #pragma once
 
 #if !defined(PORK_BOARD_CARDPUTER) && !defined(PORK_BOARD_TEMBED_CC1101) && \
-    !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD)
+    !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD) && \
+    !defined(PORK_BOARD_CARDPUTER_ADV)
 // Default to the original board so legacy builds are unaffected.
 #define PORK_BOARD_CARDPUTER
 #endif
@@ -201,6 +202,47 @@
 // long-press = power off (see hal/m5compat.cpp Waveshare input backend).
 #define PORK_ENC_KEY        28   // the one button (also the C5 boot strap pin)
 #define PORK_BTN_BACK       28   // same physical button (no second input)
+
+// ---------------------------------------------------------------------------
+#elif defined(PORK_BOARD_CARDPUTER_ADV)
+// ---------------------------------------------------------------------------
+// M5Cardputer ADV (ESP32-S3). Brought up like the Waveshare single-button profile:
+// LovyanGFX drives the ST7789 DIRECTLY (NOT M5GFX/M5Unified), on-device menus off,
+// management over the BLE console. Only the top "G0" button (GPIO0) is read — the
+// ADV's 56-key TCA8418 I2C keyboard is intentionally IGNORED for v1 (add it in a v2
+// for on-device menus). Display pins are the Cardputer/CardputerADV values from
+// M5GFX autodetect (identical for both boards). UNVERIFIED until hardware bring-up.
+//
+// Display: ST7789, 135x240 native, driven landscape as 240x135 (rotation 1).
+#define PORK_DISPLAY_W      240
+#define PORK_DISPLAY_H      135
+#define PORK_TOP_BAR_H      14
+#define PORK_BOTTOM_BAR_H   14
+
+// Display (ST7789) on SPI3_HOST. No MISO on the panel. SD is a SEPARATE FSPI bus.
+#define PORK_TFT_SCLK       36
+#define PORK_TFT_MOSI       35
+#define PORK_TFT_MISO       -1
+#define PORK_TFT_CS         37
+#define PORK_TFT_DC         34
+#define PORK_TFT_RST        33
+#define PORK_TFT_BL         38   // backlight (PWM), driven by LovyanGFX Light_PWM
+
+// Onboard WS2812 status LED (single, GPIO21).
+#define PORK_LED_PIN        21
+#define PORK_LED_COUNT      1
+
+// microSD on its own FSPI bus (NOT shared with the display).
+#define PORK_SD_SCK         40
+#define PORK_SD_MISO        39
+#define PORK_SD_MOSI        14
+#define PORK_SD_CS          12
+
+// Single usable input for v1: the top "G0" button on GPIO0 (BOOT strap + user
+// button). Tap = CAPTURE<->MANAGEMENT toggle, like the Waveshare. Held at reset =
+// download mode (strap pin), so only runtime presses are usable.
+#define PORK_ENC_KEY        0
+#define PORK_BTN_BACK       0
 
 #endif
 // ---------------------------------------------------------------------------
