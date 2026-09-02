@@ -581,6 +581,12 @@ static void bringUpHardware() {
     M5.Display.setBrightness(200);
     porkhal::inputInit();
     porkhal::ledInit();                 // no-op (no LED)
+#elif defined(PORK_BOARD_CARDPUTER_ADV)
+    M5.Display.init();
+    M5.Display.setRotation(3);          // proven-booting; rotation 1 (M5GFX default) regressed boot — revisit
+    M5.Display.setBrightness(200);
+    porkhal::inputInit();
+    porkhal::ledInit();                 // no-op (GPIO21 is not the ADV's LED — TODO verify)
 #else
     M5.Display.init();
     M5.Display.setRotation(3);          // 320x170 landscape (T-Embed CC1101: wheel on right)

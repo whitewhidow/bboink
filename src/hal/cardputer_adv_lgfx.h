@@ -28,7 +28,7 @@ public:
     LGFX_CardputerADV() {
         {   // SPI bus (SPI3_HOST; panel has no MISO; SD lives on its own FSPI bus)
             auto cfg = _bus.config();
-            cfg.spi_host    = SPI3_HOST;
+            cfg.spi_host    = SPI3_HOST;   // per M5GFX board_M5CardputerADV autodetect
             cfg.spi_mode    = 0;
             cfg.freq_write  = 40000000;
             cfg.freq_read   = 16000000;

@@ -156,9 +156,10 @@ void setup() {
     // at startup and it otherwise starves OinkMode::init(). Bridge boots keep it.
     bool g_bleBridge = (bootBleBridge == BOOT_SYNC_MAGIC);
     bootBleBridge = 0;
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD)
-    // Waveshare NimBLE-heap fix: reclaim the BT-controller RAM on non-bridge boots
-    // (other boards have RAM headroom and keep it).
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+    // Waveshare / Cardputer ADV NimBLE-heap fix: reclaim the BT-controller RAM on
+    // non-bridge boots (these boards have no PSRAM, so NimBLE's ~40KB otherwise
+    // starves OinkMode::init() and the engine hangs — black screen after display init).
     if (!g_bleBridge) esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
 #endif
 
@@ -232,6 +233,9 @@ void setup() {
     auto cfg = M5.config();
     M5Cardputer.begin(cfg);
     M5.Display.setBrightness(Config::wifi().displayBrightness);
+#if defined(PORK_BOARD_CARDPUTER_ADV)
+    M5.Display.fillScreen(0); delay(500);   // TEMP timing margin — ADV hangs without it (init race; root-cause TODO)
+#endif
 
 #if !defined(PORK_BOARD_TDISPLAY_C5)
     // The SD shares the SPI bus with the display; retry the mount now that the
@@ -250,8 +254,17 @@ void setup() {
         WiFi.mode(WIFI_OFF);
     }
 #endif
+#if defined(PORK_BOARD_CARDPUTER_ADV)
+    M5.Display.fillScreen(0); delay(500);
+#endif
     NetworkRecon::init();
+#if defined(PORK_BOARD_CARDPUTER_ADV)
+    M5.Display.fillScreen(0); delay(500);
+#endif
     OinkMode::init();
+#if defined(PORK_BOARD_CARDPUTER_ADV)
+    M5.Display.fillScreen(0); delay(500);
+#endif
 
     App::clear();
     App::centerMsg("BBoink", TFT_CYAN);
