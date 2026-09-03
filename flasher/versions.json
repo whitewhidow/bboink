@@ -19,10 +19,15 @@
       "env": "cardputer-adv",
       "name": "M5Cardputer ADV",
       "chipFamily": "ESP32-S3"
+    },
+    {
+      "env": "tdongle-s3",
+      "name": "LilyGo T-Dongle S3",
+      "chipFamily": "ESP32-S3"
     }
   ],
   "versions": [
-    "v0.9.22",
-    "v0.9.20"
+    "v0.9.23",
+    "v0.9.22"
   ]
 }
