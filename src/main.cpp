@@ -266,13 +266,30 @@ void setup() {
     M5.Display.fillScreen(0xF81F); delay(500);   // MAGENTA
 #endif
 
-    App::clear();
-    App::centerMsg("BBoink", TFT_CYAN);
-    M5.Display.setTextSize(1);
-    M5.Display.setTextDatum(top_center);
-    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    M5.Display.drawString("v" BBOINK_VERSION, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2 + 20);
-    delay(900);
+    {   // graphical boot splash (shared style with the hid-ble-poc firmware)
+        auto& d = M5.Display;
+        const int W = d.width(), H = d.height();
+        const bool big = W >= 240;
+        uint32_t cyan = d.color888(0x22, 0xD3, 0xE0), mag = d.color888(0xE8, 0x79, 0xF9);
+        uint32_t dim  = d.color888(0x5A, 0x67, 0x72), dark = d.color888(0x0B, 0x2A, 0x2E);
+        d.fillScreen(0x000000u);
+        for (int y = 0; y < H; y += 4) d.drawFastHLine(0, y, W, d.color888(0x0A, 0x12, 0x16));  // faint scanlines
+        int kw = big ? 18 : 10, kh = big ? 14 : 8, gap = big ? 5 : 3;                            // decorative key band
+        int kn = (W - 16) / (kw + gap); if (kn > 12) kn = 12; if (kn < 1) kn = 1;
+        int startx = (W - (kn * (kw + gap) - gap)) / 2, ky = (int)(H * 0.16);
+        for (int i = 0; i < kn; i++) d.fillRoundRect(startx + i * (kw + gap), ky, kw, kh, 2, (i % 5 == 2) ? cyan : dark);
+        d.setTextDatum(middle_center);
+        d.setTextSize(big ? 5 : 3);
+        d.setTextColor(dark); d.drawString("BBoink", W / 2 + 2, H / 2 + 2);   // drop shadow
+        d.setTextColor(cyan); d.drawString("BBoink", W / 2, H / 2);
+        d.setTextSize(big ? 2 : 1);
+        d.setTextColor(mag); d.drawString("handshake hunter", W / 2, H / 2 + (big ? 30 : 14));
+        if (big) { int uw = (int)(W * 0.5); d.fillRect((W - uw) / 2, H / 2 + 46, uw, 2, cyan); } // accent underline
+        d.setTextSize(1); d.setTextColor(dim);
+        d.setTextDatum(bottom_center); d.drawString("v" BBOINK_VERSION, W / 2, H - 3);
+        d.setTextDatum(top_left);
+        delay(1400);
+    }
     if (syncRan) {
         App::clear();
         App::centerMsg("SYNC RESULT", TFT_CYAN);
