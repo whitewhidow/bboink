@@ -59,21 +59,44 @@ static void drawStats() {
     else if (strstr(st, "PMKID"))      sc = TFT_MAGENTA;
     else if (strstr(st, "NEXT"))       sc = TFT_WHITE;
     else if (strstr(st, "WAIT") || strstr(st, "NO TARGETS")) sc = TFT_DARKGREY;
-    M5.Display.fillRect(0, 30, PORK_DISPLAY_W, 18, TFT_BLACK);
-    M5.Display.setTextSize(2);
+#if defined(PORK_BOARD_TDONGLE_S3)
+    const int CAP_TS = 1, CAP_TOP = 15, CAP_ROW0 = 25, CAP_BOT = PORK_DISPLAY_H - 11, LH = 11;
+#else
+    const int CAP_TS = 2, CAP_TOP = 30, CAP_ROW0 = 51, CAP_BOT = 148, LH = 12;
+#endif
+    M5.Display.fillRect(0, CAP_TOP, PORK_DISPLAY_W, CAP_TS * 8 + 2, TFT_BLACK);
+    M5.Display.setTextSize(CAP_TS);
     M5.Display.setTextDatum(top_left);
     M5.Display.setTextColor(sc, TFT_BLACK);
-    M5.Display.drawString(st, 6, 30);
+    M5.Display.drawString(st, 6, CAP_TOP);
 
     // --- small stat lines (all labels use "label: value" for consistency) ---
     M5.Display.setTextSize(1);
-    int y = 51; const int lh = 12;
+    int y = CAP_ROW0; const int lh = LH;
     auto row = [&](const char* s, uint16_t c) {
+        if (y + lh > CAP_BOT) return;   // small screens: stop before the footer (detail is on the BLE console)
         M5.Display.fillRect(0, y, PORK_DISPLAY_W, lh, TFT_BLACK);
         M5.Display.setTextColor(c, TFT_BLACK);
         M5.Display.drawString(s, 6, y);
         y += lh;
     };
+
+#if defined(PORK_BOARD_TDONGLE_S3)
+    // 160x80: a curated, short-string set that fits (full detail is on the BLE console).
+    snprintf(line, sizeof(line), "ch:%u n:%u pk:%lu", OinkMode::getChannel(),
+             OinkMode::getNetworkCount(), (unsigned long)OinkMode::getPacketCount());
+    row(line, TFT_WHITE);
+    snprintf(line, sizeof(line), "hs:%u pmkid:%u", OinkMode::getCompleteHandshakeCount(), OinkMode::getPMKIDCount());
+    row(line, TFT_GREEN);
+    { const char* last = OinkMode::getLastCaptureSSID();
+      snprintf(line, sizeof(line), "last:%.16s", (last && last[0]) ? last : "-");
+      row(line, (last && last[0]) ? TFT_GREEN : TFT_DARKGREY); }
+    { const char* tgt = OinkMode::getTargetSSID();
+      snprintf(line, sizeof(line), "tgt:%.10s cl:%u", (tgt && tgt[0]) ? tgt : "-", OinkMode::getTargetClientCount());
+      row(line, (tgt && tgt[0]) ? TFT_YELLOW : TFT_DARKGREY); }
+    if (y < CAP_BOT) M5.Display.fillRect(0, y, PORK_DISPLAY_W, CAP_BOT - y, TFT_BLACK);
+    return;
+#endif
 
     snprintf(line, sizeof(line), "ch:%02u nets:%u pkts:%lu mgmt:%lu",
              OinkMode::getChannel(), OinkMode::getNetworkCount(),
@@ -120,7 +143,7 @@ static void drawStats() {
 
     // The NO TARGETS breakdown adds an extra row; when it disappears the row count
     // shrinks, so clear any stale trailing line left below the last row drawn.
-    if (y < 148) M5.Display.fillRect(0, y, PORK_DISPLAY_W, 148 - y, TFT_BLACK);
+    if (y < CAP_BOT) M5.Display.fillRect(0, y, PORK_DISPLAY_W, CAP_BOT - y, TFT_BLACK);
 }
 
 void enter() {

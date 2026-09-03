@@ -23,8 +23,16 @@ static constexpr uint8_t  kDimLevel  = 12;
 static uint32_t lastInputMs = 0;
 static bool     dimmed      = false;
 
+#if defined(PORK_BOARD_TDONGLE_S3)
+// 160x80 — half everything: compact bars + size-1 title text.
+static constexpr int HEADER_H = 14;
+static constexpr int FOOTER_H = 11;
+static constexpr int UI_TS_TITLE = 1;
+#else
 static constexpr int HEADER_H = 26;
 static constexpr int FOOTER_H = 18;
+static constexpr int UI_TS_TITLE = 2;
+#endif
 static constexpr uint16_t COL_ACCENT = TFT_CYAN;
 static constexpr uint16_t COL_TEXT   = TFT_WHITE;
 static constexpr uint16_t COL_DIM    = TFT_DARKGREY;
@@ -49,7 +57,7 @@ void header(const char* title) {
     M5.Display.fillRect(0, 0, PORK_DISPLAY_W, HEADER_H, TFT_BLACK);
     M5.Display.fillRect(0, HEADER_H - 2, PORK_DISPLAY_W, 2, COL_ACCENT);
     M5.Display.setTextColor(COL_ACCENT, TFT_BLACK);
-    M5.Display.setTextSize(2);
+    M5.Display.setTextSize(UI_TS_TITLE);
     M5.Display.setTextDatum(top_left);
     M5.Display.drawString(title, 6, 4);
 
@@ -84,7 +92,7 @@ void footer(const char* hint) {
     M5.Display.setTextColor(COL_DIM, TFT_BLACK);
     M5.Display.setTextSize(1);
     M5.Display.setTextDatum(top_left);
-    M5.Display.drawString(hint, 6, y + 5);
+    M5.Display.drawString(hint, 6, y + (FOOTER_H > 12 ? 5 : 2));
 }
 
 void drawList(const char* const* rows, int count, int selected,
@@ -124,7 +132,7 @@ void drawList(const char* const* rows, int count, int selected,
 
 void centerMsg(const char* msg, uint16_t color) {
     M5.Display.setTextColor(color, TFT_BLACK);
-    M5.Display.setTextSize(2);
+    M5.Display.setTextSize(UI_TS_TITLE);
     M5.Display.setTextDatum(middle_center);
     M5.Display.drawString(msg, PORK_DISPLAY_W / 2, PORK_DISPLAY_H / 2);
 }
