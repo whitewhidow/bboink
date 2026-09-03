@@ -148,6 +148,20 @@ All free — bring a key from **any one**, or skip the cloud and crack locally.
 **capture file** formats, **storage**, **releases / CI**, **build from source**, and
 **provenance**. Design notes: [`docs/DESIGN-ble-bridge.md`](docs/DESIGN-ble-bridge.md).
 
+## Firmware updates & switching
+
+WiFi OTA works on **every** board — including the single-button ones that have no
+on-device menu. From the BLE portal's **Update** tab, **Update to latest** flags a
+fetch and reboots; at a clean heap (WiFi alone, no BLE contention) the board writes
+the latest release into the spare OTA slot and boots it — progress on the LCD.
+
+The two 16 MB S3 boards (T-Embed CC1101, T-Dongle S3) can also **switch firmware**:
+a hidden action (tap the *BBoink* brand 3×) flashes the sibling
+[hid-ble-poc](https://github.com/whitewhidow/hid-ble-poc) app — a USB/BLE HID
+tool — into the spare slot and boots into it; switch back from its own portal. Same
+OTA machinery, byte-compatible slots. Each firmware advertises a distinct BLE
+address so the host's GATT cache doesn't collide across a switch.
+
 ## Build from source
 
 Five PlatformIO envs from one codebase — `t-embed-cc1101` (ESP32-S3), `tdisplay-c5`,
