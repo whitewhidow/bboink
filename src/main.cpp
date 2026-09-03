@@ -94,18 +94,27 @@ static void pwnUploadAll(char* seg, size_t segLen) {
 // sibling firmware (PoC). WiFi is already associated (boot connect, above) and the
 // display is up, so download the sibling app bin into the spare OTA slot with
 // on-screen progress and boot into it. Mirrors the PoC side exactly.
-// Unified reboot-to-fetch screen (identical wording/structure to the PoC): header
-// "FIRMWARE", a center phase line ("connecting wifi" -> "NN%" -> "booting"/error),
-// and the target ("-> PoC"/"-> latest") pinned in the footer throughout.
+// Unified reboot-to-fetch screen, drawn to match the PoC's dispCenter EXACTLY:
+// a colored "FIRMWARE" title centered near the top, then a grey phase line and the
+// target ("-> PoC" / "-> latest") centered below. NO header bar / footer.
 static char g_fwTgt[24] = "";
+static void fwDraw(const char* phase, uint16_t color) {
+    auto& d = M5.Display;
+    bool sm = d.width() < 200;                       // small LCD (T-Dongle 160x80)
+    int tS = sm ? 2 : 3, bS = sm ? 1 : 2;            // title / body text sizes
+    int ty = sm ? 4 : 12, by = sm ? 26 : 60, dy = sm ? 11 : 22;
+    int W = d.width();
+    d.fillScreen(TFT_BLACK); d.setTextWrap(false); d.setTextDatum(top_center);
+    d.setTextColor(color, TFT_BLACK); d.setTextSize(tS); d.drawString("FIRMWARE", W / 2, ty);
+    d.setTextColor(d.color565(0xC8, 0xD2, 0xDA), TFT_BLACK); d.setTextSize(bS);
+    d.drawString(phase, W / 2, by);
+    d.drawString(g_fwTgt, W / 2, by + 2 * dy);       // phase, blank line, target (like the PoC)
+}
 static void fwFetchProgress(size_t done, size_t total) {
     static int last = -1;
     int p = total ? (int)(done * 100 / total) : 0;
     if (p == last) return; last = p;
-    int y = M5.Display.height() / 2 - 8;
-    M5.Display.fillRect(0, y, M5.Display.width(), 20, TFT_BLACK);
-    M5.Display.setTextDatum(top_center); M5.Display.setTextSize(2); M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
-    M5.Display.drawString(String(p) + "%", M5.Display.width() / 2, y);
+    char b[20]; snprintf(b, sizeof(b), "writing %d%%", p); fwDraw(b, M5.Display.color565(0xF7, 0xC9, 0x48));
 }
 // SELF = update to the latest of THIS firmware; SWITCH = flash the sibling (PoC).
 // One reboot-to-fetch path for both (mirrors the PoC side). Two distinct magics.
@@ -122,14 +131,15 @@ static void runFwFetchIfQueued() {
     const char* nm  = self ? "latest" : BBOINK_OTHER_FW_NAME;
 #endif
     snprintf(g_fwTgt, sizeof(g_fwTgt), "-> %s", nm);
-    App::clear(); App::header("FIRMWARE"); App::centerMsg("connecting wifi", TFT_CYAN); App::footer(g_fwTgt);
+    uint16_t cyan = M5.Display.color565(0x22, 0xD3, 0xE0);
+    fwDraw("connecting wifi", cyan);
     if (WiFi.status() != WL_CONNECTED && !NetLink::connectConfigured()) {
-        App::clear(); App::header("FIRMWARE"); App::centerMsg("NO WIFI", TFT_RED); App::footer(g_fwTgt); delay(2800); return;
+        fwDraw("NO WIFI", M5.Display.color565(0xE5, 0x48, 0x4D)); delay(2800); return;
     }
+    fwDraw("connecting to github", cyan);
     Updater::Result r = Updater::fetchToFlash(url, fwFetchProgress);
-    App::clear(); App::header("FIRMWARE");
-    if (r.ok) { App::centerMsg("booting", TFT_GREEN); App::footer(g_fwTgt); delay(1400); ESP.restart(); }
-    App::centerMsg(r.error, TFT_RED); App::footer("FAILED"); delay(3200);   // fall through to normal boot
+    if (r.ok) { fwDraw("booting", M5.Display.color565(0x3F, 0xB9, 0x50)); delay(1400); ESP.restart(); }
+    fwDraw(r.error, M5.Display.color565(0xE5, 0x48, 0x4D)); delay(3200);   // fall through to normal boot
 }
 
 // Run ONE queued sync op early in boot (clean heap, one TLS handshake). If more ops

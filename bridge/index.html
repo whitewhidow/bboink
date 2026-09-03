@@ -106,9 +106,11 @@
     <div class="sub" style="margin:0 0 8px">Firmware: <b id="fwver">—</b></div>
     <div class="sub"><b>Firmware</b> — needs WiFi configured (WiFi tab). Each reboots and flashes over WiFi at a clean heap, then boots the new image; the board <b>disconnects</b>, so <b>watch its screen</b> for progress.</div>
     <button id="updatefw" class="wide" style="margin-top:8px">⬆ Update to latest BBoink</button>
-    <div style="font-weight:600;color:#8a97a2;font-size:12px;letter-spacing:.4px;text-transform:uppercase;margin:18px 0 6px">Switch firmware</div>
-    <div class="sub" style="margin:0 0 6px">Switch to the sibling app (<b>PoC</b>, the USB/BLE HID tool) — flashed into the spare slot; whatever you boot becomes the default. Switch back from the PoC's own portal. 16&nbsp;MB boards only.</div>
-    <button id="switchfw" class="sec wide">⇄ Switch to PoC firmware</button>
+    <div id="switchSection" hidden>
+      <div style="font-weight:600;color:#8a97a2;font-size:12px;letter-spacing:.4px;text-transform:uppercase;margin:18px 0 6px">Switch firmware</div>
+      <div class="sub" style="margin:0 0 6px">Switch to the sibling app (<b>PoC</b>, the USB/BLE HID tool) — flashed into the spare slot; whatever you boot becomes the default. Switch back from the PoC's own portal. 16&nbsp;MB boards only.</div>
+      <button id="switchfw" class="sec wide">⇄ Switch to PoC firmware</button>
+    </div>
     <div id="fwMsg" class="sub" style="margin-top:6px"></div>
   </div>
 
@@ -152,6 +154,15 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p_'+b.dataset.t));
 });
+
+// Hidden "developer" unlock: tap the BBoink brand 3x (quickly) to reveal the
+// firmware-switch action in the Update tab. Kept out of sight for normal users.
+(()=>{ let n=0,t=0; const el=document.querySelector('.brand');
+  if(el){ el.style.cursor='pointer'; el.onclick=()=>{ const now=Date.now();
+    n=(now-t<1500)?n+1:1; t=now;
+    if(n>=3){ const s=$('switchSection'); if(s) s.hidden=false; n=0; }
+  }; }
+})();
 
 function onNotify(e){
   const v=e.target.value, type=v.getUint8(0);
