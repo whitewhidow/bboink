@@ -1,6 +1,6 @@
 // hal/m5compat.cpp — implementation of the T-Embed / T-Display C5 compat facade.
 #include "m5compat.h"
-#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 
 #include "board.h"
 #if defined(PORK_BOARD_TEMBED_CC1101)
@@ -221,7 +221,7 @@ void inputPoll() {
 
 void ledInit() { /* no LED on this board — no-op */ }
 
-#elif defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#elif defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 // ===========================================================================
 // Waveshare ESP32-C5-LCD-1.47 input: ONE button (BOOT = GPIO28).
 //   tap (release < 1.5s)   -> vkey.toggle       (CAPTURE <-> MANAGEMENT)
@@ -275,7 +275,7 @@ void ledInit() { /* WS2812 on GPIO8 — neopixelWrite() inits the RMT lazily */ 
 // ---------------------------------------------------------------------------
 #include "../core/config.h"
 
-#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 // No I2S speaker on the C5 boards — tone is a no-op. (Cardputer ADV has a speaker
 // but it's not enabled in the v1 single-button bring-up.)
 void SpeakerFacade::tone(uint16_t /*freq*/, uint32_t /*durationMs*/) {}
@@ -490,7 +490,7 @@ Keyboard_Class::KeysState Keyboard_Class::keysState() const {
 // PowerFacade
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 // C5 boards: T-Display C5 has an AXP2602 PMU (register map UNVERIFIED); the
 // Waveshare C5-LCD has no battery/PMU at all (USB powered). Stub the fuel gauge
 // to a safe 100% / 4.0V. TODO(hardware): read SoC/voltage on boards that have it.
@@ -581,7 +581,7 @@ static void bringUpHardware() {
     M5.Display.setBrightness(200);
     porkhal::inputInit();
     porkhal::ledInit();                 // no-op (no LED)
-#elif defined(PORK_BOARD_CARDPUTER_ADV)
+#elif defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
     M5.Display.init();
     M5.Display.setRotation(1);          // right-side up (M5GFX default for Cardputer); boot is stable now
     M5.Display.setBrightness(200);

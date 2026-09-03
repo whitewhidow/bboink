@@ -12,7 +12,7 @@
 
 #if !defined(PORK_BOARD_CARDPUTER) && !defined(PORK_BOARD_TEMBED_CC1101) && \
     !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD) && \
-    !defined(PORK_BOARD_CARDPUTER_ADV)
+    !defined(PORK_BOARD_CARDPUTER_ADV) && !defined(PORK_BOARD_TDONGLE_S3)
 // Default to the original board so legacy builds are unaffected.
 #define PORK_BOARD_CARDPUTER
 #endif
@@ -241,6 +241,43 @@
 // Single usable input for v1: the top "G0" button on GPIO0 (BOOT strap + user
 // button). Tap = CAPTURE<->MANAGEMENT toggle, like the Waveshare. Held at reset =
 // download mode (strap pin), so only runtime presses are usable.
+#define PORK_ENC_KEY        0
+#define PORK_BTN_BACK       0
+
+#elif defined(PORK_BOARD_TDONGLE_S3)
+// ---------------------------------------------------------------------------
+// LilyGo T-Dongle S3 (ESP32-S3, 16MB, NO PSRAM). Single-button profile like the
+// Cardputer ADV: LovyanGFX drives the ST7735S 80x160 LCD DIRECTLY (no M5GFX),
+// on-device menus off, management over the BLE console. Only the side button
+// (GPIO0, also BOOT strap) is read. No SD used (captures live on LittleFS, like
+// the Waveshare). Display pins per LilyGo T-Dongle-S3 pin_config.h. UNVERIFIED
+// until hardware bring-up (esp. offset/rotation/invert of the ST7735S).
+//
+// Display: ST7735S 80x160 native, driven landscape as 160x80 (rotation 1).
+#define PORK_DISPLAY_W      160
+#define PORK_DISPLAY_H      80
+#define PORK_TOP_BAR_H      12
+#define PORK_BOTTOM_BAR_H   12
+
+#define PORK_TFT_SCLK       5
+#define PORK_TFT_MOSI       3
+#define PORK_TFT_MISO       -1
+#define PORK_TFT_CS         4
+#define PORK_TFT_DC         2
+#define PORK_TFT_RST        1
+#define PORK_TFT_BL         38   // backlight
+
+// No addressable status LED wired for v1 (T-Dongle S3 has an APA102, add later).
+#define PORK_LED_COUNT      0
+
+// microSD: NONE for v1 (-1 so the shared SD code falls back to internal LittleFS).
+#define PORK_SD_SCK         -1
+#define PORK_SD_MISO        -1
+#define PORK_SD_MOSI        -1
+#define PORK_SD_CS          -1
+
+// Single usable input: the side button on GPIO0 (BOOT strap + user button).
+// Tap = CAPTURE<->BLE-BRIDGE toggle, like the Waveshare / Cardputer ADV.
 #define PORK_ENC_KEY        0
 #define PORK_BTN_BACK       0
 

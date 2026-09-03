@@ -156,7 +156,7 @@ void setup() {
     // at startup and it otherwise starves OinkMode::init(). Bridge boots keep it.
     bool g_bleBridge = (bootBleBridge == BOOT_SYNC_MAGIC);
     bootBleBridge = 0;
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
     // Waveshare / Cardputer ADV NimBLE-heap fix: reclaim the BT-controller RAM on
     // non-bridge boots (these boards have no PSRAM, so NimBLE's ~40KB otherwise
     // starves OinkMode::init() and the engine hangs — black screen after display init).
@@ -248,7 +248,7 @@ void setup() {
     // boot re-establishes its own promiscuous radio in NetworkRecon::start() (which
     // needs no association, so no GDMA race), and this headroom matters now that
     // NimBLE's static RAM is linked in. Skip for a MANAGEMENT boot (needs the STA up).
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
     if (!g_bleBridge && Config::wifi().bootModePolicy != 2) {
         WiFi.disconnect(true, true);
         WiFi.mode(WIFI_OFF);   // capture uses promiscuous mode only; keeping the STA up

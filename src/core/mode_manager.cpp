@@ -18,7 +18,7 @@
 
 // Single-button boards have no on-device menu: their "management" IS the BLE bridge
 // (tap -> reboot into bridge). Multi-button boards get the on-device MENU instead.
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 #define PORK_SINGLE_BUTTON_MGMT 1
 #endif
 

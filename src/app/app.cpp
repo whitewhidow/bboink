@@ -11,7 +11,7 @@
 
 namespace App {
 
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 Screen screen = Screen::CAPTURE;
 #else
 Screen screen = Screen::MENU;
@@ -141,7 +141,7 @@ void go(Screen s) {
     screen = s;
     switch (s) {
         case Screen::CAPTURE: ScreenCapture::enter(); break;
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD) && !defined(PORK_BOARD_CARDPUTER_ADV)
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD) && !defined(PORK_BOARD_CARDPUTER_ADV) && !defined(PORK_BOARD_TDONGLE_S3)
         case Screen::MENU:    ScreenMenu::enter();    break;
         case Screen::MANAGE:  ScreenManage::enter();  break;
         case Screen::OHC:     ScreenOHC::enter();     break;
@@ -158,7 +158,7 @@ void powerOff() {
     footer("press the button to wake");
     delay(1000);
     M5.Display.setBrightness(0);
-#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
     // The one button (BOOT = GPIO28) is a high-power GPIO, NOT an LP/RTC-IO pin,
     // so it cannot wake DEEP sleep on the ESP32-C5 (only GPIO0-7 can). Use LIGHT
     // sleep + GPIO wakeup instead: the same button turns the screen back on, and
@@ -220,7 +220,7 @@ void tick() {
         lastInputMs = millis();
         if (dimmed) { M5.Display.setBrightness(Config::wifi().displayBrightness); dimmed = false; }
     }
-#if !defined(PORK_BOARD_CARDPUTER_ADV)   // USB-powered — skip the battery-saver idle dim
+#if !defined(PORK_BOARD_CARDPUTER_ADV) && !defined(PORK_BOARD_TDONGLE_S3)   // USB-powered — skip the battery-saver idle dim
     else if (!dimmed && millis() - lastInputMs > kIdleDimMs) {   // (dim-to-12 looked like a ~30s crash)
         M5.Display.setBrightness(kDimLevel);
         dimmed = true;
@@ -230,7 +230,7 @@ void tick() {
     Input in = readInput();
     switch (screen) {
         case Screen::CAPTURE: ScreenCapture::tick(in); break;
-#if !defined(PORK_BOARD_WAVESHARE_C5_LCD) && !defined(PORK_BOARD_CARDPUTER_ADV)
+#if !defined(PORK_BOARD_WAVESHARE_C5_LCD) && !defined(PORK_BOARD_CARDPUTER_ADV) && !defined(PORK_BOARD_TDONGLE_S3)
         case Screen::MENU:    ScreenMenu::tick(in);    break;
         case Screen::MANAGE:  ScreenManage::tick(in);  break;
         case Screen::OHC:     ScreenOHC::tick(in);     break;

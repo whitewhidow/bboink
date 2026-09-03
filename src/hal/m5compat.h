@@ -14,7 +14,7 @@
 // Text entry of arbitrary characters can't be faked from an encoder; those
 // call sites get a dedicated on-screen char-picker in a later step.
 #pragma once
-#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV)
+#if defined(PORK_BOARD_TEMBED_CC1101) || defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
 
 #include <Arduino.h>
 #include <vector>
@@ -33,6 +33,9 @@ using LGFX_Board = LGFX_WaveshareC5;
 #elif defined(PORK_BOARD_CARDPUTER_ADV)
 #include "cardputer_adv_lgfx.h"
 using LGFX_Board = LGFX_CardputerADV;
+#elif defined(PORK_BOARD_TDONGLE_S3)
+#include "tdongle_s3_lgfx.h"
+using LGFX_Board = LGFX_TDongleS3;
 #endif
 
 // Bring in only the LovyanGFX colour constants (TFT_BLACK, TFT_RED, ...) and

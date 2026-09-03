@@ -15,6 +15,8 @@
 #define BBOINK_OTA_BIN "bboink-app-waveshare-c5-lcd.bin"
 #elif defined(PORK_BOARD_CARDPUTER_ADV)
 #define BBOINK_OTA_BIN "bboink-app-cardputer-adv.bin"
+#elif defined(PORK_BOARD_TDONGLE_S3)
+#define BBOINK_OTA_BIN "bboink-app-tdongle-s3.bin"
 #else
 #define BBOINK_OTA_BIN "bboink-app-t-embed-cc1101.bin"
 #endif
