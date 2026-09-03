@@ -3,7 +3,7 @@
 **A pocket WiFi handshake hunter.** BBoink turns a LilyGo, Waveshare or M5Stack board into a
 capture rig: it channel-hops, deauths eligible APs, grabs WPA **4-way handshakes + PMKIDs**,
 and gets them cracked — in the cloud or on your own machine — then shows the recovered
-**password** right on the screen. One firmware, four boards.
+**password** right on the screen. One firmware, five boards.
 
 **[🌐 Site + live screenshots](https://whitewhidow.github.io/bboink/)**  ·
 **[⚡ Web flasher](https://whitewhidow.github.io/bboink/flasher/)**  ·
@@ -15,7 +15,7 @@ and gets them cracked — in the cloud or on your own machine — then shows the
 
 ## Supported hardware
 
-Four boards, one firmware. Buy links are the official vendor stores; the wiki/docs links are
+Five boards, one firmware. Buy links are the official vendor stores; the wiki/docs links are
 the manufacturer's own hardware documentation.
 
 <table>
@@ -70,6 +70,17 @@ _BLE portal only (no menu, no AP)_
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top" align="center">
+
+**LilyGo T-Dongle S3**<br>
+ESP32-S3 · 16 MB · **1 button** + 160×80 LCD<br>
+_BLE portal only (no menu, no AP)_
+
+[Buy](https://lilygo.cc/products/t-dongle-s3)
+
+</td>
+</tr>
 </table>
 
 ## Flash → Capture → Crack
@@ -84,14 +95,14 @@ it by hand.)
 > **Heads-up — T-Display C5:** the browser flasher can fail with *"Failed to initialize"* (its ROM
 > rejects esptool's stub loader). Flash *that* board on the command line instead —
 > `esptool --chip esp32c5 --no-stub write_flash 0x0 bboink-tdisplay-c5.bin` (see
-> [getting started](docs/GETTING-STARTED.md)). The T-Embed, Waveshare and Cardputer ADV flash fine in the browser.
+> [getting started](docs/GETTING-STARTED.md)). The T-Embed, Waveshare, Cardputer ADV and T-Dongle S3 flash fine in the browser.
 
 ### 2 · Capture
 
 Drive the board with its **buttons + on-screen menu** (T-Embed / T-Display), or entirely from
 your **phone over Bluetooth** — the **[BLE portal](https://whitewhidow.github.io/bboink/bridge/)**,
 a web page that needs nothing installed and is the *only* UI on the single-button boards
-(Waveshare / Cardputer ADV). No access point, no web server on the device.
+(Waveshare / Cardputer ADV / T-Dongle S3). No access point, no web server on the device.
 
 Hit **CAPTURE** and it channel-hops (2.4 **and** 5 GHz on the C5 boards), deauths eligible
 APs, and saves handshakes + PMKIDs — with live per-event stats. Networks are remembered in a
@@ -105,7 +116,7 @@ Get the captures cracked — pick whatever suits you:
   [OnlineHashCrack](https://onlinehashcrack.com) · [PwnCrack](https://pwncrack.org)). A key
   from **any one** is enough. Button boards can upload **directly over WiFi**; or your phone
   forwards them through a tiny **relay you host** (the only path on the single-button
-  Waveshare / Cardputer ADV).
+  Waveshare / Cardputer ADV / T-Dongle S3).
 - **Local** — no account, fully offline: **Download hashes (.hc22000)** from the BLE portal
   and run `hashcat -m 22000 bboink.hc22000 <wordlist>` on your own machine.
 
@@ -139,7 +150,7 @@ All free — bring a key from **any one**, or skip the cloud and crack locally.
 
 ## Build from source
 
-Four PlatformIO envs from one codebase — `t-embed-cc1101` (ESP32-S3), `tdisplay-c5`,
-`waveshare-c5-lcd` (ESP32-C5), `cardputer-adv` (ESP32-S3). `pio run -e <env>`; per-board bits
-are gated with `build_src_filter`. Full build/flash notes are in the
-[reference](docs/REFERENCE.md#build--flash).
+Five PlatformIO envs from one codebase — `t-embed-cc1101` (ESP32-S3), `tdisplay-c5`,
+`waveshare-c5-lcd` (ESP32-C5), `cardputer-adv` (ESP32-S3), `tdongle-s3` (ESP32-S3).
+`pio run -e <env>`; per-board bits are gated with `build_src_filter`. Full build/flash notes
+are in the [reference](docs/REFERENCE.md#build--flash).

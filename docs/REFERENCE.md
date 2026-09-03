@@ -15,12 +15,12 @@ upload over the *board's own* WiFi) · `CAPTURES` · `STATS` · `OPTIONS` (edit 
 with the buttons) · `REBOOT` / `POWER OFF`. Choose **BLE BRIDGE** to hand off to the
 phone portal instead of using WiFi.
 
-**Single-button boards (Waveshare / Cardputer ADV).** One button: **tap** = CAPTURE ⇄
-**BLE BRIDGE** (it reboots into bridge, ~15 s), **hold ~3 s** = power off. Neither has an
+**Single-button boards (Waveshare / Cardputer ADV / T-Dongle S3).** One button: **tap** = CAPTURE ⇄
+**BLE BRIDGE** (it reboots into bridge, ~15 s), **hold ~3 s** = power off. None has an
 on-device menu — all config + sync are done in the phone portal.
 
 **The BLE portal** — the web page (nothing to install) that is the *entire* UI on the single-button
-boards (Waveshare / Cardputer ADV) and an
+boards (Waveshare / Cardputer ADV / T-Dongle S3) and an
 option on the others. Needs a **Web Bluetooth** browser — Chrome/Chromium/Edge on **Android or desktop** (Linux confirmed; Windows/macOS should work). **Not** iOS/Safari. Open
 **https://whitewhidow.github.io/bboink/bridge/**, tap **Connect to board**, pick
 `BBoink-XXXX`. Three tabs:
@@ -74,8 +74,8 @@ env fallbacks. You get a URL like `https://bboink.onrender.com`. Endpoint refere
 Set **Relay URL**, **Relay token**, and the **three service keys** (table above).
 
 ### 3 · Sync
-- **BLE portal (any board):** enter **BLE BRIDGE** (single-button Waveshare / Cardputer ADV:
-  tap; T-Embed/T-Display: menu → *BLE BRIDGE*) → on the phone open the portal URL →
+- **BLE portal (any board):** enter **BLE BRIDGE** (single-button Waveshare / Cardputer ADV /
+  T-Dongle S3: tap; T-Embed/T-Display: menu → *BLE BRIDGE*) → on the phone open the portal URL →
   **Connect** → **Sync** tab →
   **Check / wake relay** → **Sync captures ↔ relay**. Results print **per network**
   (OHC / PwnCrack / wpa-sec). Cracked passwords are written back to the board and shown
@@ -182,8 +182,8 @@ Settings are saved on exit to a versioned, size-tolerant config blob.
 - If up/down feel reversed on your unit, the two buttons are symmetric — just swap them in your head.
 
 Text fields (SSID / passwords / keys) use the same on-screen **char-picker**: up/down change the
-character, select confirms it, back deletes. (On the single-button Waveshare / Cardputer ADV
-there's no on-device menu input — do all config from the
+character, select confirms it, back deletes. (On the single-button Waveshare / Cardputer ADV /
+T-Dongle S3 there's no on-device menu input — do all config from the
 [BLE portal](https://whitewhidow.github.io/bboink/bridge/).)
 
 ## Capture files
@@ -218,21 +218,22 @@ How a board updates depends on whether it has the menu **and** a two-slot (A/B) 
   Both pull the **app-only** asset for that board (`bboink-app-<env>.bin`). A launcher must
   be given the `-app-` image (not the merged 0x0 image), and its app slot must be ≥ ~1.3 MB.
 
-- **Single-button boards (Waveshare / Cardputer ADV)** — **no on-device OTA.** The
+- **Single-button boards (Waveshare / Cardputer ADV / T-Dongle S3)** — **no on-device OTA.** The
   **Waveshare**'s 4 MB flash holds a *single* app slot, and on-device OTA fundamentally needs a
   **second** slot to write into (you can't overwrite the running app) — two ~1.8 MB slots don't
-  fit in 4 MB. The **Cardputer ADV** has the flash for two slots but, like the Waveshare, **no
-  menu** to trigger an update. So you update either by **reflashing the merged image over USB** —
-  easiest via the **[web flasher](https://whitewhidow.github.io/bboink/flasher/)** (pick the
-  board → Install), or by hand:
+  fit in 4 MB. The **Cardputer ADV** and **T-Dongle S3** have the flash for two slots but, like the
+  Waveshare, **no menu** to trigger an update. So you update either by **reflashing the merged image
+  over USB** — easiest via the **[web flasher](https://whitewhidow.github.io/bboink/flasher/)** (pick
+  the board → Install), or by hand:
 
   ```
   esptool --chip esp32c5 write_flash 0x0 bboink-waveshare-c5-lcd.bin   # Waveshare
   esptool --chip esp32s3 write_flash 0x0 bboink-cardputer-adv.bin      # Cardputer ADV
+  esptool --chip esp32s3 write_flash 0x0 bboink-tdongle-s3.bin         # T-Dongle S3
   ```
 
 ## Releases / CI
-GitHub Actions (`.github/workflows/build.yml`) builds **all four boards** on a `vX.Y.Z` tag,
+GitHub Actions (`.github/workflows/build.yml`) builds **all five boards** on a `vX.Y.Z` tag,
 publishing a Release with, **per board env**, two raw assets:
 
 | Asset | Use |
@@ -240,7 +241,7 @@ publishing a Release with, **per board env**, two raw assets:
 | `bboink-<env>.bin` | merged image, full flash at `0x0` (esptool) — **all** boards |
 | `bboink-app-<env>.bin` | app-only image, for button-board OTA / a launcher |
 
-`<env>` is `t-embed-cc1101`, `tdisplay-c5`, `waveshare-c5-lcd`, or `cardputer-adv`.
+`<env>` is `t-embed-cc1101`, `tdisplay-c5`, `waveshare-c5-lcd`, `cardputer-adv`, or `tdongle-s3`.
 
 Release flow: bump `BBOINK_VERSION` in `src/version.h`, `git tag vX.Y.Z`, push the tag — CI
 builds and attaches all assets. Button boards then see it via *Update FW*; the Waveshare is
@@ -250,15 +251,16 @@ version list (the `publish-flasher` job commits each release's bins under `flash
 ## Build / flash
 PlatformIO (here installed via pipx, not on `PATH`):
 ```bash
-# build envs: t-embed-cc1101 (S3) · tdisplay-c5 · waveshare-c5-lcd · cardputer-adv (S3)
+# build envs: t-embed-cc1101 (S3) · tdisplay-c5 · waveshare-c5-lcd · cardputer-adv (S3) · tdongle-s3 (S3)
 ~/.local/bin/pio run -e t-embed-cc1101                          # build
 ~/.local/bin/pio run -e t-embed-cc1101 -t upload                # flash (S3 / T-Display)
 ```
 The **Waveshare C5** is flashed with esptool (bootloader @ `0x2000`); the **T-Display
 C5** needs `--no-stub`/115200 (its env sets this) and a **clean power-cycle** to run the
-app after flashing. The **Cardputer ADV** (M5Stack StampS3, 8 MB) is an S3 — flash it like the
-T-Embed (`-t upload` or `--chip esp32s3 write_flash 0x0`). All four envs build from the same
-source; the AP/web + menu screens are excluded per-board via `build_src_filter`.
+app after flashing. The **Cardputer ADV** (M5Stack StampS3, 8 MB) and **T-Dongle S3** (16 MB,
+ST7735S 160×80) are S3 boards — flash like the T-Embed (`-t upload` or `--chip esp32s3
+write_flash 0x0`). All five envs build from the same source; the AP/web + menu screens are
+excluded per-board via `build_src_filter`.
 Selected by `-DPORK_BOARD_TEMBED_CC1101`; 16 MB flash, partition table in
 `partitions.csv` (two 3 MB `ota_0`/`ota_1` app slots for flash OTA; the `littlefs`
 partition fills the top of flash). Serial is the ESP32-S3 native USB-Serial-JTAG,
