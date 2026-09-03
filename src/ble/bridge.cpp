@@ -4,6 +4,7 @@
 #include "../core/config.h"
 #include "../modes/oink.h"
 #include "../version.h"
+#include "../core/boot_sync.h"   // requestFwSwitch() — switch to the sibling firmware
 #include "../hal/m5compat.h"
 #include "../hal/board.h"
 #include <NimBLEDevice.h>
@@ -417,6 +418,20 @@ static void handleCommand(const uint8_t* data, size_t len) {
         if (bh[0]) { uint64_t v = strtoull(bh, nullptr, 16); for (int i = 0; i < 6; i++) bssid[i] = (uint8_t)(v >> ((5 - i) * 8)); }
         if (ssid[0] || bh[0]) { OinkMode::excludeNetworkByBSSID(bssid, ssid); notifyText("{\"t\":\"ok\"}"); }
         else notifyText("{\"t\":\"err\",\"e\":\"need ssid\"}");
+    }
+    else if (!strcmp(c, "updatefw")) {   // update to the latest of THIS firmware (reboot-to-fetch)
+        notifyText("{\"t\":\"ok\",\"m\":\"updating\"}");
+        delay(300);                      // let the notify flush before we reboot
+        requestFwUpdate();               // RTC flag + reboot into a WiFi boot (never returns)
+    }
+    else if (!strcmp(c, "switchfw")) {   // flash the sibling firmware + boot into it (reboot-to-switch)
+#if defined(BBOINK_OTHER_FW_URL)
+        notifyText("{\"t\":\"ok\",\"m\":\"switching\"}");
+        delay(300);
+        requestFwSwitch();               // RTC flag + reboot into a WiFi boot (never returns)
+#else
+        notifyText("{\"t\":\"err\",\"e\":\"no sibling fw\"}");
+#endif
     }
     else if (!strcmp(c, "done"))   { s_exit = true; notifyText("{\"t\":\"bye\"}"); }
 }

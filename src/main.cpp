@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <esp_bt.h>
+#include <esp_mac.h>               // distinct BLE base MAC per firmware (GATT-cache fix)
 #include <M5Cardputer.h>            // shim -> hal/m5compat.h on this board
 #include <WiFi.h>
 #include "core/config.h"
@@ -15,6 +16,7 @@
 #include "web/ohc.h"
 #include "web/relay.h"
 #include "web/pwncrack.h"
+#include "web/updater.h"
 #include <FS.h>
 #if defined(__has_include)
 #  if __has_include("core/dev_secrets.h")
@@ -32,6 +34,7 @@ RTC_NOINIT_ATTR uint32_t bootSyncQueue;
 RTC_NOINIT_ATTR char     bootSyncResult[96];
 RTC_NOINIT_ATTR uint32_t bootShowMgmt;
 RTC_NOINIT_ATTR uint32_t bootBleBridge;
+RTC_NOINIT_ATTR uint32_t bootFwFetch;
 
 // Append a short segment to the accumulated bootSyncResult (space-separated, bounded).
 static void appendSyncSeg(const char* seg) {
@@ -87,6 +90,48 @@ static void pwnUploadAll(char* seg, size_t segLen) {
     else           snprintf(seg, segLen, "pwnUp ERR:%.40s", r.error);
 }
 
+// Firmware switch (reboot-to-switch): a portal button flagged a switch to the
+// sibling firmware (PoC). WiFi is already associated (boot connect, above) and the
+// display is up, so download the sibling app bin into the spare OTA slot with
+// on-screen progress and boot into it. Mirrors the PoC side exactly.
+// Unified reboot-to-fetch screen (identical wording/structure to the PoC): header
+// "FIRMWARE", a center phase line ("connecting wifi" -> "NN%" -> "booting"/error),
+// and the target ("-> PoC"/"-> latest") pinned in the footer throughout.
+static char g_fwTgt[24] = "";
+static void fwFetchProgress(size_t done, size_t total) {
+    static int last = -1;
+    int p = total ? (int)(done * 100 / total) : 0;
+    if (p == last) return; last = p;
+    int y = M5.Display.height() / 2 - 8;
+    M5.Display.fillRect(0, y, M5.Display.width(), 20, TFT_BLACK);
+    M5.Display.setTextDatum(top_center); M5.Display.setTextSize(2); M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    M5.Display.drawString(String(p) + "%", M5.Display.width() / 2, y);
+}
+// SELF = update to the latest of THIS firmware; SWITCH = flash the sibling (PoC).
+// One reboot-to-fetch path for both (mirrors the PoC side). Two distinct magics.
+static void runFwFetchIfQueued() {
+    bool self   = (bootFwFetch == FW_FETCH_SELF);
+    bool sw     = (bootFwFetch == FW_FETCH_SWITCH);
+    if (!self && !sw) return;
+    bootFwFetch = 0;
+#if !defined(BBOINK_OTHER_FW_URL)
+    if (sw) return;                                  // no sibling on this board
+    const char* url = BBOINK_OTA_URL; const char* nm = "latest";
+#else
+    const char* url = self ? BBOINK_OTA_URL : BBOINK_OTHER_FW_URL;
+    const char* nm  = self ? "latest" : BBOINK_OTHER_FW_NAME;
+#endif
+    snprintf(g_fwTgt, sizeof(g_fwTgt), "-> %s", nm);
+    App::clear(); App::header("FIRMWARE"); App::centerMsg("connecting wifi", TFT_CYAN); App::footer(g_fwTgt);
+    if (WiFi.status() != WL_CONNECTED && !NetLink::connectConfigured()) {
+        App::clear(); App::header("FIRMWARE"); App::centerMsg("NO WIFI", TFT_RED); App::footer(g_fwTgt); delay(2800); return;
+    }
+    Updater::Result r = Updater::fetchToFlash(url, fwFetchProgress);
+    App::clear(); App::header("FIRMWARE");
+    if (r.ok) { App::centerMsg("booting", TFT_GREEN); App::footer(g_fwTgt); delay(1400); ESP.restart(); }
+    App::centerMsg(r.error, TFT_RED); App::footer("FAILED"); delay(3200);   // fall through to normal boot
+}
+
 // Run ONE queued sync op early in boot (clean heap, one TLS handshake). If more ops
 // remain in the queue, reboot to run the next at clean heap (chained). Returns true
 // on the final op (so the caller shows the accumulated result on the splash).
@@ -140,6 +185,13 @@ static bool runBootSyncIfQueued() {
 }
 
 void setup() {
+    // Distinct BLE identity per firmware (shared fix with the PoC): derive the base
+    // MAC from the chip's factory MAC with a firmware-specific tweak so BBoink and
+    // the PoC advertise DIFFERENT BLE addresses on the SAME board. Otherwise a
+    // firmware switch keeps the same address and the host's GATT cache (BlueZ on
+    // Linux, keyed by MAC) stays stale, so the portal's writes land on dead handles.
+    // Must run before any WiFi/BLE init.
+    { uint8_t mac[6]; if (esp_efuse_mac_get_default(mac) == ESP_OK) { mac[5] ^= 0xB0; esp_base_mac_addr_set(mac); } }
 #if defined(PORK_BOARD_TEMBED_CC1101)
     // BOARD_PWR_EN (GPIO15): power the peripheral rail (display/backlight).
     // T-Embed-specific; the T-Display C5 has no such rail-enable pin (its LCD
@@ -233,6 +285,11 @@ void setup() {
     auto cfg = M5.config();
     M5Cardputer.begin(cfg);
     M5.Display.setBrightness(Config::wifi().displayBrightness);
+
+    // Firmware fetch (if flagged by the portal — update or switch): WiFi is up and
+    // the display is ready — flash + boot into it (does not return on success).
+    runFwFetchIfQueued();
+
 #if defined(PORK_BOARD_CARDPUTER_ADV)
     M5.Display.setBrightness(255); M5.Display.fillScreen(0x07E0); delay(500);   // TEMP GREEN marker (this exact combo booted)
 #endif

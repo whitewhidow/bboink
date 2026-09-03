@@ -70,6 +70,8 @@
   <div class="tabs">
     <button data-t="sync" class="on">Sync</button>
     <button data-t="caps">Captures</button>
+    <button data-t="wifi">WiFi</button>
+    <button data-t="update">Update</button>
     <button data-t="cfg">Config</button>
   </div>
 
@@ -88,6 +90,26 @@
     <div class="row"><input id="exclssid" placeholder="SSID to never attack"><button class="sec" style="padding:9px 12px" onclick="addExcl()">Exclude</button></div>
     <div class="filt"><label class="row" style="margin:0"><input type="checkbox" id="crkonly" onchange="loadCaps()"><span>cracked only</span></label><span class="count" id="capcount"></span></div>
     <div id="capsList"></div>
+  </div>
+
+  <div class="pane" id="p_wifi">
+    <div class="sub" style="margin:0 0 8px">Used for board-direct sync and firmware updates. The bridge keeps WiFi <b>off</b> (BLE owns the radio), so there's no live Connect here — creds are stored and brought up only at the next sync/update reboot.</div>
+    <div id="wifiForm"></div>
+    <div class="row" style="margin-top:8px;gap:8px">
+      <button id="savewifi" style="flex:1">Save WiFi</button>
+      <button id="forgetwifi" class="sec">Forget</button>
+    </div>
+    <div id="wifiMsg" class="sub" style="margin-top:6px"></div>
+  </div>
+
+  <div class="pane" id="p_update">
+    <div class="sub" style="margin:0 0 8px">Firmware: <b id="fwver">—</b></div>
+    <div class="sub"><b>Firmware</b> — needs WiFi configured (WiFi tab). Each reboots and flashes over WiFi at a clean heap, then boots the new image; the board <b>disconnects</b>, so <b>watch its screen</b> for progress.</div>
+    <button id="updatefw" class="wide" style="margin-top:8px">⬆ Update to latest BBoink</button>
+    <div style="font-weight:600;color:#8a97a2;font-size:12px;letter-spacing:.4px;text-transform:uppercase;margin:18px 0 6px">Switch firmware</div>
+    <div class="sub" style="margin:0 0 6px">Switch to the sibling app (<b>PoC</b>, the USB/BLE HID tool) — flashed into the spare slot; whatever you boot becomes the default. Switch back from the PoC's own portal. 16&nbsp;MB boards only.</div>
+    <button id="switchfw" class="sec wide">⇄ Switch to PoC firmware</button>
+    <div id="fwMsg" class="sub" style="margin-top:6px"></div>
   </div>
 
   <div class="pane" id="p_cfg">
@@ -110,14 +132,19 @@ function log(m){ const e=logEl(); e.textContent+=m+'\n'; e.scrollTop=e.scrollHei
 let rxCh=null, txCh=null, waiter=null, cfg={}, devName='', pwMap={};
 
 // ---------- Device status header (#4) ----------
+// Unified status header (mirrors the PoC portal's): "● connected" + fw version at
+// the left, then right-aligned chips for what the bridge actually knows live —
+// battery + board. No BLE chip (the bridge connection IS BLE) and no WiFi chip
+// (WiFi is off in the bridge, so there's nothing live to show).
 function renderDevInfo(){
   const el=$('devinfo'); if(!el) return;
-  const chips=[];
-  chips.push(`<span class="chip">🐷 <b>${esc(devName||'board')}</b></span>`);
-  if(cfg.board) chips.push(`<span class="chip">${esc(cfg.board)}</span>`);
-  if(cfg.ver)   chips.push(`<span class="chip">fw <b>v${esc(cfg.ver)}</b></span>`);
-  if(cfg.has_batt){ const b=+cfg.batt; chips.push(`<span class="chip${b<=15?' warn':''}">🔋 <b>${isFinite(b)?b:'?'}%</b></span>`); }
-  el.innerHTML=chips.join('');
+  const left=[`<span class="chip" style="color:var(--cyan);font-weight:700">● connected</span>`];
+  if(cfg.ver) left.push(`<span class="chip">fw <b>v${esc(cfg.ver)}</b></span>`);
+  const right=[];
+  if(cfg.has_batt){ const b=+cfg.batt; right.push(`<span class="chip${b<=15?' warn':''}">🔋 <b>${isFinite(b)?b:'?'}%</b></span>`); }
+  if(cfg.board) right.push(`<span class="chip">${esc(cfg.board)}</span>`);
+  if(right.length) right[0]=right[0].replace('<span class="chip','<span style="margin-left:auto" class="chip');
+  el.innerHTML=left.concat(right).join('');
 }
 
 // tab switching
@@ -182,7 +209,7 @@ for(const [k,l] of BOOL){ LAB[k]=l; TYP[k]='bool'; }
 const SECTIONS=[
   ['Capture & scanning', ['ch_hop_ms','atk_rssi','max_tries','burst','deauth','pmkid']],
   ['Cracking keys',      ['wpa_key','ohc_key','pwn_key']],
-  ['WiFi · relay · BLE', ['relay_url','relay_token','wifi_ssid','wifi_pass','app_url','ap_ssid']],
+  ['Relay · BLE', ['relay_url','relay_token','app_url','ap_ssid']],
   ['Device',             ['brightness','sound','led']],
 ];
 function fieldHtml(k){
@@ -204,8 +231,27 @@ async function loadCfg(){
     h+=rest.map(fieldHtml).join('');
   }
   $('cfgForm').innerHTML=h;
+  if($('wifiForm')) $('wifiForm').innerHTML=fieldHtml('wifi_ssid')+fieldHtml('wifi_pass');   // WiFi tab
+  if($('fwver'))    $('fwver').textContent = cfg.ver ? ('v'+cfg.ver) : '—';                   // Update tab
   renderDevInfo();
 }
+// Save just the WiFi credentials (own tab, mirrors the PoC's WiFi tab).
+$('savewifi').onclick=async()=>{
+  $('wifiMsg').textContent='saving…';
+  try{
+    const s=$('c_wifi_ssid'); if(s) await cmdAck({c:'scfg',k:'wifi_ssid',v:s.value});
+    const p=$('c_wifi_pass'); if(p&&p.value) await cmdAck({c:'scfg',k:'wifi_pass',v:p.value});
+    await cmdAck({c:'savecfg'});
+    $('wifiMsg').textContent='saved ✓'; await loadCfg();
+  }catch(e){ $('wifiMsg').textContent='save failed: '+(e.message||e); }
+};
+$('forgetwifi').onclick=async()=>{
+  if(!confirm('Clear the saved WiFi credentials on the board?')) return;
+  $('wifiMsg').textContent='clearing…';
+  try{ await cmdAck({c:'scfg',k:'wifi_ssid',v:''}); await cmdAck({c:'savecfg'});
+    $('wifiMsg').textContent='forgotten ✓'; await loadCfg();
+  }catch(e){ $('wifiMsg').textContent='failed: '+(e.message||e); }
+};
 $('savecfg').onclick=async()=>{
   $('cfgMsg').textContent='saving…';
   try{
@@ -215,6 +261,23 @@ $('savecfg').onclick=async()=>{
     await cmdAck({c:'savecfg'});
     $('cfgMsg').textContent='saved ✓'; await loadCfg();
   }catch(e){ $('cfgMsg').textContent='save failed: '+(e.message||e); }
+};
+
+$('updatefw').onclick=async()=>{
+  if(!rxCh){ $('fwMsg').textContent='connect first'; return; }
+  if(!confirm('Reboot and update to the latest BBoink over WiFi, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Keep it powered.')) return;
+  $('fwMsg').textContent='updating — watch the board screen…';
+  // Board reboots + disconnects. Auto-reload so the next connect gets a FRESH GATT
+  // (the host caches a stale handle across the reboot -> writes silently no-op).
+  try{ await write({c:'updatefw'}); setTimeout(()=>location.reload(),2500); }
+  catch(e){ /* disconnect on reboot is expected */ }
+};
+$('switchfw').onclick=async()=>{
+  if(!rxCh){ $('fwMsg').textContent='connect first'; return; }
+  if(!confirm('Reboot and flash the PoC firmware into the spare slot, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Switch back from the PoC portal. Keep it powered.')) return;
+  $('fwMsg').textContent='switching to PoC — watch the board screen…';
+  try{ await write({c:'switchfw'}); setTimeout(()=>location.reload(),2500); }   // fresh GATT after reboot
+  catch(e){ /* disconnect on reboot is expected */ }
 };
 
 // ---------- Captures + cracked ----------

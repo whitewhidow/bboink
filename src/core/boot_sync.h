@@ -28,6 +28,11 @@ extern RTC_NOINIT_ATTR uint32_t bootSyncQueue;      // pending SyncOp bits; one 
 extern RTC_NOINIT_ATTR char     bootSyncResult[96]; // accumulated result, shown via /api/status
 extern RTC_NOINIT_ATTR uint32_t bootShowMgmt;       // set on request (currently boots to capture; kept for future)
 extern RTC_NOINIT_ATTR uint32_t bootBleBridge;      // BOOT_SYNC_MAGIC -> boot straight into BLE_BRIDGE (WiFi off)
+extern RTC_NOINIT_ATTR uint32_t bootFwFetch;        // FW_FETCH_* -> on next (WiFi) boot, flash a fw image + boot into it
+
+// Reboot-to-fetch OTA targets (distinct magics guard against power-on RTC garbage).
+static const uint32_t FW_FETCH_SELF   = 0xF7C0DE01u;   // update to the latest of THIS firmware
+static const uint32_t FW_FETCH_SWITCH = 0xF7C0DE02u;   // flash the sibling firmware (PoC)
 
 // Queue one or more sync ops + reboot to run them (one handshake per boot, chained).
 inline void requestSyncQueue(uint32_t mask) {
@@ -46,6 +51,15 @@ inline void requestBleBridge() {
     delay(150);
     ESP.restart();
 }
+
+// Reboot-to-fetch OTA: flag a firmware fetch and reboot into a NORMAL (WiFi) boot;
+// main's boot hook then downloads the target app bin into the spare OTA slot and
+// boots into it. SELF = update to this firmware's latest; SWITCH = the sibling
+// (PoC). Shares the clean-heap-at-boot approach used for sync (and mirrors the PoC
+// side). WiFi creds must be configured. This gives the single-button boards (no
+// on-device menu) a WiFi OTA path they otherwise lack.
+inline void requestFwUpdate() { bootFwFetch = FW_FETCH_SELF;   delay(150); ESP.restart(); }
+inline void requestFwSwitch() { bootFwFetch = FW_FETCH_SWITCH; delay(150); ESP.restart(); }
 
 // Back-compat shim for single-service upload (1=wpa 2=ohc 3=pwn).
 inline void requestBootSync(int svc) {
