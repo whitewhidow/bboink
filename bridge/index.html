@@ -287,7 +287,7 @@ $('savecfg').onclick=async()=>{
 
 $('updatefw').onclick=async()=>{
   if(!rxCh){ $('fwMsg').textContent='connect first'; return; }
-  if(!confirm('Reboot and update to the latest BBoink over WiFi, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Keep it powered.')) return;
+  if(!confirm('Reboot and update to the latest BBoink'+(latestVer?' (v'+latestVer+')':'')+' over WiFi, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Keep it powered.')) return;
   $('fwMsg').textContent='updating — watch the board screen…';
   // Board reboots + disconnects. Auto-reload so the next connect gets a FRESH GATT
   // (the host caches a stale handle across the reboot -> writes silently no-op).
@@ -296,7 +296,8 @@ $('updatefw').onclick=async()=>{
 };
 $('switchfw').onclick=async()=>{
   if(!rxCh){ $('fwMsg').textContent='connect first'; return; }
-  if(!confirm('Reboot and flash the PoC firmware into the spare slot, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Switch back from the PoC portal. Keep it powered.')) return;
+  let sv=''; try{ const r=await fetch('https://api.github.com/repos/whitewhidow/hid-ble-poc/releases/latest',{cache:'no-store'}); const j=await r.json(); if(j.tag_name) sv=' '+j.tag_name; }catch(e){}
+  if(!confirm('Reboot and flash the PoC firmware'+sv+' into the spare slot, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Switch back from the PoC portal. Keep it powered.')) return;
   $('fwMsg').textContent='switching to PoC — watch the board screen…';
   try{ await write({c:'switchfw'}); setTimeout(()=>location.reload(),2500); }   // fresh GATT after reboot
   catch(e){ /* disconnect on reboot is expected */ }
