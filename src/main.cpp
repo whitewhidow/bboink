@@ -266,6 +266,9 @@ void setup() {
         Serial.println("[DEV] relay url/token overridden from dev_secrets.h");
     }
 #endif
+    // Durable keystore: migrate the just-loaded creds into NVS and restore any that
+    // the config file was missing (e.g. after a reflash/app-swap wiped SD/SPIFFS).
+    Config::keystoreBoot();
     const char* ssid = Config::wifi().otaSSID;
     if (!g_bleBridge && ssid && ssid[0]) {
 #if PORK_LED_COUNT > 0

@@ -10,6 +10,7 @@
 #include <M5Cardputer.h>
 #include <SD.h>
 #include <SPIFFS.h>
+#include <Preferences.h>
 #include <SPI.h>
 #include <driver/gpio.h>
 
@@ -959,6 +960,49 @@ bool Config::save() {
     if (!sdAvailable) ok = spiffsOk;
 
     return ok;
+}
+
+// ---- Durable keystore (NVS) -------------------------------------------------
+// The credential fields are painful to re-enter and must outlive a reflash or an
+// app-swap, which wipe/relocate the SD/SPIFFS config. NVS lives at a fixed offset
+// in every partition table, so it survives. Additive + failure-safe.
+static const char* KEYSTORE_NS = "bbkeys";
+
+void Config::keystoreBoot() {
+    Preferences p;
+    if (!p.begin(KEYSTORE_NS, false)) return;     // rw; a failure is a silent no-op
+    WiFiConfig& w = Config::wifi();
+    auto sync = [&](const char* k, char* dst, size_t n) {
+        if (dst[0]) {                              // present (config/dev_secrets): mirror to NVS
+            if (p.getString(k, "") != String(dst)) p.putString(k, dst);
+        } else {                                   // empty (fresh/wiped FS): restore from NVS
+            String v = p.getString(k, "");
+            if (v.length()) { strncpy(dst, v.c_str(), n - 1); dst[n - 1] = 0; }
+        }
+    };
+    sync("ssid", w.otaSSID,     sizeof(w.otaSSID));
+    sync("pass", w.otaPassword, sizeof(w.otaPassword));
+    sync("wpa",  w.wpaSecKey,   sizeof(w.wpaSecKey));
+    sync("ohc",  w.ohcKey,      sizeof(w.ohcKey));
+    sync("pwn",  w.pwncrackKey, sizeof(w.pwncrackKey));
+    sync("rurl", w.relayUrl,    sizeof(w.relayUrl));
+    sync("rtok", w.relayToken,  sizeof(w.relayToken));
+    sync("aurl", w.appUrl,      sizeof(w.appUrl));
+    p.end();
+}
+
+void Config::keystoreSave() {
+    Preferences p;
+    if (!p.begin(KEYSTORE_NS, false)) return;
+    WiFiConfig& w = Config::wifi();
+    auto put = [&](const char* k, const char* v) {
+        if (p.getString(k, "") != String(v)) p.putString(k, v);
+    };
+    put("ssid", w.otaSSID);    put("pass", w.otaPassword);
+    put("wpa",  w.wpaSecKey);  put("ohc",  w.ohcKey);
+    put("pwn",  w.pwncrackKey);put("rurl", w.relayUrl);
+    put("rtok", w.relayToken); put("aurl", w.appUrl);
+    p.end();
 }
 
 bool Config::createDefaultConfig() {

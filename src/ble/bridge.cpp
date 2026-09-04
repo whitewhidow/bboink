@@ -410,7 +410,7 @@ static void handleCommand(const uint8_t* data, size_t len) {
     else if (!strcmp(c, "del"))    { const char* b = doc["bssid"] | ""; if (b[0]) { delCapture(b); clearSyncedForBssid(b); removeCrackedForBssid(b); notifyText("{\"t\":\"ok\"}"); } }
     else if (!strcmp(c, "synced"))  { const char* n = doc["name"] | ""; const char* sv = doc["svc"] | "wop"; if (n[0]) markSynced(n, sv); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "scfg"))   { const char* k = doc["k"] | ""; const char* v = doc["v"] | ""; if (k[0]) { setCfgField(k, v); notifyText("{\"t\":\"ok\"}"); } }
-    else if (!strcmp(c, "savecfg")){ Config::save(); notifyText("{\"t\":\"ok\"}"); }
+    else if (!strcmp(c, "savecfg")){ Config::save(); Config::keystoreSave(); notifyText("{\"t\":\"ok\"}"); }
     else if (!strcmp(c, "excl"))   {   // add a manual never-attack exclusion (by SSID name, optional BSSID)
         const char* ssid = doc["s"] | "";
         const char* bh   = doc["b"] | "";

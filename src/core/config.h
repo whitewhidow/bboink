@@ -187,6 +187,14 @@ public:
     static BLEConfig& ble() { return bleConfig; }
     static PersonalityConfig& personality() { return personalityConfig; }
     
+    // Durable keystore: mirror the credential fields (WiFi/keys/relay) into NVS so
+    // they survive a reflash or an app-swap, which wipe/relocate the SD/SPIFFS
+    // config. NVS sits at a fixed offset in every partition table. Additive +
+    // failure-safe: never overwrites a value loaded from the config, never clears
+    // NVS on boot, and any NVS failure is a silent no-op.
+    static void keystoreBoot();   // migrate present creds -> NVS; restore empty fields <- NVS
+    static void keystoreSave();   // mirror current creds -> NVS (call on explicit save)
+
     // Setters with auto-save
     static void setGPS(const GPSConfig& cfg);
     static void setML(const MLConfig& cfg);
