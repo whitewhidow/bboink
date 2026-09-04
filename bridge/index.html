@@ -151,7 +151,7 @@ async function checkLatest(){   // fetch newest release over the phone's net to 
 function renderDevInfo(){
   const el=$('devinfo'); if(!el) return;
   const left=[`<span class="chip" style="color:var(--cyan);font-weight:700">● connected</span>`];
-  if(cfg.ver){ const c=verColor(cfg.ver); left.push(`<span class="chip"${c?` style="color:${c}"`:''}>fw <b>v${esc(cfg.ver)}</b></span>`); }
+  if(cfg.ver){ const c=verColor(cfg.ver); left.push(`<span class="chip"${c?` style="color:${c}"`:''}><b>v${esc(cfg.ver)}</b></span>`); }
   const right=[];
   if(cfg.has_batt){ const b=+cfg.batt; right.push(`<span class="chip${b<=15?' warn':''}">🔋 <b>${isFinite(b)?b:'?'}%</b></span>`); }
   if(cfg.board) right.push(`<span class="chip">${esc(cfg.board)}</span>`);
