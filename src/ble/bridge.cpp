@@ -477,8 +477,13 @@ void start(const char* advName) {
     svc->start();
 
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    // GOTCHA: a 128-bit service UUID (18 bytes) + the name won't both fit the 31-byte
+    // primary adv packet ("Data length exceeded" -> name silently dropped). Keep the UUID
+    // in the primary (clients filter by it) and move the NAME into the scan response.
     adv->addServiceUUID(SVC_UUID);
-    adv->setName(advName);
+    NimBLEAdvertisementData scanResp;
+    scanResp.setName(advName);
+    adv->setScanResponseData(scanResp);
     adv->enableScanResponse(true);
     NimBLEDevice::startAdvertising();
     s_running = true;
