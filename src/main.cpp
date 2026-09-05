@@ -311,9 +311,6 @@ void setup() {
     // the display is ready — flash + boot into it (does not return on success).
     runFwFetchIfQueued();
 
-#if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.setBrightness(255); M5.Display.fillScreen(0x07E0); delay(500);   // TEMP GREEN marker (this exact combo booted)
-#endif
 
 #if !defined(PORK_BOARD_TDISPLAY_C5)
     // The SD shares the SPI bus with the display; retry the mount now that the
