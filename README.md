@@ -168,3 +168,9 @@ Five PlatformIO envs from one codebase — `t-embed-cc1101` (ESP32-S3), `tdispla
 `waveshare-c5-lcd` (ESP32-C5), `cardputer-adv` (ESP32-S3), `tdongle-s3` (ESP32-S3).
 `pio run -e <env>`; per-board bits are gated with `build_src_filter`. Full build/flash notes
 are in the [reference](docs/REFERENCE.md#build--flash).
+
+## Getting help
+
+Stuck, hit a bug, or have a question? **Please open a GitHub issue** — that's the place to
+ask for help: <https://github.com/whitewhidow/bboink/issues>. Include your board, firmware
+version, and what you tried.

@@ -179,3 +179,8 @@ Settings live **on the device** and are read back by whatever UI you use (button
 
 More: [`docs/DESIGN-ble-bridge.md`](DESIGN-ble-bridge.md) ·
 [relay reference](../relay/README.md) · [README](../README.md).
+
+## Still stuck?
+
+**Open a GitHub issue** — that's how to get help: <https://github.com/whitewhidow/bboink/issues>.
+Mention your board, firmware version, and the step you're on.
