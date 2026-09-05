@@ -171,7 +171,9 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   if(b.dataset.t==='update') checkLatest();
 });
 
-// (firmware-switch unlock is now 3-tap the board-name chip — see switchTap() above)
+// Switcher unlock: 3-tap the board-name chip (attached in renderDevInfo) OR the brand
+// (always present — fallback for when the board chip hasn't rendered, e.g. cfg not loaded).
+(()=>{ const el=document.querySelector('.brand'); if(el){ el.style.cursor='pointer'; el.onclick=switchTap; } })();
 
 // Fetch sibling firmwares (single-frame {"t":"swlist","n":[...]}) and render the picker.
 async function loadSwitchList(){

@@ -253,6 +253,13 @@ void setup() {
         Serial.println("[DEV] PwnCrack key overridden from dev_secrets.h");
     }
 #endif
+#if defined(DEV_WPASEC_KEY)
+    if (DEV_WPASEC_KEY[0]) {
+        strncpy(Config::wifi().wpaSecKey, DEV_WPASEC_KEY, sizeof(Config::wifi().wpaSecKey) - 1);
+        Config::wifi().wpaSecKey[sizeof(Config::wifi().wpaSecKey) - 1] = '\0';
+        Serial.println("[DEV] WPA-SEC key overridden from dev_secrets.h");
+    }
+#endif
 #if defined(DEV_OHC_KEY)
     if (DEV_OHC_KEY[0]) {
         strncpy(Config::wifi().ohcKey, DEV_OHC_KEY, sizeof(Config::wifi().ohcKey) - 1);

@@ -329,13 +329,17 @@ static String buildCfgJson() {
     o += ",\"ver\":" + jsonQuote(BBOINK_VERSION);
 #if defined(PORK_BOARD_TEMBED_CC1101)
     o += ",\"board\":" + jsonQuote("T-Embed CC1101");
+#elif defined(PORK_BOARD_TDONGLE_S3)
+    o += ",\"board\":" + jsonQuote("T-Dongle S3");
+#elif defined(PORK_BOARD_CARDPUTER_ADV)
+    o += ",\"board\":" + jsonQuote("Cardputer ADV");
 #elif defined(PORK_BOARD_TDISPLAY_C5)
     o += ",\"board\":" + jsonQuote("T-Display C5");
 #elif defined(PORK_BOARD_WAVESHARE_C5_LCD)
     o += ",\"board\":" + jsonQuote("Waveshare C5-LCD");
 #endif
-#if !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD)
-    o += ",\"batt\":"     + String(M5.Power.getBatteryLevel());
+#if !defined(PORK_BOARD_TDISPLAY_C5) && !defined(PORK_BOARD_WAVESHARE_C5_LCD) && !defined(PORK_BOARD_TDONGLE_S3)
+    o += ",\"batt\":"     + String(M5.Power.getBatteryLevel());   // T-Embed / Cardputer have a fuel gauge
     o += ",\"has_batt\":true";
 #endif
     o += "}";
