@@ -312,10 +312,11 @@ void setup() {
     runFwFetchIfQueued();
 
 #if defined(PORK_BOARD_CARDPUTER_ADV)
-    // LOAD-BEARING (do not remove): on the no-PSRAM Cardputer this exact combo is what
-    // lets the board boot — the engine init otherwise races the display/DMA bring-up
-    // and hangs black. (Was mislabelled a debug marker; restored after a regression.)
-    M5.Display.setBrightness(255); M5.Display.fillScreen(0x07E0); delay(500);
+    // LOAD-BEARING (do NOT remove): on the no-PSRAM Cardputer the engine init races the
+    // display/DMA bring-up and hangs black without this setBrightness + fill + delay.
+    // The setBrightness call is the essential part; the fill is BLACK now (was a visible
+    // green debug flash) so boot shows no colour.
+    M5.Display.setBrightness(255); M5.Display.fillScreen(TFT_BLACK); delay(500);
 #endif
 
 
@@ -336,17 +337,8 @@ void setup() {
         WiFi.mode(WIFI_OFF);   // capture uses promiscuous mode only; keeping the STA up
     }                          // races the flash writes (pcap save hangs ~1min in)
 #endif
-#if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0x001F); delay(500);   // BLUE
-#endif
     NetworkRecon::init();
-#if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0xFFE0); delay(500);   // YELLOW
-#endif
     OinkMode::init();
-#if defined(PORK_BOARD_CARDPUTER_ADV)
-    M5.Display.fillScreen(0xF81F); delay(500);   // MAGENTA
-#endif
 
     {   // graphical boot splash (shared style with the hid-ble-poc firmware)
         auto& d = M5.Display;
