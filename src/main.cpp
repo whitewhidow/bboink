@@ -311,6 +311,13 @@ void setup() {
     // the display is ready — flash + boot into it (does not return on success).
     runFwFetchIfQueued();
 
+#if defined(PORK_BOARD_CARDPUTER_ADV)
+    // LOAD-BEARING (do not remove): on the no-PSRAM Cardputer this exact combo is what
+    // lets the board boot — the engine init otherwise races the display/DMA bring-up
+    // and hangs black. (Was mislabelled a debug marker; restored after a regression.)
+    M5.Display.setBrightness(255); M5.Display.fillScreen(0x07E0); delay(500);
+#endif
+
 
 #if !defined(PORK_BOARD_TDISPLAY_C5)
     // The SD shares the SPI bus with the display; retry the mount now that the
