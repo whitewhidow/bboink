@@ -29,6 +29,7 @@ extern RTC_NOINIT_ATTR char     bootSyncResult[96]; // accumulated result, shown
 extern RTC_NOINIT_ATTR uint32_t bootShowMgmt;       // set on request (currently boots to capture; kept for future)
 extern RTC_NOINIT_ATTR uint32_t bootBleBridge;      // BOOT_SYNC_MAGIC -> boot straight into BLE_BRIDGE (WiFi off)
 extern RTC_NOINIT_ATTR uint32_t bootFwFetch;        // FW_FETCH_* -> on next (WiFi) boot, flash a fw image + boot into it
+extern RTC_NOINIT_ATTR int32_t  bootSwitchIdx;      // which SWITCH_TARGETS[] entry (for FW_FETCH_SWITCH)
 
 // Reboot-to-fetch OTA targets (distinct magics guard against power-on RTC garbage).
 static const uint32_t FW_FETCH_SELF   = 0xF7C0DE01u;   // update to the latest of THIS firmware
@@ -59,7 +60,8 @@ inline void requestBleBridge() {
 // side). WiFi creds must be configured. This gives the single-button boards (no
 // on-device menu) a WiFi OTA path they otherwise lack.
 inline void requestFwUpdate() { bootFwFetch = FW_FETCH_SELF;   delay(150); ESP.restart(); }
-inline void requestFwSwitch() { bootFwFetch = FW_FETCH_SWITCH; delay(150); ESP.restart(); }
+inline void requestFwSwitchTo(int idx) { bootSwitchIdx = idx; bootFwFetch = FW_FETCH_SWITCH; delay(150); ESP.restart(); }
+inline void requestFwSwitch() { requestFwSwitchTo(0); }   // legacy single-target -> first sibling
 
 // Back-compat shim for single-service upload (1=wpa 2=ohc 3=pwn).
 inline void requestBootSync(int svc) {

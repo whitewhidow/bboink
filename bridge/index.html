@@ -108,8 +108,8 @@
     <button id="updatefw" class="wide" style="margin-top:8px">⬆ Update to latest BBoink</button>
     <div id="switchSection" hidden>
       <div style="font-weight:600;color:#8a97a2;font-size:12px;letter-spacing:.4px;text-transform:uppercase;margin:18px 0 6px">Switch firmware</div>
-      <div class="sub" style="margin:0 0 6px">Switch to the sibling app (<b>PoC</b>, the USB/BLE HID tool) — flashed into the spare slot; whatever you boot becomes the default. Switch back from the PoC's own portal. 16&nbsp;MB boards only.</div>
-      <button id="switchfw" class="sec wide">⇄ Switch to PoC firmware</button>
+      <div class="sub" style="margin:0 0 6px">Flash a sibling app into the spare slot and boot into it — whatever you boot becomes the default. Switch back from that app's own portal. 16&nbsp;MB boards only. NVS config carries over; captures do not (sync first).</div>
+      <div id="switchList"></div>
     </div>
     <div id="fwMsg" class="sub" style="margin-top:6px"></div>
   </div>
@@ -171,9 +171,28 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 (()=>{ let n=0,t=0; const el=document.querySelector('.brand');
   if(el){ el.style.cursor='pointer'; el.onclick=()=>{ const now=Date.now();
     n=(now-t<1500)?n+1:1; t=now;
-    if(n>=3){ const s=$('switchSection'); if(s) s.hidden=false; n=0; }
+    if(n>=3){ const s=$('switchSection'); if(s){ s.hidden=false; loadSwitchList(); } n=0; }
   }; }
 })();
+
+// Fetch sibling firmwares (single-frame {"t":"swlist","n":[...]}) and render the picker.
+async function loadSwitchList(){
+  const list=$('switchList'); if(!list) return;
+  list.innerHTML='<div class="sub" style="margin:0">loading…</div>';
+  let names=[];
+  try { names = await new Promise((res,rej)=>{ waiter={onText:j=>{ if(j.t==='swlist'){ waiter=null; res(j.n||[]); } else if(j.t==='err'){ waiter=null; rej(j.e||'err'); } }}; write({c:'switchlist'}); setTimeout(()=>rej('timeout'),5000); }); }
+  catch(e){ list.innerHTML='<div class="sub" style="margin:0">no response</div>'; return; }
+  if(!names.length){ list.innerHTML='<div class="sub" style="margin:0">No switch targets for this board.</div>'; return; }
+  list.innerHTML = names.map((nm,i)=>`<button class="sec wide swbtn" data-i="${i}" style="margin-top:8px">⇄ Switch to ${nm}</button>`).join('');
+  list.querySelectorAll('.swbtn').forEach(b=>b.onclick=async()=>{
+    const i=+b.dataset.i, nm=names[i];
+    if(!rxCh){ $('fwMsg').textContent='connect first'; return; }
+    if(!confirm('Reboot and flash '+nm+' into the spare slot, then boot into it?\n\nNeeds WiFi configured. The board disconnects — watch its screen. NVS config carries over; captures do not (sync first). Keep it powered.')) return;
+    $('fwMsg').textContent='switching to '+nm+' — watch the board screen…';
+    try{ await write({c:'switchto',i:i}); setTimeout(()=>location.reload(),2500); }
+    catch(e){ /* disconnect on reboot is expected */ }
+  });
+}
 
 function onNotify(e){
   const v=e.target.value, type=v.getUint8(0);
@@ -294,14 +313,7 @@ $('updatefw').onclick=async()=>{
   try{ await write({c:'updatefw'}); setTimeout(()=>location.reload(),2500); }
   catch(e){ /* disconnect on reboot is expected */ }
 };
-$('switchfw').onclick=async()=>{
-  if(!rxCh){ $('fwMsg').textContent='connect first'; return; }
-  let sv=''; try{ const r=await fetch('https://api.github.com/repos/whitewhidow/hid-ble-poc/releases/latest',{cache:'no-store'}); const j=await r.json(); if(j.tag_name) sv=' '+j.tag_name; }catch(e){}
-  if(!confirm('Reboot and flash the PoC firmware'+sv+' into the spare slot, then boot into it?\n\nNeeds WiFi configured. The board will disconnect — watch its screen for progress. Switch back from the PoC portal. Keep it powered.')) return;
-  $('fwMsg').textContent='switching to PoC — watch the board screen…';
-  try{ await write({c:'switchfw'}); setTimeout(()=>location.reload(),2500); }   // fresh GATT after reboot
-  catch(e){ /* disconnect on reboot is expected */ }
-};
+// (firmware switch is now the multi-target picker rendered by loadSwitchList())
 
 // ---------- Captures + cracked ----------
 async function loadCaps(){

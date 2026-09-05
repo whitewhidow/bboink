@@ -28,6 +28,7 @@
 #include "app/app.h"
 #include "core/mode_manager.h"
 #include "version.h"
+#include "switch_targets.h"
 
 RTC_NOINIT_ATTR uint32_t bootSyncMagic;
 RTC_NOINIT_ATTR uint32_t bootSyncQueue;
@@ -35,6 +36,7 @@ RTC_NOINIT_ATTR char     bootSyncResult[96];
 RTC_NOINIT_ATTR uint32_t bootShowMgmt;
 RTC_NOINIT_ATTR uint32_t bootBleBridge;
 RTC_NOINIT_ATTR uint32_t bootFwFetch;
+RTC_NOINIT_ATTR int32_t  bootSwitchIdx;
 
 // Append a short segment to the accumulated bootSyncResult (space-separated, bounded).
 static void appendSyncSeg(const char* seg) {
@@ -123,13 +125,12 @@ static void runFwFetchIfQueued() {
     bool sw     = (bootFwFetch == FW_FETCH_SWITCH);
     if (!self && !sw) return;
     bootFwFetch = 0;
-#if !defined(BBOINK_OTHER_FW_URL)
-    if (sw) return;                                  // no sibling on this board
     const char* url = BBOINK_OTA_URL; const char* nm = "latest";
-#else
-    const char* url = self ? BBOINK_OTA_URL : BBOINK_OTHER_FW_URL;
-    const char* nm  = self ? "latest" : BBOINK_OTHER_FW_NAME;
-#endif
+    if (sw) {                                        // switch: pick the chosen sibling
+        if (bootSwitchIdx >= 0 && bootSwitchIdx < SWITCH_TARGET_COUNT) {
+            url = SWITCH_TARGETS[bootSwitchIdx].url; nm = SWITCH_TARGETS[bootSwitchIdx].name;
+        } else return;                               // no valid sibling on this board
+    }
     snprintf(g_fwTgt, sizeof(g_fwTgt), "-> %s", nm);
     uint16_t cyan = M5.Display.color565(0x22, 0xD3, 0xE0);
     fwDraw("connecting wifi", cyan);

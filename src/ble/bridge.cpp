@@ -4,7 +4,8 @@
 #include "../core/config.h"
 #include "../modes/oink.h"
 #include "../version.h"
-#include "../core/boot_sync.h"   // requestFwSwitch() — switch to the sibling firmware
+#include "../switch_targets.h"   // SWITCH_TARGETS[] — sibling firmwares for the switch
+#include "../core/boot_sync.h"   // requestFwSwitchTo() — switch to a sibling firmware
 #include "../hal/m5compat.h"
 #include "../hal/board.h"
 #include <NimBLEDevice.h>
@@ -424,14 +425,26 @@ static void handleCommand(const uint8_t* data, size_t len) {
         delay(300);                      // let the notify flush before we reboot
         requestFwUpdate();               // RTC flag + reboot into a WiFi boot (never returns)
     }
-    else if (!strcmp(c, "switchfw")) {   // flash the sibling firmware + boot into it (reboot-to-switch)
-#if defined(BBOINK_OTHER_FW_URL)
-        notifyText("{\"t\":\"ok\",\"m\":\"switching\"}");
-        delay(300);
-        requestFwSwitch();               // RTC flag + reboot into a WiFi boot (never returns)
-#else
-        notifyText("{\"t\":\"err\",\"e\":\"no sibling fw\"}");
-#endif
+    else if (!strcmp(c, "switchlist")) {   // sibling firmwares available for this board
+        String s = "{\"t\":\"swlist\",\"n\":[";
+        for (int i = 0; i < SWITCH_TARGET_COUNT; i++) { if (i) s += ","; s += "\""; s += SWITCH_TARGETS[i].name; s += "\""; }
+        s += "]}";
+        notifyText(s.c_str());
+    }
+    else if (!strcmp(c, "switchto")) {   // {"c":"switchto","i":<idx>} -> flash that sibling + boot
+        int idx = doc["i"] | -1;
+        if (idx >= 0 && idx < SWITCH_TARGET_COUNT) {
+            notifyText("{\"t\":\"ok\",\"m\":\"switching\"}");
+            delay(300);
+            requestFwSwitchTo(idx);      // RTC flag + reboot into a WiFi boot (never returns)
+        } else notifyText("{\"t\":\"err\",\"e\":\"no such target\"}");
+    }
+    else if (!strcmp(c, "switchfw")) {   // legacy single-target alias -> first sibling
+        if (SWITCH_TARGET_COUNT > 0) {
+            notifyText("{\"t\":\"ok\",\"m\":\"switching\"}");
+            delay(300);
+            requestFwSwitchTo(0);
+        } else notifyText("{\"t\":\"err\",\"e\":\"no sibling fw\"}");
     }
     else if (!strcmp(c, "done"))   { s_exit = true; notifyText("{\"t\":\"bye\"}"); }
 }
