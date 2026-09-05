@@ -28,6 +28,16 @@ static const SwitchTarget SWITCH_TARGETS[] = {
   { "BBportal", GH_ "bb-portal/releases/latest/download/bb-portal-app-tembed-cc1101.bin" },
 };
 static const int SWITCH_TARGET_COUNT = (int)(sizeof(SWITCH_TARGETS) / sizeof(SWITCH_TARGETS[0]));
+#elif defined(PORK_BOARD_CARDPUTER_ADV)
+static const SwitchTarget SWITCH_TARGETS[] = {
+#if defined(DEV_OTHER_FW_URL)
+  { "PoC",      DEV_OTHER_FW_URL },
+#else
+  { "PoC",      GH_ "hid-ble-poc/releases/latest/download/hid-ble-poc-app-cardputer.bin" },
+#endif
+  { "BBportal", GH_ "bb-portal/releases/latest/download/bb-portal-app-cardputer.bin" },
+};
+static const int SWITCH_TARGET_COUNT = (int)(sizeof(SWITCH_TARGETS) / sizeof(SWITCH_TARGETS[0]));
 #else
 static const SwitchTarget SWITCH_TARGETS[1] = { { "", "" } };   // not in the mesh on this board
 static const int SWITCH_TARGET_COUNT = 0;
