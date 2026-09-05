@@ -12,7 +12,7 @@
 #  endif
 #endif
 
-#define BBOINK_VERSION "1.0.0"
+#define BBOINK_VERSION "1.1.0"
 
 // App-only image (firmware.bin) published by CI — this is what an SD-card launcher
 // loads (NOT the merged 0x0 image). The self-updater downloads this over WiFi and
