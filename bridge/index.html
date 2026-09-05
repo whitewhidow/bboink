@@ -154,10 +154,15 @@ function renderDevInfo(){
   if(cfg.ver){ const c=verColor(cfg.ver); left.push(`<span class="chip"${c?` style="color:${c}"`:''}><b>v${esc(cfg.ver)}</b></span>`); }
   const right=[];
   if(cfg.has_batt){ const b=+cfg.batt; right.push(`<span class="chip${b<=15?' warn':''}">🔋 <b>${isFinite(b)?b:'?'}%</b></span>`); }
-  if(cfg.board) right.push(`<span class="chip">${esc(cfg.board)}</span>`);
-  if(right.length) right[0]=right[0].replace('<span class="chip','<span style="margin-left:auto" class="chip');
+  if(cfg.board) right.push(`<span id="hboard" class="chip" style="cursor:pointer">${esc(cfg.board)}</span>`);
+  if(right.length) right[0]=right[0].replace('class="chip"','style="margin-left:auto" class="chip"');
   el.innerHTML=left.concat(right).join('');
+  const hb=$('hboard'); if(hb) hb.onclick=switchTap;   // hidden: 3-tap the board chip -> switcher
 }
+// 3-tap the board-name chip reveals the firmware switcher (Update tab).
+let _stN=0,_stT=0;
+function switchTap(){ const now=Date.now(); _stN=(now-_stT<1500)?_stN+1:1; _stT=now;
+  if(_stN>=3){ const s=$('switchSection'); if(s){ s.hidden=false; loadSwitchList(); } _stN=0; } }
 
 // tab switching
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
@@ -166,14 +171,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   if(b.dataset.t==='update') checkLatest();
 });
 
-// Hidden "developer" unlock: tap the BBoink brand 3x (quickly) to reveal the
-// firmware-switch action in the Update tab. Kept out of sight for normal users.
-(()=>{ let n=0,t=0; const el=document.querySelector('.brand');
-  if(el){ el.style.cursor='pointer'; el.onclick=()=>{ const now=Date.now();
-    n=(now-t<1500)?n+1:1; t=now;
-    if(n>=3){ const s=$('switchSection'); if(s){ s.hidden=false; loadSwitchList(); } n=0; }
-  }; }
-})();
+// (firmware-switch unlock is now 3-tap the board-name chip — see switchTap() above)
 
 // Fetch sibling firmwares (single-frame {"t":"swlist","n":[...]}) and render the picker.
 async function loadSwitchList(){
