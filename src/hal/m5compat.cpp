@@ -490,10 +490,14 @@ Keyboard_Class::KeysState Keyboard_Class::keysState() const {
 // PowerFacade
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-#if defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_CARDPUTER_ADV) || defined(PORK_BOARD_TDONGLE_S3)
-// C5 boards: T-Display C5 has an AXP2602 PMU (register map UNVERIFIED); the
-// Waveshare C5-LCD has no battery/PMU at all (USB powered). Stub the fuel gauge
-// to a safe 100% / 4.0V. TODO(hardware): read SoC/voltage on boards that have it.
+#if defined(PORK_BOARD_CARDPUTER_ADV)
+// Cardputer ADV: battery on GPIO10 via a 2:1 divider into ADC1 (confirmed against
+// M5Unified: ADC1_GPIO10_CHANNEL, _adc_ratio = 2.0). Map a Li-ion window to 0..100.
+int PowerFacade::getBatteryVoltage() { return (int)(analogReadMilliVolts(10) * 2.0f); }
+int PowerFacade::getBatteryLevel()   { int mv = getBatteryVoltage(); int p = (mv - 3300) * 100 / (4200 - 3300); return p < 0 ? 0 : p > 100 ? 100 : p; }
+#elif defined(PORK_BOARD_TDISPLAY_C5) || defined(PORK_BOARD_WAVESHARE_C5_LCD) || defined(PORK_BOARD_TDONGLE_S3)
+// T-Display C5 has an AXP2602 PMU (register map UNVERIFIED); Waveshare C5-LCD and the
+// T-Dongle have no battery/PMU we can read (USB powered). Stub to a safe 100% / 4.0V.
 int PowerFacade::getBatteryLevel()   { return 100; }
 int PowerFacade::getBatteryVoltage() { return 4000; }
 #else
